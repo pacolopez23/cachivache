@@ -1,0 +1,95 @@
+# ---------------------------------------------------------------------
+#  Salida generada por el programa
+#
+#  Cachivache escribe en %LOCALAPPDATA%\Cachivache, no aqui dentro, pero
+#  si alguien ejecuta una version antigua o exporta un informe al
+#  directorio del proyecto, que no acabe en el repositorio.
+# ---------------------------------------------------------------------
+*.log
+Informe.html
+informes/
+registros/
+preferencias.json
+historial.json
+analisis_*.html
+analisis_*.csv
+analisis_*.json
+limpieza_*.html
+
+# ---------------------------------------------------------------------
+#  El lanzador compilado
+#
+#  Cachivache.exe lo genera tools/Compilar-Lanzador.ps1 y lo publica el CI
+#  con cada version. NO va en el repositorio: un binario dentro de un
+#  proyecto que presume de "puedes leer lo que hace antes de ejecutarlo"
+#  es justo lo contrario, y un .exe pequenyo sin firmar que lanza
+#  PowerShell tiene la forma exacta de un cuentagotas de malware.
+# ---------------------------------------------------------------------
+Cachivache.exe
+
+# ---------------------------------------------------------------------
+#  Manifiestos de winget y de Scoop
+#
+#  Mismo motivo que el .exe, y por eso van juntos aqui: son ARTEFACTOS,
+#  no fuentes. Los genera tools/Publicar-Manifiestos.ps1 en cada
+#  publicacion, con el hash del .zip que se acaba de armar.
+#
+#  Un manifiesto guardado en el repositorio declara una version, una URL
+#  y un hash que envejecen a la vez y en silencio: pasa las pruebas, pasa
+#  el analizador, se lee perfectamente, y falla en casa de quien instala
+#  con un mensaje que dice que el archivo no coincide con lo declarado.
+#  Ver [DIS-03] y [DIS-04]. El README de esa carpeta lo explica, y ese si
+#  va al repositorio.
+# ---------------------------------------------------------------------
+packaging/winget/
+packaging/cachivache.json
+SHA256SUMS.txt
+
+# ---------------------------------------------------------------------
+#  Restos de sistemas de archivos montados
+#
+#  Cuando se sobrescribe un archivo que otro proceso tiene abierto y el
+#  sistema de archivos no admite borrarlo, FUSE renombra el viejo a
+#  .fuse_hidden* en vez de quitarlo. Quedan copias muertas del codigo, sin
+#  extension, que NO ve ninguna comprobacion: ni Pester (solo lee
+#  *.Tests.ps1), ni el analizador, ni la prueba del BOM (filtran *.ps1 y
+#  *.xaml). Y publicar.yml copia src/ entero al .zip, asi que se irian
+#  publicadas. Hay una invariante que las caza; esto es el segundo cerrojo.
+# ---------------------------------------------------------------------
+.fuse_hidden*
+.nfs*
+
+# ---------------------------------------------------------------------
+#  Resultados de las pruebas
+# ---------------------------------------------------------------------
+testResults*.xml
+coverage*.xml
+TestResults/
+
+# ---------------------------------------------------------------------
+#  Editores
+# ---------------------------------------------------------------------
+.vs/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json.example
+*.suo
+*.user
+.idea/
+
+# ---------------------------------------------------------------------
+#  Windows y macOS
+# ---------------------------------------------------------------------
+Thumbs.db
+ehthumbs.db
+desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+
+# ---------------------------------------------------------------------
+#  Temporales
+# ---------------------------------------------------------------------
+*.tmp
+*.bak
+*.old
+~$*

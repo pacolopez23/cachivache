@@ -1,0 +1,58 @@
+﻿<!--
+    Tema oscuro. Solo define colores y pinceles: ni un estilo.
+    Styles.xaml los consume con DynamicResource, de modo que cambiar de
+    tema en caliente es sustituir este diccionario por Theme.Light.xaml.
+
+    REGLA: los dos temas declaran EXACTAMENTE las mismas claves. Hay una
+    prueba que falla si divergen, porque una clave que exista solo en uno
+    deja el otro con un control sin pintar y nada más avisa.
+
+    Sobre la paleta. El acento es verde azulado y el verde de "esto ha ido
+    bien" es verde de verdad, no una variante del acento: en un programa
+    que borra archivos, la etiqueta de riesgo y el espacio recuperado
+    tienen que leerse de un vistazo y no confundirse con un boton. Por eso
+    hay separación deliberada de tono entre Acento (#2DD4BF, cian) y Éxito
+    (#4ADE80, verde).
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Superficies. Cinco niveles, del fondo de la ventana al elemento
+         que esta más "cerca": ventana < barra/lateral < tarjeta < elevado
+         < hover. Cada salto es pequeño a propósito; lo que separa las
+         cosas es el borde, no el contraste bruto. -->
+    <SolidColorBrush x:Key="FondoVentana"   Color="#0E1014"/>
+    <SolidColorBrush x:Key="FondoBarra"     Color="#13161C"/>
+    <SolidColorBrush x:Key="FondoLateral"   Color="#13161C"/>
+    <SolidColorBrush x:Key="FondoTarjeta"   Color="#181C23"/>
+    <SolidColorBrush x:Key="FondoElevado"   Color="#1F242D"/>
+    <SolidColorBrush x:Key="FondoHover"     Color="#272E39"/>
+    <SolidColorBrush x:Key="Borde"          Color="#2A313D"/>
+    <SolidColorBrush x:Key="BordeSuave"     Color="#20262F"/>
+
+    <!-- Texto. Tres pesos de gris, no más: principal, secundario y
+         terciario. Todos por encima de 4.5:1 sobre FondoTarjeta. -->
+    <SolidColorBrush x:Key="Texto"          Color="#E8ECF4"/>
+    <SolidColorBrush x:Key="TextoSuave"     Color="#AEB7C6"/>
+    <SolidColorBrush x:Key="TextoTenue"     Color="#8C95A6"/>
+
+    <!-- Acento -->
+    <SolidColorBrush x:Key="Acento"         Color="#2DD4BF"/>
+    <SolidColorBrush x:Key="AcentoFuerte"   Color="#5EEAD4"/>
+    <SolidColorBrush x:Key="AcentoTenue"    Color="#0F2E2C"/>
+    <!-- Sobre un acento CLARO el texto va oscuro, no blanco. Antes estaba
+         puesto a "#FFFFFF" a mano en el estilo del boton primario, lo que
+         obliga a que el acento sea oscuro en los dos temas. Sacarlo aquí
+         permite que cada tema elija el acento que le conviene. -->
+    <SolidColorBrush x:Key="TextoSobreAcento" Color="#05231F"/>
+
+    <!-- Semanticos. Deliberadamente lejos del acento en tono. -->
+    <SolidColorBrush x:Key="Exito"          Color="#4ADE80"/>
+    <SolidColorBrush x:Key="Aviso"          Color="#FBBF24"/>
+    <SolidColorBrush x:Key="Peligro"        Color="#FB7185"/>
+    <SolidColorBrush x:Key="PeligroTenue"   Color="#331A21"/>
+
+    <!-- Gráfico de disco -->
+    <SolidColorBrush x:Key="DiscoLibre"     Color="#272E39"/>
+
+</ResourceDictionary>

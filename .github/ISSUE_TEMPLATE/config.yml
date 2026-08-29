@@ -1,0 +1,9 @@
+blank_issues_enabled: false
+contact_links:
+  - name: He encontrado algo que el programa borraría y no debería
+    url: https://github.com/pacolopez23/cachivache/security/advisories/new
+    about: >
+      No lo publiques como incidencia. Repórtalo en privado por aquí. Lee SECURITY.md.
+  - name: Duda sobre cómo usarlo
+    url: https://github.com/pacolopez23/cachivache/discussions
+    about: Para preguntas, usa las discusiones en lugar de abrir una incidencia.

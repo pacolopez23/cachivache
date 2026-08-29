@@ -1,0 +1,169 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # ===================================================================
+  #  Analisis estatico: estilo, malas practicas y compatibilidad
+  # ===================================================================
+  analisis:
+    name: PSScriptAnalyzer
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Set-PSRepository PSGallery -InstallationPolicy Trusted
+          Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
+
+      - name: Analizar
+        shell: pwsh
+        run: |
+          $resultados = Invoke-ScriptAnalyzer -Path . -Recurse `
+                          -Settings ./PSScriptAnalyzerSettings.psd1
+
+          if ($resultados) {
+              $resultados | Format-Table -AutoSize RuleName, Severity, ScriptName, Line, Message
+              Write-Host "::error::PSScriptAnalyzer ha encontrado $($resultados.Count) problemas."
+              exit 1
+          }
+          Write-Host 'Analisis limpio.'
+
+  # ===================================================================
+  #  Pruebas en las dos versiones de PowerShell que hay en Windows
+  # ===================================================================
+  pruebas:
+    name: Pruebas (PowerShell ${{ matrix.powershell }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - powershell: '5.1'
+            shell: powershell
+          - powershell: '7'
+            shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar Pester
+        shell: ${{ matrix.shell }}
+        run: |
+          Set-PSRepository PSGallery -InstallationPolicy Trusted
+          Install-Module Pester -MinimumVersion 5.0 -Scope CurrentUser -Force -SkipPublisherCheck
+
+      - name: Ejecutar las pruebas
+        shell: ${{ matrix.shell }}
+        run: |
+          Import-Module Pester -MinimumVersion 5.0
+          $configuracion = New-PesterConfiguration
+          $configuracion.Run.Path      = './tests'
+          $configuracion.Run.PassThru  = $true
+          $configuracion.Output.Verbosity      = 'Detailed'
+          $configuracion.TestResult.Enabled    = $true
+          $configuracion.TestResult.OutputPath = 'testResults.xml'
+
+          $resultado = Invoke-Pester -Configuration $configuracion
+          if ($resultado.FailedCount -gt 0) {
+              Write-Host "::error::Han fallado $($resultado.FailedCount) pruebas."
+              exit 1
+          }
+
+      - name: Publicar los resultados
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: resultados-pester-${{ matrix.powershell }}
+          path: testResults.xml
+          if-no-files-found: ignore
+
+  # ===================================================================
+  #  El programa tiene que poder cargarse y listar sus modulos
+  # ===================================================================
+  arranque:
+    name: Comprobacion de arranque
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Listar los modulos
+        shell: powershell
+        run: .\Cachivache.ps1 -Listar
+
+      - name: Analisis real en modo consola, sin borrar nada
+        shell: powershell
+        run: |
+          .\Cachivache.ps1 -Consola -Perfil conservador -Informe informe-ci.html
+          if (-not (Test-Path informe-ci.html)) {
+              Write-Host '::error::No se ha generado el informe.'
+              exit 1
+          }
+          Write-Host 'El analisis ha terminado y ha generado su informe.'
+
+      - name: Comprobar que no ha tocado nada del arbol de trabajo
+        shell: pwsh
+        run: |
+          Remove-Item informe-ci.html -Force -ErrorAction SilentlyContinue
+          $sucio = git status --porcelain
+          if ($sucio) {
+              Write-Host '::error::El analisis ha modificado archivos del repositorio:'
+              Write-Host $sucio
+              exit 1
+          }
+          Write-Host 'El repositorio sigue limpio despues del analisis.'
+
+  # ===================================================================
+  #  El XAML tiene que ser XML valido
+  # ===================================================================
+  interfaz:
+    name: Validacion del XAML
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Comprobar cada archivo XAML
+        shell: pwsh
+        run: |
+          # Los Panel.*.xaml NO son documentos: son trozos que MainWindow.xaml
+          # pega antes de interpretar, y por eso no declaran el espacio de
+          # nombres 'x' que usan sus atributos x:Name. Validarlos sueltos
+          # fallaria siempre. Lo que hay que validar es el documento MONTADO,
+          # que es exactamente lo que WPF acaba viendo; de eso se encarga el
+          # paso siguiente.
+          $fallos = 0
+          Get-ChildItem -Path ./src/UI -Filter '*.xaml' |
+              Where-Object { $_.Name -notlike 'Panel.*.xaml' } |
+              ForEach-Object {
+                  try {
+                      [xml](Get-Content -LiteralPath $_.FullName -Raw) | Out-Null
+                      Write-Host "  OK   $($_.Name)"
+                  } catch {
+                      Write-Host "::error file=$($_.FullName)::XAML invalido: $($_.Exception.Message)"
+                      $fallos++
+                  }
+              }
+          if ($fallos -gt 0) { exit 1 }
+
+      - name: Comprobar la ventana ya montada con sus paneles
+        shell: pwsh
+        run: |
+          . ./src/UI/Xaml.ps1
+          $montado = Expand-PanelesXaml -Carpeta ./src/UI `
+                         -Texto ([IO.File]::ReadAllText((Resolve-Path ./src/UI/MainWindow.xaml)))
+          try {
+              [xml]$montado | Out-Null
+              Write-Host "  OK   MainWindow.xaml + $(@(Get-ChildItem ./src/UI -Filter 'Panel.*.xaml').Count) paneles"
+          } catch {
+              Write-Host "::error::La ventana montada no es XML valido: $($_.Exception.Message)"
+              exit 1
+          }

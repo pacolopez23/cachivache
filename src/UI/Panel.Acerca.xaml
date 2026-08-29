@@ -1,0 +1,56 @@
+﻿<!--
+    Panel de ACERCA DE de la ventana principal.
+
+    NO ES UN DOCUMENTO XAML COMPLETO: es un TROZO de MainWindow.xaml,
+    que lo inserta en su sitio antes de interpretar el XAML entero.
+    Por eso no declara xmlns ni tiene un único elemento raiz propio:
+    los hereda del documento donde se pega.
+
+    Se hace así, y no cargando cada panel por separado, para que
+    siga habiendo UN SOLO arbol y UN SOLO ámbito de nombres. Con
+    paneles cargados aparte, $ventana.FindName() dejaria de
+    encontrar sus controles -viven en otro ámbito- y habría que
+    rehacer la resolución entera de la ventana. Aquí no cambia nada
+    en tiempo de ejecución: el XAML que se interpreta es identico,
+    byte a byte, al de antes de partirlo.
+-->
+                    <!-- ==================== ACERCA DE ==================== -->
+                    <!-- Destino de foco, no parada de tabulacion. Ver [A11Y-06]. -->
+                    <Grid x:Name="PanelAcerca" Visibility="Collapsed"
+                          Focusable="True" KeyboardNavigation.IsTabStop="False"
+                          AutomationProperties.Name="Acerca de Cachivache">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel Margin="32,28,32,28" MaxWidth="760" HorizontalAlignment="Left">
+                                <TextBlock Text="Acerca de Cachivache" Style="{StaticResource Titulo}"/>
+                                <TextBlock x:Name="TxtVersionAcerca" Style="{StaticResource Subtitulo}" Margin="0,4,0,0"/>
+
+                                <Border Style="{StaticResource Tarjeta}" Margin="0,22,0,0">
+                                    <StackPanel>
+                                        <TextBlock Text="Como funciona la seguridad" FontWeight="SemiBold" FontSize="15"/>
+                                        <TextBlock Style="{StaticResource Subtitulo}" Margin="0,12,0,0" LineHeight="21"
+                                                   Text="El programa trabaja con lista blanca: una ruta solo se puede borrar si cuelga de una carpeta que el módulo ha autorizado explicitamente, y la propia carpeta autorizada nunca es borrable, solo lo que hay dentro. Además hay filtros que vetan, para cualquier módulo: las rutas del sistema y una lista negra explicita, la raiz de cualquier unidad, los recursos de red, las travesias con dos puntos, las carpetas personales (Escritorio, Documentos, Descargas, Imágenes, Música y Videos), las carpetas de copias de seguridad, y los enlaces simbolicos. A esos se añade el veto por extensión de trabajo personal (documentos, hojas, fotos, código), universal salvo para el módulo de duplicados, que lo levanta únicamente cuando ha comprobado por hash que existe otra copia identica del mismo archivo."/>
+                                        <TextBlock Style="{StaticResource Subtitulo}" Margin="0,12,0,0" LineHeight="21"
+                                                   Text="La comprobación se repite justo antes de borrar, no solo durante el análisis: si algo ha cambiado entre medias, la eliminación se bloquea. Y siempre que es posible se vacía el contenido de una carpeta en lugar de borrar la carpeta, porque muchos programas fallan si su carpeta de caché desaparece."/>
+                                    </StackPanel>
+                                </Border>
+
+                                <Border Style="{StaticResource Tarjeta}" Margin="0,16,0,0">
+                                    <StackPanel>
+                                        <TextBlock Text="Lo que este programa NO hace" FontWeight="SemiBold" FontSize="15"/>
+                                        <TextBlock Style="{StaticResource Subtitulo}" Margin="0,12,0,0" LineHeight="21"
+                                                   Text="No escribe en el registro de Windows. No desinstala programas. No toca WinSxS a mano. No borra Windows.old. No elimina perfiles de usuario ni puntos de restauración. Cuando algo de eso conviene, lo dice y explica como hacerlo desde Windows."/>
+                                    </StackPanel>
+                                </Border>
+
+                                <Border Style="{StaticResource Tarjeta}" Margin="0,16,0,0">
+                                    <StackPanel>
+                                        <TextBlock Text="Licencia y código" FontWeight="SemiBold" FontSize="15"/>
+                                        <TextBlock Style="{StaticResource Subtitulo}" Margin="0,10,0,14"
+                                                   Text="Software libre bajo licencia MIT. Todo el código es PowerShell legible: puedes leer exactamente que hace antes de ejecutarlo."/>
+                                        <Button x:Name="BtnRepositorio" Style="{StaticResource BotonSecundario}"
+                                                Content="Ver el código en GitHub" HorizontalAlignment="Left"/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Grid>

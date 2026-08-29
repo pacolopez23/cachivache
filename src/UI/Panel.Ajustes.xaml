@@ -1,0 +1,115 @@
+﻿<!--
+    Panel de AJUSTES de la ventana principal.
+
+    NO ES UN DOCUMENTO XAML COMPLETO: es un TROZO de MainWindow.xaml,
+    que lo inserta en su sitio antes de interpretar el XAML entero.
+    Por eso no declara xmlns ni tiene un único elemento raiz propio:
+    los hereda del documento donde se pega.
+
+    Se hace así, y no cargando cada panel por separado, para que
+    siga habiendo UN SOLO arbol y UN SOLO ámbito de nombres. Con
+    paneles cargados aparte, $ventana.FindName() dejaria de
+    encontrar sus controles -viven en otro ámbito- y habría que
+    rehacer la resolución entera de la ventana. Aquí no cambia nada
+    en tiempo de ejecución: el XAML que se interpreta es identico,
+    byte a byte, al de antes de partirlo.
+-->
+                    <!-- ==================== AJUSTES ==================== -->
+                    <!-- Destino de foco, no parada de tabulacion. Ver [A11Y-06]. -->
+                    <Grid x:Name="PanelAjustes" Visibility="Collapsed"
+                          Focusable="True" KeyboardNavigation.IsTabStop="False"
+                          AutomationProperties.Name="Ajustes">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <StackPanel Grid.Row="0" Margin="32,28,32,0">
+                            <TextBlock Text="Ajustes" Style="{StaticResource Titulo}"/>
+                            <TextBlock Style="{StaticResource Subtitulo}" Margin="0,4,0,0"
+                                       Text="Estos valores se aplican al análisis y se recuerdan entre sesiones. Al tocar cualquiera, el perfil pasa a Personalizado."/>
+                        </StackPanel>
+
+                        <ScrollViewer Grid.Row="1" Margin="32,24,24,0" VerticalScrollBarVisibility="Auto">
+                            <StackPanel Margin="0,0,8,24" MaxWidth="720" HorizontalAlignment="Left">
+
+                                <Border Style="{StaticResource Tarjeta}">
+                                    <StackPanel>
+                                        <TextBlock Text="Umbrales de detección" FontWeight="SemiBold" FontSize="15"/>
+
+                                        <Grid Margin="0,18,0,0">
+                                            <StackPanel>
+                                                <TextBlock Text="Tamano mínimo para proponer un elemento"/>
+                                                <TextBlock x:Name="TxtMinimoMB" Style="{StaticResource Subtitulo}" Text="10 MB"/>
+                                            </StackPanel>
+                                            <!--
+                                                Los dos deslizadores estan en un Grid, a la derecha
+                                                de su rotulo pero SIN relacion declarada con el:
+                                                para WPF son dos hermanos en la misma celda. Sin
+                                                nombre propio, un lector de pantalla anuncia
+                                                "control deslizante, 10" y el usuario no sabe si
+                                                son megabytes o dias. Ver [A11Y-01].
+                                            -->
+                                            <Slider x:Name="SliderMinimoMB" Width="260" Minimum="1" Maximum="500"
+                                                    AutomationProperties.Name="Tamaño mínimo en megabytes"
+                                                    Value="10" TickFrequency="1" IsSnapToTickEnabled="True"
+                                                    HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Border Style="{StaticResource Separador}"/>
+
+                                        <Grid>
+                                            <StackPanel>
+                                                <TextBlock Text="Días sin usar para considerar algo abandonado"/>
+                                                <TextBlock x:Name="TxtDiasSinUso" Style="{StaticResource Subtitulo}" Text="180 días"/>
+                                            </StackPanel>
+                                            <Slider x:Name="SliderDias" Width="260" Minimum="30" Maximum="730"
+                                                    AutomationProperties.Name="Días sin usar"
+                                                    Value="180" TickFrequency="10" IsSnapToTickEnabled="True"
+                                                    HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Border Style="{StaticResource Separador}"/>
+
+                                        <CheckBox x:Name="ChkMenores" Content="Incluir también los elementos pequeños"/>
+                                        <TextBlock Style="{StaticResource Subtitulo}" Margin="28,4,0,0"
+                                                   Text="Añade cachés de menos de unos pocos MB. Encuentra más cosas, pero la lista se llena de ruido."/>
+                                    </StackPanel>
+                                </Border>
+
+                                <Border Style="{StaticResource Tarjeta}" Margin="0,16,0,0">
+                                    <StackPanel>
+                                        <TextBlock Text="Como se elimina" FontWeight="SemiBold" FontSize="15"/>
+                                        <CheckBox x:Name="ChkPermanente" Margin="0,16,0,0"
+                                                  Content="Borrado permanente, sin pasar por la papelera"/>
+                                        <TextBlock Style="{StaticResource Subtitulo}" Margin="28,6,0,0"
+                                                   Text="Desactivado, todo lo que se pueda va a la papelera y se puede recuperar. Activado, el espacio se libera al instante pero no hay marcha atras."/>
+                                    </StackPanel>
+                                </Border>
+
+                                <Border Style="{StaticResource Tarjeta}" Margin="0,16,0,0">
+                                    <StackPanel>
+                                        <TextBlock Text="Permisos" FontWeight="SemiBold" FontSize="15"/>
+                                        <TextBlock x:Name="TxtEstadoAdmin" Style="{StaticResource Subtitulo}" Margin="0,8,0,16"
+                                                   Text="Comprobando..."/>
+                                        <Button x:Name="BtnReiniciarAdmin" Style="{StaticResource BotonSecundario}"
+                                                Content="Reiniciar como administrador" HorizontalAlignment="Left"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <Border Style="{StaticResource Tarjeta}" Margin="0,16,0,0">
+                                    <StackPanel>
+                                        <TextBlock Text="Datos del programa" FontWeight="SemiBold" FontSize="15"/>
+                                        <TextBlock x:Name="TxtCarpetaDatos" Style="{StaticResource Subtitulo}" Margin="0,8,0,16"/>
+                                        <StackPanel Orientation="Horizontal">
+                                            <Button x:Name="BtnAbrirDatos" Style="{StaticResource BotonSecundario}"
+                                                    Content="Abrir carpeta de datos"/>
+                                            <Button x:Name="BtnRestablecer" Style="{StaticResource BotonTexto}"
+                                                    Content="Restablecer ajustes" Margin="10,0,0,0"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Grid>
+

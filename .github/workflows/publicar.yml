@@ -1,0 +1,254 @@
+# =====================================================================
+#  Publicacion de una version
+#
+#  Se dispara al crear una etiqueta v* (por ejemplo, v2.1.0). Compila el
+#  lanzador, arma el paquete y lo adjunta a la version de GitHub.
+#
+#  Es aqui donde vive el unico binario del proyecto, y a proposito:
+#  Cachivache.exe NO esta en el repositorio. Un ejecutable dentro de un
+#  proyecto que presume de "puedes leer exactamente que hace antes de
+#  ejecutarlo" seria justo lo contrario, porque nadie puede auditar un
+#  binario leyendo el codigo. Compilado aqui, al menos queda constancia
+#  publica de que salio de este codigo y de este commit.
+# =====================================================================
+name: Publicar version
+
+on:
+  push:
+    tags:
+      - 'v*'
+  # Tambien a mano, para poder probar el empaquetado sin publicar nada.
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  paquete:
+    name: Compilar y publicar
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Antes de empaquetar nada: si las pruebas no pasan, no hay version.
+      - name: Pruebas
+        shell: pwsh
+        run: |
+          Install-Module Pester -MinimumVersion 5.0 -Force -SkipPublisherCheck -Scope CurrentUser
+          Import-Module Pester -MinimumVersion 5.0
+          $config = New-PesterConfiguration
+          $config.Run.Path = './tests'
+          $config.Run.Exit = $true
+          $config.Output.Verbosity = 'Detailed'
+          Invoke-Pester -Configuration $config
+
+      - name: Compilar el lanzador
+        shell: pwsh
+        run: ./tools/Compilar-Lanzador.ps1
+
+      - name: Comprobar que el lanzador es lo que decimos que es
+        shell: pwsh
+        run: |
+          # Dos comprobaciones que valen mas que "el archivo existe":
+          # que sea un ejecutable de subsistema WINDOWS -si fuera de
+          # consola, seguiria saliendo la ventana negra que este .exe
+          # existe para evitar- y que ocupe lo que tiene que ocupar.
+          $exe = Get-Item ./Cachivache.exe
+          Write-Host "  Tamanyo: $($exe.Length) bytes"
+          if ($exe.Length -gt 200KB) {
+              Write-Host '::error::El lanzador deberia ocupar unos pocos KB. Algo se ha colado dentro.'
+              exit 1
+          }
+
+          # El subsistema esta en la cabecera PE, 2 = Windows GUI, 3 = consola.
+          $bytes = [IO.File]::ReadAllBytes($exe.FullName)
+          $inicioPE = [BitConverter]::ToInt32($bytes, 0x3C)
+          $subsistema = [BitConverter]::ToUInt16($bytes, $inicioPE + 0x5C)
+          Write-Host "  Subsistema PE: $subsistema (2 = ventana, 3 = consola)"
+          if ($subsistema -ne 2) {
+              Write-Host '::error::El lanzador se ha compilado como aplicacion de consola.'
+              exit 1
+          }
+
+      - name: Armar el paquete
+        shell: pwsh
+        run: |
+          $version = if ($env:GITHUB_REF -like 'refs/tags/*') {
+              $env:GITHUB_REF -replace '^refs/tags/', ''
+          } else { 'dev' }
+          $carpeta = "Cachivache-$version"
+          New-Item -ItemType Directory -Path $carpeta | Out-Null
+
+          # Lo que necesita un usuario para ejecutarlo, y nada mas: ni
+          # pruebas, ni herramientas de desarrollo, ni el .github.
+          foreach ($elemento in @('src', 'assets', 'tools', 'Cachivache.ps1', 'Cachivache.bat',
+                                  'Cachivache.exe', 'README.md', 'LICENSE', 'SECURITY.md')) {
+              Copy-Item -Path $elemento -Destination $carpeta -Recurse
+          }
+          Compress-Archive -Path $carpeta -DestinationPath "$carpeta.zip"
+          "PAQUETE=$carpeta.zip" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      # DESPUES de armar el paquete y ANTES de adjuntarlo: hay que medir
+      # exactamente los bytes que se van a subir. Ver [DIS-02].
+      - name: Calcular las sumas SHA-256
+        shell: pwsh
+        run: |
+          $tabla = ./tools/Publicar-Sumas.ps1 -Archivos $env:PAQUETE, 'Cachivache.exe'
+
+          # A GITHUB_ENV no cabe texto de varias lineas, asi que la tabla va
+          # por GITHUB_OUTPUT con delimitador. El delimitador lleva el
+          # identificador de la ejecucion para que no pueda aparecer dentro
+          # del propio contenido.
+          $fin = "FIN_TABLA_$($env:GITHUB_RUN_ID)"
+          "TABLA<<$fin"  | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          $tabla         | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          $fin           | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+        id: sumas
+
+      - name: Comprobar que las sumas se pueden verificar
+        shell: bash
+        run: |
+          # Se verifican aqui mismo con la herramienta de verdad, no con
+          # PowerShell. Un archivo de sumas con BOM, con CRLF o con un solo
+          # espacio se LEE perfectamente y no valida, y ese fallo solo lo
+          # encuentra quien lo usa: normalmente, alguien que concluye que el
+          # paquete esta adulterado. Ver [DIS-02].
+          #
+          # --strict NO es adorno, y esto se comprobo a mano antes de
+          # escribirlo. Sin --strict, un archivo con BOM da:
+          #
+          #     WARNING: 1 line is improperly formatted
+          #     Cachivache.exe: OK
+          #     codigo de salida: 0
+          #
+          # O sea: la primera linea no se comprueba, la segunda si, y el
+          # paso sale VERDE. Habriamos publicado un .zip cuya suma no ha
+          # verificado nadie, con un tick al lado. Con --strict, una linea
+          # mal formada es un error y la publicacion se para.
+          cat SHA256SUMS.txt
+          sha256sum -c --strict SHA256SUMS.txt
+
+      # Los manifiestos se GENERAN, no se mantienen a mano. Declaran la
+      # version, la URL, la carpeta de dentro del zip y el hash: cuatro
+      # datos que cambian en cada version y que, escritos a mano, se quedan
+      # viejos sin que falle nada aqui. Falla en casa de quien instala, y lo
+      # que le dice su gestor de paquetes es que el archivo no coincide con
+      # lo declarado. Ver [DIS-03] y [DIS-04].
+      - name: Generar los manifiestos de winget y de Scoop
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        run: |
+          $etiqueta = $env:GITHUB_REF -replace '^refs/tags/', ''
+          ./tools/Publicar-Manifiestos.ps1 -Etiqueta $etiqueta -Paquete $env:PAQUETE
+
+      - name: Comprobar que los manifiestos declaran el paquete que se sube
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        run: |
+          # Se leen los archivos ESCRITOS y se comparan con el hash real del
+          # zip, calculado otra vez aqui. Es la misma idea que el
+          # `sha256sum -c --strict` de arriba: la comprobacion no vale nada
+          # si recorre el mismo camino que lo que comprueba.
+          $real = (Get-FileHash -LiteralPath $env:PAQUETE -Algorithm SHA256).Hash
+          $nombre = Split-Path -Leaf $env:PAQUETE
+          $fallos = @()
+
+          $scoop = Get-Content -Raw ./packaging/cachivache.json | ConvertFrom-Json
+          # -cne, con case: Scoop escribe el hash en minusculas y su
+          # autoupdate lo saca de SHA256SUMS.txt, que tambien va en
+          # minusculas. Comparar sin distinguir dejaria pasar justo lo que
+          # esta prueba existe para ver.
+          if ($scoop.hash -cne $real.ToLowerInvariant()) {
+              $fallos += "El JSON de Scoop declara '$($scoop.hash)' y el zip vale '$($real.ToLowerInvariant())'."
+          }
+          if ($scoop.url -notlike "*/$nombre") {
+              $fallos += "El JSON de Scoop apunta a '$($scoop.url)' y el archivo se llama '$nombre'."
+          }
+
+          $instalador = Get-Content -Raw ./packaging/winget/FranciscoLopez.Cachivache.installer.yaml
+          if ($instalador -cnotmatch ('InstallerSha256:\s+' + [regex]::Escape($real.ToUpperInvariant()))) {
+              $fallos += 'El manifiesto de winget no declara el SHA-256 del zip en mayusculas.'
+          }
+          if ($instalador -notmatch ([regex]::Escape("/$nombre"))) {
+              $fallos += "El manifiesto de winget no apunta a '$nombre'."
+          }
+
+          Get-ChildItem ./packaging -Recurse -File | ForEach-Object { Write-Host "  $($_.FullName)" }
+          if ($fallos) {
+              $fallos | ForEach-Object { Write-Host "::error::$_" }
+              exit 1
+          }
+          Write-Host 'Los dos manifiestos declaran el paquete que se va a adjuntar.'
+
+      - name: Adjuntar a la version
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ env.PAQUETE }}
+            Cachivache.exe
+            SHA256SUMS.txt
+            packaging/cachivache.json
+            packaging/winget/FranciscoLopez.Cachivache.yaml
+            packaging/winget/FranciscoLopez.Cachivache.installer.yaml
+            packaging/winget/FranciscoLopez.Cachivache.locale.es-ES.yaml
+          body: |
+            Descarga el `.zip`, descomprimelo y haz doble clic en **Cachivache.exe**.
+
+            El ejecutable es un lanzador de unos 45 KB -casi todo el icono- que solo abre el programa
+            sin dejar una consola detras; todo lo que hace esta en
+            `tools/Compilar-Lanzador.ps1`, y lo ha compilado esta misma
+            ejecucion a partir del codigo etiquetado. Si prefieres no usar un
+            binario, `Cachivache.bat` hace lo mismo dejando la consola a la
+            vista.
+
+            ### Comprobar lo que has descargado
+
+            ${{ steps.sumas.outputs.TABLA }}
+
+            En PowerShell, desde la carpeta de la descarga:
+
+            ```powershell
+            Get-FileHash .\Cachivache-*.zip -Algorithm SHA256
+            ```
+
+            O con `SHA256SUMS.txt`, que tambien va adjunto:
+
+            ```bash
+            sha256sum -c SHA256SUMS.txt
+            ```
+
+            Las sumas estan aqui **y** en el archivo a proposito: quien pudiera
+            cambiar el paquete podria cambiar tambien su archivo de sumas, pero
+            no este texto.
+
+            ### Instalar con Scoop
+
+            El manifiesto va adjunto y ya declara el hash de este `.zip`, asi
+            que se puede instalar sin anyadir ningun repositorio:
+
+            ```powershell
+            scoop install https://github.com/pacolopez23/cachivache/releases/download/${{ github.ref_name }}/cachivache.json
+            ```
+
+            ### Manifiestos de winget
+
+            Los tres archivos `FranciscoLopez.Cachivache*.yaml` que van
+            adjuntos son el manifiesto de esta version, generado por esta misma
+            ejecucion con el hash de arriba. Son lo que hay que copiar a
+            `microsoft/winget-pkgs`; el envio se hace a mano.
+
+      - name: Guardar el paquete tambien como artefacto
+        uses: actions/upload-artifact@v4
+        with:
+          name: cachivache
+          path: |
+            ${{ env.PAQUETE }}
+            Cachivache.exe
+            SHA256SUMS.txt
+          # OJO al comparar: upload-artifact mete todo esto DENTRO DE OTRO
+          # ZIP. Lo que se baja de la pestanya de artefactos no es el
+          # paquete, sino un zip que lo contiene, y su suma no coincide con
+          # SHA256SUMS.txt. Las sumas valen para los archivos adjuntos a la
+          # VERSION. Ver [DIS-02].

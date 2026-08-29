@@ -1,0 +1,559 @@
+﻿<!--
+    Panel de RESULTADOS de la ventana principal.
+
+    NO ES UN DOCUMENTO XAML COMPLETO: es un TROZO de MainWindow.xaml,
+    que lo inserta en su sitio antes de interpretar el XAML entero.
+    Por eso no declara xmlns ni tiene un único elemento raiz propio:
+    los hereda del documento donde se pega.
+
+    Se hace así, y no cargando cada panel por separado, para que
+    siga habiendo UN SOLO arbol y UN SOLO ámbito de nombres. Con
+    paneles cargados aparte, $ventana.FindName() dejaria de
+    encontrar sus controles -viven en otro ámbito- y habría que
+    rehacer la resolución entera de la ventana. Aquí no cambia nada
+    en tiempo de ejecución: el XAML que se interpreta es identico,
+    byte a byte, al de antes de partirlo.
+-->
+                    <!-- ==================== RESULTADOS ==================== -->
+                    <!-- Destino de foco, no parada de tabulacion. Ver [A11Y-06]. -->
+                    <Grid x:Name="PanelResultados" Visibility="Collapsed"
+                          Focusable="True" KeyboardNavigation.IsTabStop="False"
+                          AutomationProperties.Name="Resultados del análisis">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <StackPanel Grid.Row="0" Margin="32,28,32,0">
+                            <TextBlock Text="Resultados del análisis" Style="{StaticResource Titulo}"/>
+                            <TextBlock x:Name="TxtResumenAnalisis" Style="{StaticResource Subtitulo}" Margin="0,4,0,0"
+                                       Text="Todavía no se ha analizado nada."/>
+
+                            <!--
+                                Franja de análisis incompleto.
+
+                                Vive PEGADA a la lista y no en el registro, que es
+                                donde estaba antes: una lista incompleta que se
+                                presenta como completa lleva a borrar creyendo que
+                                ya se ha visto todo. El aviso tiene que estar donde
+                                se toma la decisión. Ver [CNF-04].
+
+                                Nace plegada y solo aparece cuando de verdad falta
+                                algo: un aviso permanente no lo lee nadie.
+                            -->
+                            <Border x:Name="AvisoIncompleto" Visibility="Collapsed"
+                                    Margin="0,14,0,0" Padding="14,10" CornerRadius="8"
+                                    Background="{DynamicResource FondoBarra}"
+                                    BorderBrush="{DynamicResource Aviso}" BorderThickness="1">
+                                <TextBlock x:Name="TxtAvisoIncompleto" TextWrapping="Wrap" FontSize="13"
+                                           Foreground="{DynamicResource Aviso}"
+                                           Text=""/>
+                            </Border>
+
+                            <!--
+                                El resultado de la simulación, AQUI, que es donde
+                                esta mirando quien la ha pulsado.
+
+                                Antes solo se escribia en el panel de Registro. En
+                                Resultados no cambiaba nada: ni un numero, ni una
+                                marca. En la primera prueba real el usuario pulso
+                                "Simular limpieza" tres veces seguidas creyendo que
+                                el boton no hacia nada; el registro demostraba que
+                                habia hecho las tres. Hacer el trabajo y no decirlo
+                                es, para quien mira, lo mismo que no hacerlo.
+                                Ver [USO-15].
+
+                                Con el color de acento y no con el de exito: no ha
+                                pasado nada bueno todavia, no ha pasado NADA. Y
+                                desaparece en cuanto se cambia la selección, porque
+                                a partir de ahi sus cifras ya no corresponden a lo
+                                que hay marcado.
+                            -->
+                            <Border x:Name="AvisoSimulacion" Visibility="Collapsed"
+                                    Margin="0,14,0,0" Padding="14,10" CornerRadius="8"
+                                    Background="{DynamicResource FondoBarra}"
+                                    BorderBrush="{DynamicResource Acento}" BorderThickness="1">
+                                <TextBlock x:Name="TxtAvisoSimulacion" TextWrapping="Wrap" FontSize="13"
+                                           Foreground="{DynamicResource Acento}"
+                                           Text=""/>
+                            </Border>
+                        </StackPanel>
+
+                        <!-- Barra de herramientas -->
+                        <Grid Grid.Row="1" Margin="32,20,32,16">
+                            <StackPanel Orientation="Horizontal">
+                                <Grid Width="270">
+                                    <!--
+                                        El unico rotulo de este campo es el marcador de
+                                        posicion de abajo, y un marcador de posicion NO es
+                                        una etiqueta: desaparece en cuanto escribes, y
+                                        mientras se ve es un TextBlock suelto que WPF no
+                                        asocia con nada. Un lector de pantalla anunciaba
+                                        "cuadro de edicion" y ya. Ver [A11Y-01].
+                                    -->
+                                    <TextBox x:Name="CampoFiltro"
+                                             AutomationProperties.Name="Filtrar por nombre o ruta"/>
+                                    <!-- Marcador de posición: se oculta solo en cuanto hay texto. -->
+                                    <TextBlock Text="Filtrar por nombre o ruta..." IsHitTestVisible="False"
+                                               Margin="12,0,0,0" VerticalAlignment="Center" FontSize="13"
+                                               Foreground="{DynamicResource TextoTenue}">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Text, ElementName=CampoFiltro}" Value="">
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </Grid>
+                                <ComboBox x:Name="FiltroRiesgo" Width="150" Margin="10,0,0,0"
+                                          AutomationProperties.Name="Filtrar por nivel de riesgo">
+                                    <ComboBoxItem Content="Todos los riesgos" IsSelected="True"/>
+                                    <ComboBoxItem Content="Solo riesgo bajo"/>
+                                    <ComboBoxItem Content="Solo riesgo medio"/>
+                                    <ComboBoxItem Content="Solo riesgo alto"/>
+                                </ComboBox>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Button x:Name="BtnMarcarTodo"   Style="{StaticResource BotonTexto}" Content="Marcar todo"/>
+                                <Button x:Name="BtnDesmarcarTodo" Style="{StaticResource BotonTexto}" Content="Desmarcar todo"/>
+                                <Button x:Name="BtnSoloSeguros"  Style="{StaticResource BotonTexto}" Content="Solo lo seguro"/>
+                                <Border Width="1" Margin="8,4" Background="{DynamicResource Borde}"/>
+                                <Button x:Name="BtnVerContenido" Style="{StaticResource BotonTexto}" Content="Ver contenido"
+                                        ToolTip="Cuántos archivos hay, de cuándo es lo más reciente y qué es lo que ocupa"/>
+                                <Button x:Name="BtnAbrirCarpeta" Style="{StaticResource BotonTexto}" Content="Abrir ubicación"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- Lista -->
+                        <DataGrid x:Name="TablaResultados" Grid.Row="2" Margin="20,0,20,0">
+                            <DataGrid.GroupStyle>
+                                <GroupStyle>
+                                    <GroupStyle.ContainerStyle>
+                                        <Style TargetType="GroupItem">
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="GroupItem">
+                                                        <!-- Grid y no StackPanel: un StackPanel da altura infinita
+                                                             a sus hijos y anula la virtualizacion de la lista,
+                                                             que es justo lo que hace falta cuando un módulo
+                                                             devuelve miles de filas. -->
+                                                        <Grid>
+                                                            <Grid.RowDefinitions>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="*"/>
+                                                            </Grid.RowDefinitions>
+                                                            <Border Grid.Row="0" Background="{DynamicResource FondoElevado}"
+                                                                    CornerRadius="8" Padding="16,10" Margin="0,16,0,4">
+                                                                <Grid>
+                                                                    <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="Auto"/>
+                                                                        <ColumnDefinition Width="*"/>
+                                                                        <ColumnDefinition Width="Auto"/>
+                                                                    </Grid.ColumnDefinitions>
+
+                                                                    <!--
+                                                                        Plegar el grupo. Con veintiún módulos y miles de
+                                                                        filas, cerrar "Cachés" para poder mirar el resto
+                                                                        es la diferencia entre revisar y rendirse.
+                                                                        Ver [USO-04].
+                                                                    -->
+                                                                    <ToggleButton x:Name="BtnPlegarGrupo" Grid.Column="0"
+                                                                                  IsChecked="True" Margin="0,0,10,0"
+                                                                                  Background="Transparent" BorderThickness="0"
+                                                                                  Cursor="Hand" Focusable="True"
+                                                                                  AutomationProperties.Name="Plegar o desplegar esta categoría"
+                                                                                  ToolTip="Plegar o desplegar esta categoría">
+                                                                        <ToggleButton.Template>
+                                                                            <ControlTemplate TargetType="ToggleButton">
+                                                                                <Border Background="Transparent" Padding="2">
+                                                                                    <!--
+                                                                                        El giro se cambia REEMPLAZANDO la
+                                                                                        transformacion entera sobre el Path, no
+                                                                                        poniendole nombre a la RotateTransform y
+                                                                                        apuntandole con TargetName.
+
+                                                                                        Lo segundo es lo que habia, y es lo que
+                                                                                        reventaba el programa en Windows: una
+                                                                                        RotateTransform es un Freezable, no un
+                                                                                        FrameworkElement, y no entra en el ambito
+                                                                                        de nombres de la plantilla. TargetName no
+                                                                                        la encuentra y WPF lanza al APLICAR el
+                                                                                        disparador, no al cargar el XAML: por eso
+                                                                                        la ventana abria tan tranquila y el fallo
+                                                                                        salia despues, al aparecer la primera
+                                                                                        cabecera de grupo. Ver [USO-14].
+                                                                                    -->
+                                                                                    <Path x:Name="Punta" Width="10" Height="10"
+                                                                                          Stretch="Uniform"
+                                                                                          Fill="{DynamicResource TextoTenue}"
+                                                                                          Data="M4,2 L10,8 L4,14 Z"
+                                                                                          RenderTransformOrigin="0.5,0.5">
+                                                                                        <Path.RenderTransform>
+                                                                                            <RotateTransform Angle="0"/>
+                                                                                        </Path.RenderTransform>
+                                                                                    </Path>
+                                                                                </Border>
+                                                                                <ControlTemplate.Triggers>
+                                                                                    <Trigger Property="IsChecked" Value="True">
+                                                                                        <Setter TargetName="Punta" Property="RenderTransform">
+                                                                                            <Setter.Value>
+                                                                                                <RotateTransform Angle="90"/>
+                                                                                            </Setter.Value>
+                                                                                        </Setter>
+                                                                                    </Trigger>
+                                                                                </ControlTemplate.Triggers>
+                                                                            </ControlTemplate>
+                                                                        </ToggleButton.Template>
+                                                                    </ToggleButton>
+
+                                                                    <TextBlock Grid.Column="1" Text="{Binding Name}"
+                                                                               FontWeight="SemiBold" FontSize="13"
+                                                                               VerticalAlignment="Center"/>
+
+                                                                    <StackPanel Grid.Column="2" Orientation="Horizontal"
+                                                                                VerticalAlignment="Center">
+                                                                        <!--
+                                                                            DOS BOTONES Y NO UNA CASILLA DE TRES ESTADOS.
+
+                                                                            La casilla era lo que pedia el plan, y se
+                                                                            descarto a proposito: para ensenyar el estado
+                                                                            "a medias" tendria que recalcularse cada vez
+                                                                            que cambia CUALQUIER fila del grupo, y las
+                                                                            cabeceras viven dentro de un panel
+                                                                            virtualizado que las crea y las destruye al
+                                                                            desplazarse. Una casilla que se queda en
+                                                                            "sin marcar" cuando hay cinco de diez
+                                                                            marcados MIENTE sobre el estado, que es
+                                                                            justo la familia de fallo que este proyecto
+                                                                            lleva cerrando todo el dia.
+
+                                                                            Dos botones no afirman nada: hacen algo.
+                                                                            Ver [USO-04].
+                                                                        -->
+                                                                        <!--
+                                                                            x:Name, no el texto del boton: el manejador
+                                                                            distingue por NOMBRE. Mirar el Content ataria
+                                                                            el comportamiento a la etiqueta, y cambiar
+                                                                            "Marcar" por "Marcar todo" romperia el boton
+                                                                            en silencio.
+                                                                        -->
+                                                                        <Button x:Name="BtnMarcarGrupo"
+                                                                                Style="{StaticResource BotonTexto}"
+                                                                                Content="Marcar" Tag="{Binding Name}"
+                                                                                ToolTip="Marcar todo lo que se pueda borrar de esta categoría"/>
+                                                                        <Button x:Name="BtnQuitarGrupo"
+                                                                                Style="{StaticResource BotonTexto}"
+                                                                                Content="Quitar" Tag="{Binding Name}"
+                                                                                ToolTip="Desmarcar toda esta categoría"/>
+                                                                        <TextBlock FontSize="12" Margin="10,0,0,0"
+                                                                                   VerticalAlignment="Center"
+                                                                                   Foreground="{DynamicResource TextoTenue}">
+                                                                            <!--
+                                                                                "Elementos: 12" y no "12 elementos".
+
+                                                                                Ponia "1 elementos", y con veintiuna
+                                                                                categorias casi siempre hay alguna con una
+                                                                                sola fila. El primer arreglo fue un Style con
+                                                                                un DataTrigger que cambiaba la palabra a
+                                                                                singular cuando ItemCount era 1: en Windows,
+                                                                                el disparador funcionaba y el valor por
+                                                                                defecto NO, asi que las categorias de una
+                                                                                fila decian "1 elemento" y las demas se
+                                                                                quedaban en "12", sin palabra ninguna.
+
+                                                                                No se por que, y ese es justo el motivo de
+                                                                                no dejarlo asi: aqui no hay WPF con el que
+                                                                                comprobarlo, y un mecanismo que no puedo
+                                                                                verificar no tiene sitio en una cabecera que
+                                                                                se dibuja miles de veces.
+
+                                                                                En forma de etiqueta el numero no concuerda
+                                                                                con nada, asi que no hay plural que acertar
+                                                                                ni disparador que aplicar: un enlace y una
+                                                                                palabra fija. Ver [USO-15].
+                                                                            -->
+                                                                            <Run Text="Elementos:"/>
+                                                                            <Run Text="{Binding ItemCount, Mode=OneWay}"/>
+                                                                        </TextBlock>
+                                                                    </StackPanel>
+                                                                </Grid>
+                                                            </Border>
+                                                            <!--
+                                                                La visibilidad cuelga del ToggleButton de arriba. Se hace
+                                                                asi y no con un Expander para no meter otro contenedor
+                                                                entre el Grid y el ItemsPresenter: el comentario de
+                                                                arriba explica por que la virtualizacion depende de esa
+                                                                estructura exacta.
+                                                            -->
+                                                            <ItemsPresenter Grid.Row="1"
+                                                                            Visibility="{Binding IsChecked, ElementName=BtnPlegarGrupo,
+                                                                                        Converter={StaticResource BoolAVisible}}"/>
+                                                        </Grid>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                    </GroupStyle.ContainerStyle>
+                                </GroupStyle>
+                            </DataGrid.GroupStyle>
+
+                            <DataGrid.Columns>
+                                <!--
+                                    SortMemberPath en las cinco columnas.
+
+                                    Sin el, las cabeceras de una
+                                    DataGridTemplateColumn PARECEN pulsables
+                                    y no hacen nada: WPF no puede adivinar
+                                    por que campo ordenar una plantilla. Con
+                                    500 filas no habia forma de ver "lo mas
+                                    grande primero", que es lo primero que
+                                    quiere cualquiera. Ver [USO-03].
+                                -->
+                                <DataGridTemplateColumn Width="46" SortMemberPath="Seleccionado">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <!--
+                                                La casilla que decide si algo se borra, y era
+                                                la peor de todas: en una tabla de cientos de
+                                                filas, un lector de pantalla anunciaba
+                                                "casilla, sin marcar" cientos de veces sin
+                                                decir de que. Lleva el nombre del ELEMENTO
+                                                -mismo enlace que la columna de al lado-, que
+                                                es lo que hace falta para decidir.
+                                                Ver [A11Y-01].
+                                            -->
+                                            <CheckBox IsChecked="{Binding Seleccionado, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                      AutomationProperties.Name="{Binding Nombre}"
+                                                      IsEnabled="{Binding Borrable}"
+                                                      HorizontalAlignment="Center"/>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+
+                                <DataGridTemplateColumn Header="ELEMENTO" Width="*" SortMemberPath="Nombre">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <StackPanel VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding Nombre}" FontWeight="SemiBold"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                                <TextBlock Text="{Binding Info}" FontSize="12" Margin="0,4,0,0"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           Foreground="{DynamicResource TextoTenue}"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+
+                                <!--
+                                    Por Bytes, NO por Tamano.
+
+                                    Tamano es el texto ya formateado, y
+                                    ordenarlo alfabeticamente pone "9,52 GB"
+                                    antes que "980 MB". El numero es lo
+                                    unico que ordena de verdad.
+                                -->
+                                <DataGridTemplateColumn Header="TAMAÑO" Width="110" SortMemberPath="Bytes">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Tamano}" HorizontalAlignment="Right"
+                                                       FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+
+                                <!-- Por OrdenRiesgo: la cadena daria Alto, Bajo, Medio. -->
+                                <DataGridTemplateColumn Header="RIESGO" Width="100" SortMemberPath="OrdenRiesgo">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <Ellipse Style="{StaticResource Punto}" Fill="{Binding ColorRiesgo}"/>
+                                                <TextBlock Style="{StaticResource TextoEtiqueta}"
+                                                           Text="{Binding Riesgo}" Foreground="{Binding ColorRiesgo}"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+
+                                <DataGridTemplateColumn Header="QUÉ PASA SI SE BORRA" Width="2*" SortMemberPath="Efecto">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <!--
+                                                La ayuda emergente lleva el texto ENTERO.
+
+                                                Con MinRowHeight las filas ya crecen y no
+                                                deberia hacer falta, pero es la red por si la
+                                                altura variable diera problemas de
+                                                desplazamiento en listas de miles de
+                                                elementos: si hubiera que volver a la altura
+                                                fija, el texto completo seguiria estando a un
+                                                golpe de raton. Ver [USO-01].
+                                            -->
+                                            <StackPanel VerticalAlignment="Center"
+                                                        ToolTipService.ShowDuration="30000">
+                                                <StackPanel.ToolTip>
+                                                    <TextBlock Text="{Binding TextoCompleto}"
+                                                               TextWrapping="Wrap" MaxWidth="520"/>
+                                                </StackPanel.ToolTip>
+                                                <TextBlock Text="{Binding Aviso}" FontSize="12" FontWeight="SemiBold"
+                                                           Visibility="{Binding VisibilidadAviso}" TextWrapping="Wrap"
+                                                           Foreground="{DynamicResource Peligro}"/>
+                                                <TextBlock Text="{Binding Efecto}" FontSize="12" TextWrapping="Wrap"
+                                                           Foreground="{DynamicResource TextoSuave}"/>
+                                                <!-- Comando externo real que se va a ejecutar. SECURITY.md exige
+                                                     que sea "siempre visible en la interfaz": ver [C-03] en
+                                                     docs/OPTIMIZACIONES.md. Solo aparece cuando el método es
+                                                     'Comando'; monoespaciado para que se lea como lo que es. -->
+                                                <TextBlock Text="{Binding Comando}" FontSize="11" FontFamily="Consolas"
+                                                           Visibility="{Binding VisibilidadComando}" TextWrapping="Wrap"
+                                                           Margin="0,4,0,0" Foreground="{DynamicResource Texto}"/>
+                                                <!--
+                                                    Resultado real de la eliminación, fila a fila.
+
+                                                    Antes esto solo se veia con Hecho a True y en
+                                                    verde fijo. O sea que un elemento que NO se pudo
+                                                    borrar no ensenyaba nada -la fila quedaba igual
+                                                    que antes de intentarlo- y, cuando llegaba a
+                                                    verse, un fallo salia en verde diciendo lo
+                                                    contrario de lo que ponia.
+
+                                                    Ahora la visibilidad depende de que HAYA algo que
+                                                    contar y el color de si eso es un fallo. Las dos
+                                                    decisiones viven en ItemVista, no aqui: un
+                                                    disparador de XAML no se puede probar, y una
+                                                    propiedad si. Ver [USO-02].
+                                                -->
+                                                <TextBlock Text="{Binding Estado}" FontSize="12" FontWeight="SemiBold"
+                                                           TextWrapping="Wrap" Margin="0,4,0,0"
+                                                           Visibility="{Binding VisibilidadEstado}">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Foreground" Value="{DynamicResource Exito}"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding EstadoEsFallo}" Value="True">
+                                                                    <Setter Property="Foreground" Value="{DynamicResource Peligro}"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                            </DataGrid.Columns>
+
+                            <DataGrid.RowStyle>
+                                <Style TargetType="DataGridRow">
+                                    <Setter Property="BorderBrush"     Value="{DynamicResource BordeSuave}"/>
+                                    <Setter Property="BorderThickness" Value="0,0,0,1"/>
+                                    <Setter Property="ToolTip"         Value="{Binding Ruta}"/>
+                                    <Style.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource FondoTarjeta}"/>
+                                        </Trigger>
+                                        <Trigger Property="IsSelected" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource AcentoTenue}"/>
+                                        </Trigger>
+                                        <DataTrigger Binding="{Binding Hecho}" Value="True">
+                                            <Setter Property="Opacity" Value="0.45"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </DataGrid.RowStyle>
+                        </DataGrid>
+
+                        <!--
+                            Que se ve cuando la tabla no ensenya ni una fila.
+
+                            Va en la MISMA celda que la tabla (Grid.Row="2"),
+                            encima y centrado. Solo se hace visible cuando la
+                            vista esta vacia, asi que nunca tapa nada: debajo
+                            no hay filas que tapar.
+
+                            El texto y la visibilidad se asignan DESDE
+                            POWERSHELL, con lo que devuelve Get-EstadoVacio.
+                            Aqui no hay ni un Style con DataTrigger ni un
+                            conversor que decida nada: en [USO-04] un
+                            disparador se aplico y su valor por defecto no,
+                            en Windows, y no se pudo averiguar por que. Sin
+                            WPF con el que comprobarlo, un mecanismo de XAML
+                            que no se puede verificar no tiene sitio aqui.
+                            Una propiedad que se escribe desde codigo si se
+                            puede probar.
+
+                            El Content del boton tambien lo pone el codigo:
+                            el rotulo dice CUANTOS filtros va a quitar, y eso
+                            depende de cuales haya puestos. El literal de
+                            aqui es el caso general y solo se ve si algo
+                            impidiera asignarlo.
+                        -->
+                        <Border x:Name="EstadoVacio" Grid.Row="2" Visibility="Collapsed"
+                                HorizontalAlignment="Center" VerticalAlignment="Center"
+                                MaxWidth="520" Margin="20,24" Padding="24,20" CornerRadius="8"
+                                Background="{DynamicResource FondoElevado}"
+                                BorderBrush="{DynamicResource Borde}" BorderThickness="1">
+                            <StackPanel>
+                                <TextBlock x:Name="TxtEstadoVacio" TextWrapping="Wrap" FontSize="13"
+                                           TextAlignment="Center"
+                                           Foreground="{DynamicResource TextoSuave}"
+                                           Text="Todavía no se ha analizado nada."/>
+                                <Button x:Name="BtnQuitarFiltros" Style="{StaticResource BotonSecundario}"
+                                        Visibility="Collapsed" Margin="0,16,0,0"
+                                        HorizontalAlignment="Center"
+                                        Content="Quitar los filtros"
+                                        ToolTip="Vacía el cuadro de filtro y vuelve a poner el desplegable en Todos los riesgos"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Pie con el resumen y el boton de eliminar -->
+                        <Border Grid.Row="3" Background="{DynamicResource FondoBarra}"
+                                BorderBrush="{DynamicResource Borde}" BorderThickness="0,1,0,0" Padding="32,16">
+                            <Grid>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock x:Name="TxtSeleccion" FontSize="13" FontWeight="SemiBold"
+                                               Text="Nada marcado."/>
+                                    <TextBlock x:Name="TxtProyeccion" FontSize="12" Margin="0,4,0,0"
+                                               Foreground="{DynamicResource TextoTenue}" Text=""/>
+                                    <ProgressBar x:Name="BarraBorrado" Width="420" Margin="0,12,0,0"
+                                                 HorizontalAlignment="Left" Visibility="Collapsed"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                    <!--
+                                        La casilla de simulacion va AQUI, pegada al boton que
+                                        borra, y no en Ajustes. Una opcion que cambia lo que hace
+                                        el boton rojo tiene que verse desde el boton rojo: si vive
+                                        tres pantallas mas alla, el usuario la activa, se olvida y
+                                        cree que ha limpiado. Ver [CNF-02] en docs/HOJA-DE-RUTA.md.
+                                    -->
+                                    <CheckBox x:Name="ChkSimular" VerticalAlignment="Center"
+                                              Margin="0,0,18,0"
+                                              Content="Solo simular"
+                                              ToolTip="Recorre y mide todo lo marcado, te dice cuanto liberaria y no borra nada."/>
+                                    <!--
+                                        Aparece solo DESPUES de una limpieza que haya
+                                        mandado algo a la papelera. El programa manda
+                                        a la papelera por defecto -es su red de
+                                        seguridad- pero el usuario no lo sabia: al
+                                        terminar no se le decia si lo borrado se podia
+                                        rescatar, asi que la red existia y no servia
+                                        de nada. Ver [CNF-03] en docs/HOJA-DE-RUTA.md.
+                                    -->
+                                    <Button x:Name="BtnAbrirPapelera" Style="{StaticResource BotonSecundario}"
+                                            Content="Abrir la papelera" Margin="0,0,10,0" Visibility="Collapsed"/>
+                                    <Button x:Name="BtnCancelarBorrado" Style="{StaticResource BotonSecundario}"
+                                            Content="Detener" Margin="0,0,10,0" Visibility="Collapsed"/>
+                                    <Button x:Name="BtnExportar" Style="{StaticResource BotonSecundario}"
+                                            Content="Guardar informe" Margin="0,0,10,0"/>
+                                    <Button x:Name="BtnEliminar" Style="{StaticResource BotonPeligro}"
+                                            Content="Eliminar lo marcado" Padding="24,12" IsEnabled="False"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </Grid>
+

@@ -1,0 +1,141 @@
+﻿<!--
+    Confirmación final antes de eliminar. Obliga a escribir una palabra
+    exacta: es lo único que separa un clic distraido de un borrado real.
+-->
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Confirmar eliminación" SizeToContent="Height" Width="620"
+        WindowStartupLocation="CenterOwner" WindowStyle="None" ResizeMode="NoResize"
+        Background="{DynamicResource FondoVentana}" ShowInTaskbar="False"
+
+        MaxHeight="760">
+    <!--
+        MaxHeight, porque SizeToContent="Height" hace que el dialogo crezca
+        con su contenido y aqui el contenido lo pone el usuario: con
+        bastantes elementos de riesgo, los BOTONES quedaban por debajo del
+        borde inferior de la pantalla y no habia forma de confirmar ni de
+        cancelar. Ver [A11Y-03].
+
+        760 y no un porcentaje: XAML no sabe cuanta pantalla hay. Es la
+        altura util de un portatil de 768 px, que es el caso peor comun. La
+        lista de riesgo ya se desplaza sola desde [USO-08], asi que el tope
+        recorta lo que sobra por donde tiene que recortar.
+    -->
+
+    <Border BorderBrush="{DynamicResource Borde}" BorderThickness="1">
+        <StackPanel Margin="28">
+
+            <StackPanel Orientation="Horizontal">
+                <Border Width="38" Height="38" CornerRadius="10"
+                        Background="{DynamicResource PeligroTenue}">
+                    <Path Width="19" Height="19" Stretch="Uniform"
+                          Fill="{DynamicResource Peligro}"
+                          Data="M12,2 L22,20 L2,20 Z M11,8 L13,8 L13,14 L11,14 Z M11,16 L13,16 L13,18 L11,18 Z"/>
+                </Border>
+                <StackPanel Margin="14,0,0,0" VerticalAlignment="Center">
+                    <TextBlock Text="Confirmar eliminación" FontSize="20" FontWeight="SemiBold"/>
+                    <TextBlock x:Name="TxtSubtitulo" FontSize="13" Margin="0,4,0,0"
+                               Foreground="{DynamicResource TextoTenue}"/>
+                </StackPanel>
+            </StackPanel>
+
+            <Border Margin="0,20,0,0" CornerRadius="10" Padding="16"
+                    Background="{DynamicResource FondoTarjeta}"
+                    BorderBrush="{DynamicResource Borde}" BorderThickness="1">
+                <StackPanel>
+                    <Grid>
+                        <TextBlock Text="Elementos marcados" Foreground="{DynamicResource TextoTenue}" FontSize="12"/>
+                        <TextBlock x:Name="TxtElementos" HorizontalAlignment="Right" FontWeight="SemiBold"/>
+                    </Grid>
+                    <Grid Margin="0,10,0,0">
+                        <TextBlock Text="Espacio que se recuperaria" Foreground="{DynamicResource TextoTenue}" FontSize="12"/>
+                        <TextBlock x:Name="TxtEspacio" HorizontalAlignment="Right" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource Exito}"/>
+                    </Grid>
+                    <Grid Margin="0,10,0,0">
+                        <TextBlock Text="Destino de lo borrado" Foreground="{DynamicResource TextoTenue}" FontSize="12"/>
+                        <TextBlock x:Name="TxtDestino" HorizontalAlignment="Right" FontWeight="SemiBold"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Border x:Name="MarcoRiesgo" Margin="0,14,0,0" CornerRadius="10" Padding="14"
+                    Background="{DynamicResource PeligroTenue}" Visibility="Collapsed">
+                <StackPanel>
+                    <TextBlock x:Name="TxtRiesgo" FontWeight="SemiBold" FontSize="13"
+                               Foreground="{DynamicResource Peligro}" TextWrapping="Wrap"/>
+                    <!--
+                        La lista va dentro de un ScrollViewer con altura
+                        maxima: sin el, veinticinco entradas estirarian el
+                        dialogo (SizeToContent="Height") hasta salirse de la
+                        pantalla y los botones quedarian fuera de alcance.
+                        Con el, la lista crece hasta donde cabe y a partir
+                        de ahi se desplaza.
+                    -->
+                    <ScrollViewer Margin="0,8,0,0" MaxHeight="260"
+                                  VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled">
+                        <ItemsControl x:Name="ListaRiesgo">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <!--
+                                        TextWrapping, NO TextTrimming.
+
+                                        Antes recortaba con puntos
+                                        suspensivos, y lo que se recortaba
+                                        era justo el comando externo que
+                                        SECURITY.md exige ensenyar ANTES de
+                                        confirmar: "docker system prune -a
+                                        -f" se quedaba en "docker system
+                                        pru...". Pedir que alguien confirme
+                                        un comando que no puede leer entero
+                                        es pedirle que confie a ciegas.
+                                        Ver [USO-08] y [C-03].
+                                    -->
+                                    <TextBlock Text="{Binding}" FontSize="12" Margin="0,4,0,0"
+                                               TextWrapping="Wrap"
+                                               Foreground="{DynamicResource TextoSuave}"/>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </StackPanel>
+            </Border>
+
+            <TextBlock x:Name="TxtInstruccion" Margin="0,20,0,8" TextWrapping="Wrap"
+                       Text="Para continuar, escribe ELIMINAR en mayusculas:"/>
+            <!--
+                El campo del que depende que se borre o no. TxtInstruccion
+                esta justo encima y lo explica, pero es un TextBlock suelto:
+                WPF no lo asocia con el cuadro, asi que quien navega con el
+                teclado llega aqui y oye "cuadro de edicion". Ver [A11Y-01].
+            -->
+            <TextBox x:Name="CampoConfirmacion" FontSize="15" Padding="12,10"
+                     AutomationProperties.Name="Palabra de confirmación"/>
+
+            <TextBlock x:Name="TxtError" Margin="0,8,0,0" FontSize="12" Visibility="Collapsed"
+                       Foreground="{DynamicResource Peligro}"
+                       Text="La palabra no coincide."/>
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,22,0,0">
+                <!--
+                    IsCancel: hace que Escape cierre el dialogo desde
+                    CUALQUIER foco. Antes, cancelar con el teclado solo
+                    funcionaba si el foco estaba dentro del cuadro de texto,
+                    porque el unico manejador de Escape estaba enganchado a
+                    ese cuadro; si habias tabulado hasta un boton, Escape no
+                    hacia nada y el dialogo se quedaba ahi. Ver [A11Y-03].
+
+                    Y NO se pone IsDefault en BtnSi: eso haria que Enter
+                    lanzase el borrado desde cualquier foco, que es
+                    exactamente lo contrario de lo que quiere un dialogo que
+                    existe para frenar un clic distraido.
+                -->
+                <Button x:Name="BtnNo" Style="{StaticResource BotonSecundario}" Content="Cancelar"
+                        IsCancel="True"/>
+                <Button x:Name="BtnSi" Style="{StaticResource BotonPeligro}" Margin="10,0,0,0"
+                        Content="Eliminar definitivamente" IsEnabled="False"/>
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</Window>

@@ -1,0 +1,43 @@
+# ---------------------------------------------------------------------
+#  Finales de linea
+#
+#  Todo el repositorio esta HOY en LF, y aqui se fija para que siga
+#  estandolo. No es una preferencia: en Windows, Git viene de fabrica con
+#  core.autocrlf=true y convierte a CRLF al sacar los archivos. Este
+#  proyecto tiene una prueba que compara el XAML montado BYTE A BYTE con
+#  un oraculo guardado, y otra que exige BOM de UTF-8 en todo .ps1 y
+#  .xaml. Un cambio de finales de linea aplicado a unos archivos y no a
+#  otros rompe la primera sin tocar una sola linea de codigo, y el
+#  mensaje de error no habla de finales de linea.
+#
+#  PowerShell 5.1 lee LF sin problema, asi que no se pierde nada.
+# ---------------------------------------------------------------------
+* text=auto eol=lf
+
+# ---------------------------------------------------------------------
+#  Binarios: que Git no toque nada dentro
+# ---------------------------------------------------------------------
+*.png  binary
+*.ico  binary
+*.exe  binary
+*.zip  binary
+
+# ---------------------------------------------------------------------
+#  El oraculo del XAML montado
+#
+#  Explicito y aparte aunque la regla de arriba ya lo cubre, porque es el
+#  archivo donde mas caro sale equivocarse: se compara byte a byte, y si
+#  alguien anyade una excepcion generosa mas abajo, aqui queda dicho por
+#  que este no puede entrar en ella.
+# ---------------------------------------------------------------------
+tests/datos/MainWindow.montado.esperado.xaml text eol=lf
+
+# ---------------------------------------------------------------------
+#  Idioma de las estadisticas de GitHub
+#
+#  Sin esto, GitHub cuenta el .yml de la integracion continua y los .json
+#  y ensenya un lenguaje que no es el del proyecto.
+# ---------------------------------------------------------------------
+*.ps1   linguist-language=PowerShell
+*.psd1  linguist-language=PowerShell
+docs/*  linguist-documentation
