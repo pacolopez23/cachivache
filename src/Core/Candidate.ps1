@@ -259,6 +259,12 @@ function New-Candidato {
         Hecho          = $false
         BytesLiberados = 0.0
         Error          = ''
+        # Con que se compara la lista de exclusiones del usuario. NO es la
+        # ruta: para un comando o para la papelera, Ruta es una etiqueta, y
+        # compararla como si fuera una carpeta -en minusculas, sin barra
+        # final, por prefijo- es tratar de jerarquia algo que no la tiene.
+        # Ver Get-ClaveExclusion y [ARQ-03].
+        ClaveExclusion = Get-ClaveExclusion -Ruta $Ruta -ModuloId $ModuloId -Nombre $Nombre
     }
 }
 

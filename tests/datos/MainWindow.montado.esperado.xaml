@@ -523,6 +523,35 @@
                                     <ComboBoxItem Content="Solo riesgo medio"/>
                                     <ComboBoxItem Content="Solo riesgo alto"/>
                                 </ComboBox>
+                                <!--
+                                    OCULTAR LO YA ELIMINADO [USO-13].
+
+                                    Tras limpiar 800 elementos la lista se quedaba
+                                    con 800 filas fantasma al 45% de opacidad, y
+                                    para seguir trabajando había que bajar por
+                                    todas ellas.
+
+                                    Es una CASILLA y no algo automático, y esa es
+                                    la decisión del punto. Esconder solo el
+                                    resultado de la limpieza, justo cuando el
+                                    usuario acaba de pulsar el botón y va a mirar
+                                    qué ha pasado, es hacer el trabajo y no
+                                    decirlo: [USO-15] otra vez. Así el resultado
+                                    se ve siempre, y esconderlo es una decisión
+                                    del usuario, reversible con un clic.
+
+                                    Nace desmarcada y solo esconde lo que se borró
+                                    BIEN. Lo que falló se queda siempre a la
+                                    vista, y en rojo, porque es lo único que
+                                    todavía se puede arreglar y reintentar. Ver
+                                    [USO-02]: la decisión de qué se esconde vive
+                                    en el predicado del filtro, en PowerShell, no
+                                    en un disparador del XAML.
+                                -->
+                                <CheckBox x:Name="ChkOcultarHechos" Margin="12,0,0,0"
+                                          VerticalAlignment="Center"
+                                          Content="Ocultar lo ya eliminado"
+                                          ToolTip="Esconde las filas que se borraron bien. Lo que falló sigue viéndose siempre, en rojo, para que puedas reintentarlo."/>
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                                 <Button x:Name="BtnMarcarTodo"   Style="{StaticResource BotonTexto}" Content="Marcar todo"/>
@@ -536,7 +565,60 @@
                         </Grid>
 
                         <!-- Lista -->
-                        <DataGrid x:Name="TablaResultados" Grid.Row="2" Margin="20,0,20,0">
+                        <!--
+                            IsReadOnly: aquí no se edita nada. Ninguna columna
+                            declara plantilla de edición, así que entrar en modo
+                            edición no cambiaba nada visible, pero el doble clic
+                            SI lo abría, y desde [USO-06] el doble clic tiene otro
+                            trabajo: abrir la ubicación. Las casillas de la
+                            primera columna siguen funcionando: viven en la
+                            CellTemplate, y esto solo impide entrar a editar.
+                        -->
+                        <DataGrid x:Name="TablaResultados" Grid.Row="2" Margin="20,0,20,0"
+                                  IsReadOnly="True">
+                            <!--
+                                MENU CONTEXTUAL DE LA FILA [USO-06].
+
+                                "Abrir ubicación" existía y obligaba a seleccionar
+                                la fila y subir a la barra de herramientas; copiar
+                                una ruta no se podía hacer de ninguna forma.
+
+                                Va colgado de la TABLA y no del estilo de fila a
+                                propósito. Dentro de un Style los MenuItem nacen y
+                                mueren con el panel virtualizado, no tienen ámbito
+                                de nombres y FindName no los encuentra: habría que
+                                repetir el apaño de la cabecera de grupo
+                                (AddHandler y mirar quién disparó). Aquí son
+                                cuatro controles con nombre, resueltos en la lista
+                                de $c como todos los demás, y sus manejadores son
+                                Add_Click normales.
+
+                                El precio de colgarlo de la tabla es que el menú
+                                también sale sobre la cabecera y sobre el hueco
+                                vacío, donde no hay fila elegida. Los cuatro
+                                manejadores lo comprueban y lo dicen, igual que
+                                hacen los botones de la barra.
+
+                                El color va en el menú Y en cada entrada: la
+                                plantilla nativa del sistema puede no heredarlo, y
+                                aquí no hay WPF con el que comprobarlo. Un menú
+                                oscuro con letra oscura no se lee.
+                            -->
+                            <DataGrid.ContextMenu>
+                                <ContextMenu Background="{DynamicResource FondoElevado}"
+                                             Foreground="{DynamicResource Texto}"
+                                             BorderBrush="{DynamicResource Borde}">
+                                    <MenuItem x:Name="MenuAbrirUbicacion" Header="Abrir ubicación"
+                                              Foreground="{DynamicResource Texto}"/>
+                                    <MenuItem x:Name="MenuCopiarRuta" Header="Copiar ruta"
+                                              Foreground="{DynamicResource Texto}"/>
+                                    <Separator/>
+                                    <MenuItem x:Name="MenuExcluirSiempre" Header="Excluir siempre esto"
+                                              Foreground="{DynamicResource Texto}"/>
+                                    <MenuItem x:Name="MenuDesmarcarGrupo" Header="Desmarcar el grupo"
+                                              Foreground="{DynamicResource Texto}"/>
+                                </ContextMenu>
+                            </DataGrid.ContextMenu>
                             <DataGrid.GroupStyle>
                                 <GroupStyle>
                                     <GroupStyle.ContainerStyle>
@@ -913,6 +995,20 @@
                                         HorizontalAlignment="Center"
                                         Content="Quitar los filtros"
                                         ToolTip="Vacía el cuadro de filtro y vuelve a poner el desplegable en Todos los riesgos"/>
+                                <!--
+                                    El otro motivo de que la tabla se quede vacia: la
+                                    casilla de [USO-13]. Boton propio y no uno
+                                    compartido, porque cada uno destapa una cosa
+                                    distinta y un boton que promete lo que no hace es
+                                    justo lo que evita este cartel. Nunca se ven los
+                                    dos a la vez: hay prueba que recorre las 144
+                                    combinaciones y lo exige. Ver [USO-09] y [USO-13].
+                                -->
+                                <Button x:Name="BtnMostrarHechos" Style="{StaticResource BotonSecundario}"
+                                        Visibility="Collapsed" Margin="0,16,0,0"
+                                        HorizontalAlignment="Center"
+                                        Content="Mostrar lo ya eliminado"
+                                        ToolTip="Vuelve a enseñar las filas que se borraron bien"/>
                             </StackPanel>
                         </Border>
 
@@ -953,6 +1049,21 @@
                                             Content="Abrir la papelera" Margin="0,0,10,0" Visibility="Collapsed"/>
                                     <Button x:Name="BtnCancelarBorrado" Style="{StaticResource BotonSecundario}"
                                             Content="Detener" Margin="0,0,10,0" Visibility="Collapsed"/>
+                                    <!--
+                                        [USO-12]. Va pegada al boton que guarda el informe, por
+                                        el mismo motivo que la de simular va pegada al boton rojo:
+                                        cambia lo que produce ese boton, asi que tiene que verse
+                                        desde el.
+
+                                        Existia solo como -InformeAnonimo en la consola, y el
+                                        informe que genera la ventana lleva el nombre de usuario
+                                        de Windows en CADA fila. Es justo el que uno adjunta a una
+                                        incidencia, o sea, el que se acaba publicando.
+                                    -->
+                                    <CheckBox x:Name="ChkAnonimizar" VerticalAlignment="Center"
+                                              Margin="0,0,18,0"
+                                              Content="Anonimizar rutas"
+                                              ToolTip="En el informe que guardes, tu nombre de usuario, tu carpeta de perfil y el nombre del equipo se sustituyen por marcadores. Márcala si vas a adjuntarlo a una incidencia."/>
                                     <Button x:Name="BtnExportar" Style="{StaticResource BotonSecundario}"
                                             Content="Guardar informe" Margin="0,0,10,0"/>
                                     <Button x:Name="BtnEliminar" Style="{StaticResource BotonPeligro}"
@@ -1149,6 +1260,94 @@
                                     </StackPanel>
                                 </Border>
 
+                                <!--
+                                    LO QUE NO SE TOCA NUNCA. La tarjeta que [CNF-01]
+                                    daba por hecha en su banner y nunca se llego a
+                                    hacer. Desde [USO-06] se podian anyadir
+                                    exclusiones desde el menu contextual de la tabla,
+                                    pero no quitarlas: la unica marcha atras era
+                                    editar preferencias.json a mano.
+
+                                    NO SE LLAMA "Carpetas que nunca se tocan", que es
+                                    como la nombraba aquel banner, porque desde
+                                    [ARQ-03] la lista guarda tambien claves
+                                    sinteticas de cosas que no son carpetas -un
+                                    comando del sistema, la papelera-. Una tarjeta
+                                    titulada "Carpetas" con "Cache de Docker" dentro
+                                    seria el programa etiquetando mal sus propios
+                                    datos.
+
+                                    AQUI NO DECIDE NADA EL XAML. El rotulo de arriba
+                                    y los dos textos de cada fila salen de
+                                    Get-ExclusionVista y Get-TextoListaExclusiones,
+                                    en src/Core/Exclusiones.ps1, que son calculo puro
+                                    y estan probados. Ni un DataTrigger, ni un Style
+                                    con disparadores, ni un convertidor: en [USO-04]
+                                    un disparador se aplico y su valor por defecto
+                                    no, en Windows, y no se pudo averiguar por que.
+                                    Sin WPF con el que comprobarlo, un mecanismo de
+                                    XAML que no se puede verificar no tiene sitio
+                                    aqui. Hay una prueba que lo prohibe sobre este
+                                    bloque.
+
+                                    El boton "Quitar" vive dentro de la plantilla,
+                                    asi que no tiene ambito de nombres propio y
+                                    FindName no lo encuentra: el Click se engancha en
+                                    la lista y se mira quien lo disparo, igual que
+                                    los botones de la cabecera de grupo de [USO-04].
+                                    Lleva en el Tag la CLAVE EXACTA, no el titulo:
+                                    quitar por el titulo no encontraria nada que
+                                    quitar en cuanto la clave fuera sintetica.
+
+                                    El rotulo del resumen se ve SIEMPRE, tambien con
+                                    la lista vacia, y entonces dice donde esta la
+                                    orden que la llena. Es la leccion de [USO-09]: un
+                                    hueco en blanco se lee como un programa roto.
+                                -->
+                                <Border Style="{StaticResource Tarjeta}" Margin="0,16,0,0">
+                                    <StackPanel>
+                                        <TextBlock Text="Lo que no se toca nunca" FontWeight="SemiBold" FontSize="15"/>
+                                        <TextBlock x:Name="TxtResumenExclusiones" Style="{StaticResource Subtitulo}"
+                                                   Margin="0,8,0,0" TextWrapping="Wrap"
+                                                   Text="Todavía no has excluido nada."/>
+                                        <ItemsControl x:Name="ListaExclusiones" Margin="0,14,0,0">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <!--
+                                                        Fondo elevado y radio 6, que es el de las
+                                                        filas. Con el estilo Tarjeta la fila
+                                                        quedaria del mismo color que la tarjeta que
+                                                        la contiene y solo la separaria una linea.
+                                                    -->
+                                                    <Border Background="{DynamicResource FondoElevado}"
+                                                            BorderBrush="{DynamicResource Borde}" BorderThickness="1"
+                                                            CornerRadius="6" Padding="13" Margin="0,0,0,7">
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                                                <TextBlock Text="{Binding Titulo}" FontWeight="SemiBold"
+                                                                           TextWrapping="Wrap"/>
+                                                                <TextBlock Text="{Binding Detalle}" FontSize="12" Margin="0,4,0,0"
+                                                                           TextWrapping="Wrap"
+                                                                           Foreground="{DynamicResource TextoTenue}"/>
+                                                            </StackPanel>
+                                                            <Button x:Name="BtnQuitarExclusion" Grid.Column="1"
+                                                                    Style="{StaticResource BotonSecundario}"
+                                                                    Margin="12,0,0,0" VerticalAlignment="Center"
+                                                                    Content="Quitar" Tag="{Binding Clave}"
+                                                                    AutomationProperties.Name="{Binding Titulo}"
+                                                                    ToolTip="Deja de excluirlo. No borra nada: vuelve a proponerse en los próximos análisis."/>
+                                                        </Grid>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </Border>
+
                                 <Border Style="{StaticResource Tarjeta}" Margin="0,16,0,0">
                                     <StackPanel>
                                         <TextBlock Text="Como se elimina" FontWeight="SemiBold" FontSize="15"/>
@@ -1220,6 +1419,58 @@
                                                    Text="Software libre bajo licencia MIT. Todo el código es PowerShell legible: puedes leer exactamente que hace antes de ejecutarlo."/>
                                         <Button x:Name="BtnRepositorio" Style="{StaticResource BotonSecundario}"
                                                 Content="Ver el código en GitHub" HorizontalAlignment="Left"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <!--
+                                    ==================== VERSION NUEVA [DIS-05] ====================
+
+                                    La consulta NO se lanza sola: ni al arrancar el programa, ni al
+                                    abrir este panel, ni con un temporizador de fondo. Hace falta
+                                    pulsar el boton. El motivo esta escrito en el propio texto del
+                                    panel, porque el usuario tiene derecho a saberlo antes: este
+                                    programa presume de no tener comunicacion de red, y una
+                                    consulta automatica -aunque no mande ningun dato- entrega la
+                                    direccion IP y la hora a un tercero cada vez que se abre una
+                                    pantalla. Con el boton, la promesa sigue siendo cierta y ademas
+                                    es comprobable.
+
+                                    Los dos botones y el texto NO deciden nada por su cuenta: lo
+                                    que dicen y cual se ve sale de Get-AvisoActualizacion, que es
+                                    una funcion pura y esta probada. Aqui no hay WPF donde
+                                    comprobar un disparador, asi que no se usa ninguno.
+                                -->
+                                <Border Style="{StaticResource Tarjeta}" Margin="0,16,0,0">
+                                    <StackPanel>
+                                        <TextBlock Text="Versión y actualizaciones" FontWeight="SemiBold" FontSize="15"/>
+                                        <TextBlock x:Name="TxtActualizacion" Style="{StaticResource Subtitulo}" Margin="0,10,0,14"
+                                                   Text="Cachivache no se conecta a internet por su cuenta. Si pulsas el botón, y solo entonces, se consulta en GitHub cuál es la última versión publicada. No se envía ningún dato tuyo."/>
+                                        <StackPanel Orientation="Horizontal">
+                                            <Button x:Name="BtnBuscarActualizacion" Style="{StaticResource BotonSecundario}"
+                                                    Content="Buscar si hay una versión nueva"/>
+                                            <Button x:Name="BtnIrAVersionNueva" Style="{StaticResource BotonPrimario}"
+                                                    Content="Ver la versión nueva" Margin="10,0,0,0" Visibility="Collapsed"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+
+                                <!--
+                                    ==================== DIAGNOSTICO [USO-12] ====================
+
+                                    Lo mismo que ya hacia .\Cachivache.ps1 -Diagnostico, con el
+                                    mismo texto y la misma funcion. Estaba solo en la consola, y el
+                                    camino normal de este programa es hacer doble clic en
+                                    Cachivache.exe, que arranca sin ninguna consola donde escribir:
+                                    era una capacidad que la mayoria de los usuarios no tenia. Es la
+                                    leccion de [CNF-02].
+                                -->
+                                <Border Style="{StaticResource Tarjeta}" Margin="0,16,0,0">
+                                    <StackPanel>
+                                        <TextBlock Text="Informar de un problema" FontWeight="SemiBold" FontSize="15"/>
+                                        <TextBlock Style="{StaticResource Subtitulo}" Margin="0,10,0,14"
+                                                   Text="El diagnóstico reúne la versión, el entorno, las unidades y las últimas líneas del registro en un solo bloque de texto, listo para pegar en una incidencia. No incluye las rutas de tus archivos ni el nombre del equipo."/>
+                                        <Button x:Name="BtnCopiarDiagnostico" Style="{StaticResource BotonSecundario}"
+                                                Content="Copiar diagnóstico" HorizontalAlignment="Left"/>
                                     </StackPanel>
                                 </Border>
                             </StackPanel>

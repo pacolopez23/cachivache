@@ -91,7 +91,19 @@ function Add-EntradaHistorial {
     #>
     [CmdletBinding(SupportsShouldProcess)]
     param(
-        [Parameter(Mandatory)] [ValidateSet('analisis', 'limpieza')] [string] $Tipo,
+        # 'limpieza-interrumpida' FALTABA, y la ventana lleva llamando con
+        # ese tipo desde [CNF-04]. El ValidateSet rechazaba la llamada, la
+        # excepcion caia en el catch de al lado -que solo hace
+        # Write-Verbose, porque ocurre al cerrar la ventana y ahi no hay a
+        # quien avisar-, y NO SE ANOTABA NADA.
+        #
+        # O sea: la parte de [CNF-04] que promete "una limpieza detenida se
+        # anota como tal" no funcionaba por el camino de la ventana, que es
+        # el camino normal. Ninguna prueba lo veia porque las dos listas
+        # -la que valida y la que llama- vivian en archivos distintos y
+        # nadie las comparaba. Es [COR-04] otra vez, con otra pareja de
+        # listas; ahora hay invariante.
+        [Parameter(Mandatory)] [ValidateSet('analisis', 'limpieza', 'limpieza-interrumpida')] [string] $Tipo,
         [Parameter(Mandatory)] [int]    $Elementos,
         [Parameter(Mandatory)] [double] $Bytes,
         [string] $Perfil        = 'equilibrado',

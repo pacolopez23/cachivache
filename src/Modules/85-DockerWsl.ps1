@@ -39,7 +39,8 @@ $BuscarDockerWsl = {
         (Join-Path $env:LOCALAPPDATA 'Docker\wsl'),
         (Join-Path $env:APPDATA 'Docker\vms'))) {
         if (-not (Test-Path -LiteralPath $carpeta)) { continue }
-        Get-ChildItem -LiteralPath $carpeta -Recurse -Filter '*.vhdx' -File -Force -ErrorAction SilentlyContinue |
+        # Get-ElementosDelArbol y no Get-ChildItem -Recurse: ver [COR-08].
+        Get-ElementosDelArbol -Ruta $carpeta -Filtro '*.vhdx' |
             ForEach-Object { $encontrados += $_ }
     }
 

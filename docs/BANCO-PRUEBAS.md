@@ -1,8 +1,8 @@
-# Banco de pruebas — comprobar lo que aquí no se puede comprobar
+﻿# Banco de pruebas — comprobar lo que aquí no se puede comprobar
 
 `[VAL-02]`
 
-Cachivache tiene **1038 pruebas en verde y tres afirmaciones que nadie ha visto cumplirse**. No es
+Cachivache tiene **1612 pruebas en verde y tres afirmaciones que nadie ha visto cumplirse**. No es
 una contradicción: las tres solo ocurren **al borrar de verdad**, y un borrado de verdad no se
 ensaya sobre las carpetas de uno.
 
@@ -15,6 +15,19 @@ ensaya sobre las carpetas de uno.
 Este documento convierte esas tres en *"lo he visto"*. Lleva un rato la primera vez; después son
 veinte minutos por tanda.
 
+> **Buena parte de esto ya no hace falta hacerlo a mano.** Desde `VAL-03`, la integración continua
+> monta este mismo banco en un agente de Windows y ejecuta una limpieza **real** en cada push:
+> comprueba que los cebos aparecen, que no se propone nada del sistema, las rutas largas de `COR-02`,
+> los enlaces duros de `VIS-03`, dos análisis seguidos y —gratis, porque los agentes de GitHub están
+> en **inglés**— buena parte de `I18N-03`. Lo que sigue exigiendo la máquina virtual está en el
+> apartado 8, al final, y es una lista corta.
+>
+> **Los nombres de los cebos cambiaron en `VAL-03`, y el motivo merece leerse:** se llamaban
+> `copia-enorme.bak`, `copia-antigua.bak` y `documento-N.bak`, y empiezan por palabras de la lista de
+> `Test-ArchivoPersonal`. La guardia los protegía como trabajo tuyo y **no se proponían nunca**. O
+> sea: los pasos 5.4 y 5.5 —los de `COR-01` y `COR-02`, justo los que este banco existe para ver—
+> eran incomprobables, y lo habrías descubierto en la VM buscando un archivo que no aparecía.
+>
 > **Regla que no se salta.** El banco crea archivos **dentro de Documentos**, porque es el único
 > sitio donde los módulos los buscan, y después se hace una limpieza **real** sobre ellos. Eso se
 > hace en una máquina virtual con instantánea. No en el equipo de trabajo. El guion se niega a
@@ -69,9 +82,9 @@ concreta:
 
 | Carpeta | Qué contiene | Para qué |
 |---|---|---|
-| `01-temporales` | 16 archivos `.bak` y `.old`, con fecha de hace más de un año | El camino normal: proponer, marcar y borrar a la papelera |
-| `02-ruta-larga` | Doce carpetas anidadas y un `.bak` al fondo, más de 260 caracteres | `COR-02` |
-| `03-mas-grande-que-la-papelera` | Un `.bak` de 200 MB | `COR-01`, con la cuota bajada a 100 MB |
+| `01-temporales` | 16 archivos `salida-N.bak` y `version-N.old`, con fecha de hace más de un año | El camino normal: proponer, marcar y borrar a la papelera |
+| `02-ruta-larga` | Doce carpetas anidadas y `volcado-antiguo.dmp` al fondo, más de 260 caracteres | `COR-02` |
+| `03-mas-grande-que-la-papelera` | `volcado-enorme.dmp`, de 200 MB | `COR-01`, con la cuota bajada a 100 MB |
 | `04-enlaces-duros` | 20 MB reales con **dos** nombres | `VIS-03`: no contar dos veces |
 | `05-duplicados` | Dos archivos idénticos de 512 KB, independientes | El módulo de duplicados, y el contraste con el anterior |
 | `06-carpetas-vacias` | Cinco carpetas vacías | El módulo de carpetas vacías |
@@ -93,9 +106,11 @@ de excepción y línea.
 
 Perfil **Exhaustivo**, analizar. Al terminar:
 
-- [ ] Aparecen los `.bak` y `.old` de `01-temporales`.
-- [ ] Aparece el de `02-ruta-larga`. **Si no aparece, `COR-02` no funciona**: el recorrido se está
-      parando en silencio en la ruta larga, que era exactamente el fallo original.
+- [ ] Aparecen los `salida-N.bak` y `version-N.old` de `01-temporales`.
+- [ ] **`volcado-antiguo.dmp`, el de `02-ruta-larga`, TIENE que aparecer.** Hasta `COR-08` no
+      aparecía: `COR-02` había arreglado medir y borrar las rutas largas, pero no **encontrarlas**.
+      Si no aparece, `COR-08` no funciona en tu Windows y quiero saberlo — la CI ya lo exige, así
+      que lo normal es que salga verde antes de que llegues aquí.
 - [ ] Aparecen los 3.000 de `07-muchas-filas`.
 - [ ] **Nada de `C:\Windows`, `Archivos de programa` ni perfiles de otros usuarios.** Esto es la
       guardia, y es lo único de esta lista que, si falla, se para todo.
@@ -121,7 +136,7 @@ desplazamiento a saltos**. Aquí es donde se ve.
 
 ### 5.4 · La papelera que no cabría — `COR-01`
 
-Marca **solo** `copia-enorme.bak` (200 MB) y elimina.
+Marca **solo** `volcado-enorme.dmp` (200 MB) y elimina.
 
 - [ ] **No se borra.** Aparece la explicación con las dos cifras: lo que ocupa y lo que cabe.
 - [ ] Se ofrece el borrado permanente como decisión aparte.
@@ -132,7 +147,7 @@ Marca **solo** `copia-enorme.bak` (200 MB) y elimina.
 
 ### 5.5 · La ruta larga — `COR-02`
 
-Marca **solo** el `.bak` de `02-ruta-larga` y elimina.
+Marca **solo** `volcado-antiguo.dmp`, el del fondo de `02-ruta-larga`, y elimina.
 
 - [ ] O va a la papelera, o se dice que **no puede ir** y por qué. Las dos son correctas; lo que no
       vale es borrarlo permanentemente llamándolo papelera.
@@ -223,6 +238,26 @@ Inicia sesión en OneDrive dentro de la VM, sube una carpeta con archivos grande
 - [ ] El módulo de duplicados **dice cuántos archivos se saltó** por estar en la nube. Es el que
       calcula hashes, o sea el que los materializaría.
 - [ ] El de archivos grandes no promete espacio que en el disco no está.
+
+---
+
+## 8. Lo que la integración continua NO puede ver
+
+Después de `VAL-03`, esto es lo que sigue necesitando la máquina virtual y tus ojos:
+
+1. **`COR-01` entero** — bajar la cuota de la papelera a 100 MB, marcar `volcado-enorme.dmp` y ver
+   que **no se borra**, que se dan las dos cifras y que el registro no dice `PAPELERA`. Se dejó
+   fuera de la CI a propósito: quien lee la cuota pasa por una clase CIM que exige elevación, y si
+   un día el agente dejara de estar elevado la comprobación **se invertiría sola y en silencio**,
+   hacia el lado que no avisa.
+2. **`COR-03`, OneDrive** — necesita cuenta y archivos bajo demanda.
+3. **Todo lo visual**: desplazamiento con miles de filas, marcar en lote, el diálogo de confirmación
+   con los comandos externos enteros, lo que falló en rojo y todavía marcado, y detener a mitad.
+4. **Accesibilidad**: el Narrador, los atajos, la tabulación.
+5. **Cuenta sin privilegios**: el agente va elevado.
+6. **La memoria de dos análisis seguidos**: la CI compara los recuentos e imprime la memoria, pero no
+   falla por ella — un recolector de basura no promete cuándo devuelve memoria, y un umbral ahí sería
+   un paso que falla algunos días.
 
 ---
 

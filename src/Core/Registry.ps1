@@ -248,7 +248,15 @@ function Get-TokensProgramasInstalados {
         foreach ($menu in @(
             (Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu'),
             (Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu'))) {
-            Get-ChildItem -LiteralPath $menu -Recurse -Filter '*.lnk' -Force -ErrorAction SilentlyContinue |
+            # Get-ElementosDelArbol y no Get-ChildItem -Recurse, y aqui el
+            # motivo de [COR-08] va AL REVES que en los modulos: este
+            # vocabulario es la lista de "cosas que estan instaladas", y lo
+            # consulta Test-TokenConocido para decidir si una carpeta
+            # sobrante es de algo conocido. Un acceso directo que no se
+            # llegue a leer no hace que se proponga de menos: hace que una
+            # carpeta legitima parezca desconocida y SE PROPONGA PARA
+            # BORRAR. Pararse a los 260 caracteres aqui era el error caro.
+            Get-ElementosDelArbol -Ruta $menu -Filtro '*.lnk' |
                 ForEach-Object { Add-TokenVocabulario -Vocabulario $vocabulario -Texto $_.BaseName }
         }
     }

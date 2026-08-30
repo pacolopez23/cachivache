@@ -51,6 +51,58 @@
                                                 Content="Ver el código en GitHub" HorizontalAlignment="Left"/>
                                     </StackPanel>
                                 </Border>
+
+                                <!--
+                                    ==================== VERSION NUEVA [DIS-05] ====================
+
+                                    La consulta NO se lanza sola: ni al arrancar el programa, ni al
+                                    abrir este panel, ni con un temporizador de fondo. Hace falta
+                                    pulsar el boton. El motivo esta escrito en el propio texto del
+                                    panel, porque el usuario tiene derecho a saberlo antes: este
+                                    programa presume de no tener comunicacion de red, y una
+                                    consulta automatica -aunque no mande ningun dato- entrega la
+                                    direccion IP y la hora a un tercero cada vez que se abre una
+                                    pantalla. Con el boton, la promesa sigue siendo cierta y ademas
+                                    es comprobable.
+
+                                    Los dos botones y el texto NO deciden nada por su cuenta: lo
+                                    que dicen y cual se ve sale de Get-AvisoActualizacion, que es
+                                    una funcion pura y esta probada. Aqui no hay WPF donde
+                                    comprobar un disparador, asi que no se usa ninguno.
+                                -->
+                                <Border Style="{StaticResource Tarjeta}" Margin="0,16,0,0">
+                                    <StackPanel>
+                                        <TextBlock Text="Versión y actualizaciones" FontWeight="SemiBold" FontSize="15"/>
+                                        <TextBlock x:Name="TxtActualizacion" Style="{StaticResource Subtitulo}" Margin="0,10,0,14"
+                                                   Text="Cachivache no se conecta a internet por su cuenta. Si pulsas el botón, y solo entonces, se consulta en GitHub cuál es la última versión publicada. No se envía ningún dato tuyo."/>
+                                        <StackPanel Orientation="Horizontal">
+                                            <Button x:Name="BtnBuscarActualizacion" Style="{StaticResource BotonSecundario}"
+                                                    Content="Buscar si hay una versión nueva"/>
+                                            <Button x:Name="BtnIrAVersionNueva" Style="{StaticResource BotonPrimario}"
+                                                    Content="Ver la versión nueva" Margin="10,0,0,0" Visibility="Collapsed"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+
+                                <!--
+                                    ==================== DIAGNOSTICO [USO-12] ====================
+
+                                    Lo mismo que ya hacia .\Cachivache.ps1 -Diagnostico, con el
+                                    mismo texto y la misma funcion. Estaba solo en la consola, y el
+                                    camino normal de este programa es hacer doble clic en
+                                    Cachivache.exe, que arranca sin ninguna consola donde escribir:
+                                    era una capacidad que la mayoria de los usuarios no tenia. Es la
+                                    leccion de [CNF-02].
+                                -->
+                                <Border Style="{StaticResource Tarjeta}" Margin="0,16,0,0">
+                                    <StackPanel>
+                                        <TextBlock Text="Informar de un problema" FontWeight="SemiBold" FontSize="15"/>
+                                        <TextBlock Style="{StaticResource Subtitulo}" Margin="0,10,0,14"
+                                                   Text="El diagnóstico reúne la versión, el entorno, las unidades y las últimas líneas del registro en un solo bloque de texto, listo para pegar en una incidencia. No incluye las rutas de tus archivos ni el nombre del equipo."/>
+                                        <Button x:Name="BtnCopiarDiagnostico" Style="{StaticResource BotonSecundario}"
+                                                Content="Copiar diagnóstico" HorizontalAlignment="Left"/>
+                                    </StackPanel>
+                                </Border>
                             </StackPanel>
                         </ScrollViewer>
                     </Grid>

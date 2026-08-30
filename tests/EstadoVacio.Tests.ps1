@@ -49,11 +49,12 @@ BeforeAll {
 
 Describe 'USO-09: Get-EstadoVacio distingue los tres vacios' {
 
-    It 'devuelve los cinco campos que la ventana necesita' {
+    It 'devuelve los seis campos que la ventana necesita' {
         # Guarda: si el objeto cambiara de forma, las pruebas de abajo
         # compararian $null contra $null y pasarian todas.
         $r = Get-EstadoVacio -Fase 'terminado' -Total 0 -HayVisibles $false
-        foreach ($campo in @('Vacio', 'Caso', 'Texto', 'OfrecerQuitarFiltro', 'TextoBoton')) {
+        foreach ($campo in @('Vacio', 'Caso', 'Texto', 'OfrecerQuitarFiltro',
+                             'OfrecerMostrarHechos', 'TextoBoton')) {
             $r.PSObject.Properties.Name | Should -Contain $campo
         }
     }
@@ -147,6 +148,132 @@ Describe 'USO-09: Get-EstadoVacio distingue los tres vacios' {
             Should -Not -Throw
         { Get-EstadoVacio -Fase 'terminado' -Total -5 -HayVisibles $false } | Should -Not -Throw
         (Get-EstadoVacio -Fase 'terminado' -Total -5 -HayVisibles $false).Caso | Should -Be 'sin-resultados'
+    }
+}
+
+Describe 'USO-13: la casilla "Ocultar lo ya eliminado" tambien vacia la tabla' {
+
+    <#
+        [USO-13] anyadio una casilla que esconde las filas que se borraron
+        bien. Get-EstadoVacio no sabia nada de ella, asi que tras limpiar
+        800 elementos el cartel decia "Ninguno de los 812 elementos que
+        encontro el analisis se esta viendo en la tabla" -verdad, pero sin
+        decir la causa-, y si ademas habia un filtro de texto puesto,
+        CULPABA AL FILTRO. Quitar el filtro no destapa lo eliminado: el
+        usuario habria pulsado un boton que no cambia nada, que es
+        [USO-15] otra vez.
+    #>
+
+    It 'sin la casilla marcada nada cambia respecto a antes' {
+        # Guarda: si el parametro alterase el caso general, las pruebas de
+        # abajo estarian midiendo otra cosa.
+        (Get-EstadoVacio -Fase 'terminado' -Total 812 -HayVisibles $false -TextoFiltro 'zzz' `
+             -OcultandoHechos $false).Caso | Should -Be 'filtrado'
+        (Get-EstadoVacio -Fase 'terminado' -Total 812 -HayVisibles $false `
+             -OcultandoHechos $false).Caso | Should -Be 'oculto'
+    }
+
+    It 'con la casilla marcada la nombra, y no habla de la lista vacia' {
+        $r = Get-EstadoVacio -Fase 'terminado' -Total 812 -HayVisibles $false -OcultandoHechos $true
+        $r.Vacio | Should -BeTrue
+        $r.Caso  | Should -Be 'ocultando-hechos'
+        $r.Texto | Should -BeLike '*812 elementos*'
+        $r.Texto | Should -BeLike '*Ocultar lo ya eliminado*'
+        $r.Texto | Should -BeLike '*no está vacía*'
+    }
+
+    It 'ofrece destapar lo eliminado, y el rotulo dice lo que hace' {
+        $r = Get-EstadoVacio -Fase 'terminado' -Total 812 -HayVisibles $false -OcultandoHechos $true
+        $r.OfrecerMostrarHechos | Should -BeTrue
+        $r.TextoBoton           | Should -Be 'Mostrar lo ya eliminado'
+    }
+
+    It 'con filtro Y casilla se pregunta antes por la casilla' {
+        # EL ORDEN. El filtro se ve -su texto esta en el cuadro, delante
+        # del usuario-; la casilla es una marca pequenya que pudo quedarse
+        # puesta en una limpieza de hace veinte minutos. Un cartel que
+        # existe para nombrar lo que no se ve tiene que nombrar esa. Y el
+        # boton de los filtros no destapa lo eliminado: culpar al filtro
+        # seria ofrecer un boton que no arregla nada.
+        $r = Get-EstadoVacio -Fase 'terminado' -Total 812 -HayVisibles $false `
+                 -TextoFiltro 'chromme' -RiesgoFiltro 'Alto' -OcultandoHechos $true
+        $r.Caso                 | Should -Be 'ocultando-hechos'
+        $r.OfrecerMostrarHechos | Should -BeTrue
+        $r.OfrecerQuitarFiltro  | Should -BeFalse
+    }
+
+    It 'con filtro Y casilla el texto NOMBRA LAS DOS causas' {
+        # Ningun boton puede prometer aqui que la tabla se llene: quitar
+        # los filtros deja la casilla y destapar lo eliminado deja el
+        # filtro. Lo unico honesto es no callarse ninguna de las dos.
+        $r = Get-EstadoVacio -Fase 'terminado' -Total 812 -HayVisibles $false `
+                 -TextoFiltro 'chromme' -OcultandoHechos $true
+        $r.Texto | Should -BeLike '*filtro*'
+        $r.Texto | Should -BeLike '*Ocultar lo ya eliminado*'
+    }
+
+    It 'sin filtro dice ademas por que estan escondidos' {
+        # Si la casilla es lo unico que filtra y no se ve ni una fila, es
+        # que se borraron todas. Es la buena noticia, y decirla evita que
+        # el usuario crea que ha perdido la lista.
+        $r = Get-EstadoVacio -Fase 'terminado' -Total 812 -HayVisibles $false -OcultandoHechos $true
+        $r.Texto | Should -BeLike '*ya se eliminaron*'
+        $r.Texto | Should -Not -BeLike '*el filtro*'
+    }
+
+    It 'la casilla no manda si hay filas a la vista' {
+        # El orden general no cambia: primero se mira si hay algo a la
+        # vista. Un cartel de tabla vacia sobre una tabla llena seria peor
+        # que no decir nada.
+        (Get-EstadoVacio -Fase 'terminado' -Total 812 -HayVisibles $true -OcultandoHechos $true).Caso |
+            Should -Be 'con-datos'
+    }
+
+    It 'la casilla no acusa a nadie cuando no hay nada que esconder' {
+        # Total 0 y la casilla marcada: no hay 812 elementos detras, no hay
+        # nada. Decir "la casilla los esta escondiendo" seria inventarse
+        # unas filas que no existen.
+        (Get-EstadoVacio -Fase 'terminado' -Total 0 -HayVisibles $false -OcultandoHechos $true).Caso |
+            Should -Be 'sin-resultados'
+        (Get-EstadoVacio -Fase 'analizando' -Total 0 -HayVisibles $false -OcultandoHechos $true).Caso |
+            Should -Be 'analizando'
+    }
+
+    It 'NUNCA se ofrecen los dos botones a la vez' {
+        # Los dos comparten TextoBoton. El dia que se ofrecieran juntos,
+        # uno de los dos llevaria el rotulo del otro, y un boton que dice
+        # lo que no hace es peor que no tener boton.
+        foreach ($total in @(0, 1, 812)) {
+            foreach ($visibles in @($true, $false)) {
+                foreach ($texto in @('', 'chrome')) {
+                    foreach ($riesgo in @('', 'Alto')) {
+                        foreach ($hechos in @($true, $false)) {
+                            foreach ($fase in @('sin-analizar', 'analizando', 'terminado')) {
+                                $r = Get-EstadoVacio -Fase $fase -Total $total -HayVisibles $visibles `
+                                         -TextoFiltro $texto -RiesgoFiltro $riesgo -OcultandoHechos $hechos
+                                ($r.OfrecerQuitarFiltro -and $r.OfrecerMostrarHechos) |
+                                    Should -BeFalse -Because "fase=$fase total=$total visibles=$visibles texto='$texto' riesgo='$riesgo' hechos=$hechos"
+                                if (-not $r.OfrecerQuitarFiltro -and -not $r.OfrecerMostrarHechos) {
+                                    $r.TextoBoton | Should -BeNullOrEmpty
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    It 'por defecto la casilla se considera sin marcar' {
+        # Quien no pase el dato -la consola, o una version de la ventana
+        # que todavia no lo pasa- nunca vera al programa culpar a una
+        # casilla que a lo mejor no esta marcada.
+        (Get-EstadoVacio -Fase 'terminado' -Total 812 -HayVisibles $false).Caso | Should -Be 'oculto'
+    }
+
+    It 'no revienta con nulos' {
+        { Get-EstadoVacio -Fase $null -Total 812 -HayVisibles $false -TextoFiltro $null `
+              -RiesgoFiltro $null -OcultandoHechos $false } | Should -Not -Throw
     }
 }
 
@@ -311,16 +438,23 @@ Describe 'USO-09: la ventana llama a la funcion y no vuelve a decidir por su cue
 Describe 'USO-09: los textos que ve el usuario estan bien escritos' {
 
     BeforeAll {
+        # Un texto por cada caso que ensenya cartel. Si se anyade un caso,
+        # su texto viene aqui: la cuenta de abajo es lo que impide que dos
+        # situaciones distintas acaben diciendo lo mismo.
         $script:Textos = @(
             (Get-EstadoVacio -Fase 'sin-analizar' -Total 0 -HayVisibles $false).Texto
             (Get-EstadoVacio -Fase 'analizando'   -Total 0 -HayVisibles $false).Texto
             (Get-EstadoVacio -Fase 'terminado'    -Total 0 -HayVisibles $false).Texto
             (Get-EstadoVacio -Fase 'terminado' -Total 9 -HayVisibles $false -TextoFiltro 'x').Texto
+            (Get-EstadoVacio -Fase 'terminado' -Total 9 -HayVisibles $false).Texto
+            (Get-EstadoVacio -Fase 'terminado' -Total 9 -HayVisibles $false -OcultandoHechos $true).Texto
+            (Get-EstadoVacio -Fase 'terminado' -Total 9 -HayVisibles $false -TextoFiltro 'x' `
+                 -OcultandoHechos $true).Texto
         )
     }
 
-    It 'hay cuatro textos distintos: si no, esta prueba no compara nada' {
-        @($script:Textos | Select-Object -Unique).Count | Should -Be 4
+    It 'hay siete textos distintos: si no, esta prueba no compara nada' {
+        @($script:Textos | Select-Object -Unique).Count | Should -Be 7
         foreach ($t in $script:Textos) { $t.Length | Should -BeGreaterThan 40 }
     }
 

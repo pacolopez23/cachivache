@@ -115,6 +115,35 @@ function Initialize-Guardia {
     Where-Object { $_ } |
     Select-Object -Unique
 
+    # =================================================================
+    # [I18N-02] ESTAS LISTAS NO SE TRADUCEN. NO SON TEXTO DE INTERFAZ.
+    #
+    # Lo que viene a partir de aqui son palabras en castellano y en ingles
+    # -"documentos" y "documents", "respaldo" y "backup", "seguridad" y
+    # "security"-, y por eso PARECEN cadenas de interfaz esperando a que
+    # alguien las saque a un archivo de idioma. No lo son: son LOGICA DE
+    # SEGURIDAD. Con ellas decide la guardia que no se puede borrar.
+    #
+    # Si una extraccion de textos se las lleva a un .resx, a un .psd1 de
+    # idioma o a cualquier recurso, pasan dos cosas y ninguna se ve:
+    #   - traducir la lista al idioma de turno BORRA la mitad castellana o
+    #     la inglesa, y la guardia deja de reconocer justo las carpetas que
+    #     protegia;
+    #   - y no falla nada. No hay excepcion, no hay aviso: simplemente se
+    #     propone para borrar algo que antes estaba vetado.
+    #
+    # Las dos mitades tienen que seguir estando LAS DOS, aqui dentro y
+    # escritas literalmente. Ver [I18N-02] en docs/HOJA-DE-RUTA.md y la
+    # invariante de tests/Guardia.Idioma.Tests.ps1, que lo exige archivo a
+    # archivo: FragmentosProhibidos, NombresSensibles,
+    # ExtensionesPersonales, NombresBasuraConocida, CarpetasEspejo,
+    # RegexCarpetaPersonal y RegexCopiaSeguridad.
+    #
+    # (Lo que si es un problema abierto, y distinto, es que un Windows
+    # aleman o frances tenga las carpetas con OTROS nombres: eso es
+    # [I18N-03], y se arregla anyadiendo idiomas a estas listas, nunca
+    # sustituyendo los que ya hay.)
+    # =================================================================
     $script:FragmentosProhibidos = @(
         'windowsapps', 'package cache', 'winsxs', 'driverstore', 'catroot',
         '\system32\', '\syswow64\', '\config\systemprofile\', '\assembly\',

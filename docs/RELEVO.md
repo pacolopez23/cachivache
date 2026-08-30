@@ -1,4 +1,4 @@
-# Relevo — cómo seguir con Cachivache
+﻿# Relevo — cómo seguir con Cachivache
 
 Este archivo existe para que otro agente pueda continuar sin haber leído la conversación anterior.
 Léelo entero antes de tocar nada. **Está escrito para pegarse como primer mensaje.**
@@ -15,7 +15,7 @@ importa tanto como que funcione.
 - Se ejecuta con `Cachivache.exe`, que lanza `powershell.exe` (5.1) sin consola visible.
 - Las pruebas se ejecutan con PowerShell 7 + Pester.
 
-**Estado hoy: 1206 pruebas en verde, analizador limpio, 38 puntos de la hoja de ruta cerrados.**
+**Estado hoy: 1612 pruebas en verde, analizador limpio, 47 puntos de la hoja de ruta cerrados.**
 
 ---
 
@@ -154,16 +154,19 @@ Cada una de estas costó una sesión. Están aquí porque volverán a aparecer.
 
 ## Lo que queda abierto
 
-`docs/HOJA-DE-RUTA.md` es la fuente de verdad y está al día. Quedan 19 puntos. **El bloque de
-accesibilidad está cerrado, y el de distribución salvo `DIS-01` y `DIS-05`.** Los que él
-probablemente quiera antes:
+`docs/HOJA-DE-RUTA.md` es la fuente de verdad y está al día. Quedan **9 puntos**. El bloque de
+accesibilidad está cerrado, y el de distribución entero salvo la firma. Lo que toca ahora:
 
-| Punto | Qué es | Por qué ahora |
-|---|---|---|
-| **Pasar el banco** | `docs/BANCO-PRUEBAS.md`, en la VM | No es un punto: es lo que hay pendiente, y ya son cinco puntos entregados sin que él los haya visto. `COR-01`, `COR-02` y `COR-03` siguen sin ejecutarse nunca |
-| **Enviar a winget** | `microsoft/winget-pkgs` | Trámite, no código: los manifiestos ya los genera la publicación. Hasta que se envíen, `winget install` no lo encuentra |
-| `USO-06` | Menú contextual y doble clic | Copiar una ruta no se puede hacer hoy de ninguna forma |
-| `DIS-05` | Aviso de versión nueva | `Version.ps1` ya tiene la versión y la URL: falta consultar y avisar |
+| Qué | Por qué |
+|---|---|
+| **Pasar el banco en la VM** | `docs/BANCO-PRUEBAS.md`. Ahora es **mucho más corto**: la CI ya cubre lo que no exige mirar una ventana. Lo que queda a mano está en su apartado 8. Es lo primero, con diferencia: `COR-01`, `COR-02` y `COR-03` **no se han ejecutado nunca**, y ya son doce puntos entregados que él no ha visto. Cada punto nuevo ensancha esa distancia |
+| **Mirar la pestaña Actions** | La CI corre la suite en Windows real, en PowerShell 5.1 y en 7. Aquí solo se ejecuta en Linux con 7. Es información que no existe en ningún otro sitio |
+| **Enviar a `winget-pkgs`** | Trámite, no código: los manifiestos ya los genera la publicación. Hasta que se envíen, `winget install` no lo encuentra |
+| `USO-10` | La tabla salta al reengancharse por módulo: pierde posición y selección. Es lo más molesto de lo que queda |
+| `USO-11` | Limpiezas programadas. **Tiene una decisión de diseño pendiente que es suya**: qué significa "más conservador en desatendido" |
+
+La deuda de `CNF-01` —la tarjeta de Ajustes que su banner daba por hecha y nunca se hizo— **ya está
+cerrada**: *Lo que no se toca nunca*, con la lista y un botón por fila. Queda anotada en su banner.
 
 Deliberadamente **descartados**, con su justificación escrita en la hoja de ruta — no los
 reabras sin hablarlo: el deshacer completo de `CNF-03` (necesita COM `IFileOperation`), la casilla de

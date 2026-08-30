@@ -273,6 +273,7 @@ Describe 'USO-04: plegar grupos y marcar categorias enteras' {
         $script:XamlG = [regex]::Replace(
             (Get-Content -Raw -LiteralPath (Join-Path $script:Raiz 'src/UI/Panel.Resultados.xaml')),
             '(?s)<!--.*?-->', '')
+        $script:RutaEventosG = Join-Path $script:Raiz 'src/UI/Window.Eventos.ps1'
         $script:EventosG = [regex]::Replace(
             ((Get-Content -LiteralPath (Join-Path $script:Raiz 'src/UI/Window.Eventos.ps1') |
               Where-Object { $_ -notmatch '^\s*#' }) -join "`n"), '(?s)<#.*?#>', '')
@@ -350,10 +351,44 @@ Describe 'USO-04: plegar grupos y marcar categorias enteras' {
         # Sin esto, marcar doscientas filas dispara doscientos recalculos
         # completos y la ventana se queda en "No responde". Es el mismo
         # fallo que ya obligo a poner esta bandera en el marcado global.
-        $i = $script:EventosG.IndexOf('TablaResultados.AddHandler')
-        $trozo = $script:EventosG.Substring($i, 1400)
+        #
+        # Se mira DENTRO de $marcarCategoria, sacado por AST. La version
+        # anterior contaba 1400 caracteres desde el AddHandler, y eso tenia
+        # dos problemas: afirmaba "dentro del manejador" cuando en realidad
+        # solo comprobaba "cerca" -la supresion vive en el cierre, no en el
+        # manejador-, y ademas mandaba sobre el codigo, porque obligaba a
+        # definir el cierre DESPUES del AddHandler para que cayera dentro de
+        # la ventana. Una prueba no puede decidir el orden del codigo que
+        # vigila; es la trampa del numero magico que avisa el relevo.
+        $ast = [System.Management.Automation.Language.Parser]::ParseFile(
+                   $script:RutaEventosG, [ref]$null, [ref]$null)
+
+        $cierre = @($ast.FindAll({
+            param($n) $n -is [System.Management.Automation.Language.AssignmentStatementAst] -and
+                      $n.Left.Extent.Text -eq '$marcarCategoria'
+        }, $true))
+
+        $cierre.Count | Should -Be 1 -Because 'si no, la prueba no esta mirando el cierre que cree'
+        $trozo = $cierre[0].Right.Extent.Text
+
         $trozo | Should -Match '\$estado\.SuprimirResumen = \$true'
         $trozo | Should -Match '\$estado\.SuprimirResumen = \$false'
         $trozo | Should -Match 'actualizarResumenSeleccion'
+    }
+
+    It 'y el manejador de la tabla delega en ese cierre, no repite lo que hace' {
+        # La otra mitad: sin esto, alguien podria dejar el cierre impecable
+        # y que el manejador marcara por su cuenta, saltandose la supresion.
+        $ast = [System.Management.Automation.Language.Parser]::ParseFile(
+                   $script:RutaEventosG, [ref]$null, [ref]$null)
+
+        $llamada = @($ast.FindAll({
+            param($n) $n -is [System.Management.Automation.Language.InvokeMemberExpressionAst] -and
+                      $n.Member.Extent.Text -eq 'AddHandler' -and
+                      $n.Expression.Extent.Text -like '*TablaResultados*'
+        }, $true))
+
+        $llamada.Count | Should -Be 1
+        $llamada[0].Extent.Text | Should -Match 'marcarCategoria'
     }
 }

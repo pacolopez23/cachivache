@@ -367,6 +367,126 @@ function Test-RutaExcluida {
     return $false
 }
 
+function Test-EsRutaDeVerdad {
+    <#
+    .SYNOPSIS
+        Si un texto es una ruta absoluta y no una etiqueta.
+
+    .DESCRIPTION
+        Hace falta porque el campo Ruta de un candidato NO siempre lleva una
+        ruta. Para el metodo Comando lleva la orden que se va a ejecutar
+        -"docker system prune -a -f"- y para el metodo Papelera lleva una
+        etiqueta. Informativo va en los dos casos: el modulo de archivos
+        grandes pone rutas de verdad, y el de Windows Update, etiquetas.
+
+        Por eso esto mira el VALOR y no el metodo. Decidirlo por metodo
+        habria dejado fuera justo los candidatos informativos que si tienen
+        ruta, que son la mayoria.
+
+        Ver [ARQ-03].
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory)] [AllowNull()] [AllowEmptyString()] [string] $Texto
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Texto)) { return $false }
+
+    # La pregunta de fondo es si la cadena esta ANCLADA en algun sitio, no
+    # si tiene pinta de Windows. Tres formas:
+    #
+    #   - Unidad con letra: "C:\..." o "C:/..."
+    #   - Recurso de red:   "\\equipo\recurso"
+    #   - Raiz POSIX:       "/tmp/..."
+    #
+    # La tercera no sobra aunque el programa solo corra en Windows. La
+    # primera version de esto no la tenia, y la suite -que se ejecuta en
+    # Linux- convirtio una ruta de verdad en "etiqueta": la exclusion del
+    # usuario dejaba de aplicarse y el archivo se borraba. Lo cazo una
+    # prueba de [CNF-01] que ya existia. Una regla que solo es correcta en
+    # el sistema donde no se prueba es una regla sin probar.
+    return $Texto -match '^[A-Za-z]:[\\/]' -or $Texto.StartsWith('\\') -or $Texto.StartsWith('/')
+}
+
+function Get-ClaveExclusion {
+    <#
+    .SYNOPSIS
+        La clave estable con la que el usuario excluye un candidato.
+
+    .DESCRIPTION
+        [ARQ-03], y lo dejo escrito [CNF-01] al cerrarse: "la clave de
+        exclusion no puede ser la ruta a secas".
+
+        Hasta ahora se excluia comparando contra Ruta. Para lo que tiene
+        ruta, bien. Para lo que no -un comando, la papelera-, esa
+        comparacion es sobre una ETIQUETA tratada como si fuera una carpeta:
+        se normaliza a minusculas, se le quitan barras finales y se le
+        aplica una regla de prefijo pensada para jerarquias que ahi no
+        existe. "Excluir siempre esto" sobre un comando guardaba un texto
+        que no era una ruta dentro de una lista llamada RutasExcluidas.
+
+        Ahora hay dos formas de clave, y se distinguen a la vista:
+
+        - Con ruta de verdad: la clave ES la ruta. El comportamiento no
+          cambia ni un byte para todo lo que hoy funciona.
+        - Sin ruta: "modulo:<ModuloId>|<Nombre>". Lleva una barra vertical,
+          que Windows no admite en una ruta, asi que una clave sintetica no
+          puede confundirse jamas con una ruta ni casar con una exclusion
+          de carpeta.
+
+        Estable entre analisis: ModuloId y Nombre no dependen de la
+        ejecucion. Si dependieran, excluir algo hoy no lo excluiria manyana,
+        que es exactamente el fallo que la exclusion viene a arreglar.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)] [AllowNull()] [AllowEmptyString()] [string] $Ruta,
+        [Parameter(Mandatory)] [AllowNull()] [AllowEmptyString()] [string] $ModuloId,
+        [Parameter(Mandatory)] [AllowNull()] [AllowEmptyString()] [string] $Nombre
+    )
+
+    if (Test-EsRutaDeVerdad -Texto $Ruta) { return $Ruta }
+
+    return ('modulo:{0}|{1}' -f $ModuloId, $Nombre)
+}
+
+function Test-ClaveExcluida {
+    <#
+    .SYNOPSIS
+        Si el usuario ha excluido este candidato.
+
+    .DESCRIPTION
+        Reparte segun la forma de la clave, y es el motivo de que exista:
+
+        - Clave de ruta: se compara con Test-RutaExcluida, o sea por
+          prefijo, porque excluir una carpeta excluye lo que cuelga de ella.
+        - Clave sintetica: solo coincidencia EXACTA. Una etiqueta no tiene
+          jerarquia, asi que comparar por prefijo ahi solo puede excluir de
+          mas: "modulo:docker|prune" no contiene a nada.
+
+        Ver [ARQ-03].
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [AllowNull()] [AllowEmptyString()] [string] $Clave,
+        [string[]] $Excluidas = @()
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Clave)) { return $false }
+    if (Test-EsRutaDeVerdad -Texto $Clave) {
+        return (Test-RutaExcluida -Ruta $Clave -Excluidas $Excluidas)
+    }
+
+    foreach ($excluida in @($Excluidas)) {
+        if ([string]::IsNullOrWhiteSpace($excluida)) { continue }
+        if ($Clave.Equals($excluida.Trim(), [StringComparison]::OrdinalIgnoreCase)) { return $true }
+    }
+    return $false
+}
+
 function Get-IdentidadArchivo {
     <#
     .SYNOPSIS
@@ -709,6 +829,269 @@ function Get-ResumenArbol {
     }
 }
 
+# =====================================================================
+#  EL RECORRIDO CON EL QUE LOS MODULOS ENCUENTRAN QUE PROPONER ([COR-08])
+# =====================================================================
+#
+# [COR-02] arreglo MEDIR -el prefijo de Get-ResumenArbol- y BORRAR -
+# System.IO con el mismo prefijo-. Lo que no arreglo fue ENCONTRAR.
+#
+# Los modulos recorrian con
+#
+#     Get-ChildItem -LiteralPath $zona -Recurse -File -Force -ErrorAction SilentlyContinue
+#
+# y en Windows PowerShell 5.1 eso SE PARA a los 260 caracteres. Bajo ese
+# SilentlyContinue no dice absolutamente nada: no hay error, no hay aviso,
+# simplemente el arbol termina antes de tiempo. O sea que el programa
+# medía bien y borraba bien lo que llegaba a proponer, pero NO PROPONIA lo
+# que hay al fondo de una ruta larga -un node_modules anidado, una cache
+# de Gradle-. El fallo original de [COR-02] seguia vivo un paso antes.
+#
+# Esta funcion es el unico recorrido de los modulos, y esta escrita con
+# las mismas cuatro reglas que Get-ResumenArbol, que es el modelo:
+#
+#   1. Pila propia y EnumerateDirectories en vez de AllDirectories,
+#      porque hay que poder SALTAR los puntos de reanalisis.
+#   2. EnumerateFiles en vez de Get-ChildItem -Recurse. Es lo que permite
+#      aplicar el prefijo -el proveedor de PowerShell 5.1 no lo entiende-
+#      y ademas ahorra el proveedor entero: la enumeracion pura son 4 ms
+#      donde Get-ChildItem -Recurse gasta 179 sobre 7.200 archivos (ver
+#      docs/RENDIMIENTO.md, seccion 1).
+#
+#      OJO CON ESE NUMERO: alli se comparaba SUMAR, que no construye nada.
+#      Aqui hay que devolver un objeto por archivo, y eso cuesta unos 19
+#      microsegundos, que es del mismo orden que lo que cuesta el objeto
+#      de Get-ChildItem en 5.1. O sea que la ganancia grande esta en los
+#      modulos que pasan -Filtro -45-AccesosRotos y 85-DockerWsl, donde
+#      filtra Windows y no una canalizacion-, y en los demas lo que se
+#      gana es correccion, no velocidad. Medido en PowerShell 7 sobre
+#      Linux, que es donde se puede medir; en 5.1 esta sin comprobar.
+#   3. El prefijo "\\?\" se pone UNA VEZ, en la raiz. Los hijos que
+#      devuelve la enumeracion heredan la forma del padre, asi que basta
+#      con eso para cubrir el arbol entero.
+#   4. Cada carpeta va en su propio try: una carpeta sin permiso pierde
+#      esa carpeta, no el recorrido.
+#
+# Y LA REGLA QUE NO SE PUEDE ROMPER, que aqui es mas dificil que en
+# Get-ResumenArbol porque alli lo que salia eran numeros y aqui salen
+# RUTAS: la ruta que devuelve este recorrido acaba en el campo Ruta de un
+# candidato, y de ahi en la guardia, en la pantalla y en el informe. Si
+# llevara el prefijo, la guardia compararia "\\?\C:\Windows" contra su
+# lista negra "C:\Windows" y NO COINCIDIRIA. Un prefijo puesto para
+# encontrar mejor se convertiria en un agujero para borrar el sistema.
+#
+# Por eso la ruta que sale NO se lee de FullName: se COMPONE con la ruta
+# limpia del padre mas el nombre de la entrada, que es exactamente lo que
+# hace .NET por dentro. Asi el prefijo no puede escaparse aunque alguien
+# se olvide de quitarlo, porque nunca llega a estar en la cadena que sale.
+
+function Get-ElementosDelArbol {
+    <#
+    .SYNOPSIS
+        Recorre una carpeta entera -sin pararse en los 260 caracteres- y va
+        devolviendo lo que encuentra, uno a uno.
+
+    .DESCRIPTION
+        Sustituye a Get-ChildItem -Recurse en los modulos. Ver el bloque de
+        arriba para el porque; aqui esta el contrato.
+
+        DEVUELVE OBJETOS PROPIOS, NO FileInfo, y es la unica diferencia
+        visible. El motivo es la ruta: un FileInfo nacido de una
+        enumeracion con prefijo lleva el prefijo METIDO en su FullName, y
+        no hay forma de quitarselo sin construir otro objeto. Estos traen
+        las mismas propiedades que usaban los modulos -FullName, Name,
+        BaseName, Extension, Length, LastWriteTime, LastAccessTime,
+        CreationTime, DirectoryName, Attributes- leidas del propio
+        WIN32_FIND_DATA, o sea sin volver al disco, mas EsCarpeta. Con eso
+        los ocho modulos siguieron funcionando sin tocar ni una linea de su
+        logica.
+
+        NO trae Directory (el DirectoryInfo del padre): construirlo cuesta
+        un objeto por archivo y ningun llamante lo usa. Si alguna vez hace
+        falta, DirectoryName lleva la misma ruta ya limpia.
+
+        LOS PUNTOS DE REANALISIS NO SE SIGUEN, igual que en
+        Get-ResumenArbol: seguir una union significa contar y proponer dos
+        veces el destino, o dar vueltas en un ciclo. Por defecto tampoco se
+        DEVUELVEN; -IncluirEnlaces los devuelve sin entrar en ellos, que es
+        lo que necesita quien esta buscando precisamente enlaces.
+
+        LOS OCULTOS Y LOS DE SISTEMA SI SE VEN. Es lo que hacia -Force, y
+        no es un detalle: media docena de modulos viven de archivos con el
+        atributo oculto -Thumbs.db, desktop.ini, los contenedores de la
+        papelera-. EnumerateFiles no filtra por atributos, asi que sale
+        gratis, pero hay una prueba que lo fija: si un dia dejaran de
+        verse, esos modulos dejarian de encontrar cosas y NADA fallaria.
+
+    .PARAMETER Ruta
+        La carpeta por donde se empieza. Si no existe, no se devuelve nada
+        y no se lanza: es lo mismo que hacia Get-ChildItem con
+        -ErrorAction SilentlyContinue, y hay modulos que preguntan por
+        carpetas que pueden no estar.
+
+    .PARAMETER Que
+        'Archivos' (por defecto), 'Carpetas' o 'Todo'.
+
+    .PARAMETER Filtro
+        Patron de nombre, el mismo que -Filter de Get-ChildItem: lo
+        resuelve la propia API de Windows, que es muchisimo mas barato que
+        traerse todo y descartar despues.
+
+        SOLO SE APLICA A LOS ARCHIVOS, a proposito. Filtrar carpetas no
+        seria filtrar lo que sale: seria decidir POR DONDE SE DESCIENDE, y
+        entonces un patron cualquiera se llevaria por delante ramas
+        enteras del arbol sin que nadie lo notara. Para no descender esta
+        -NoDescender, que se llama asi justamente para que se vea.
+
+    .PARAMETER NoDescender
+        Bloque que recibe una carpeta y devuelve $true si NO hay que entrar
+        en ella. Es la poda de 20-Proyectos: al encontrar un node_modules
+        no hay nada que buscar dentro, y entrar ademas hacia que sus
+        'dist' y 'build' se propusieran POR SEPARADO del node_modules que
+        los contiene, o sea los mismos bytes contados dos veces.
+
+    .PARAMETER Cancelado
+        Bloque que devuelve $true cuando el usuario ha cancelado. Se mira
+        una vez por carpeta. Sin el, cancelar no para la enumeracion, solo
+        deja de mirar lo que va saliendo.
+
+    .PARAMETER IncluirEnlaces
+        Devuelve tambien los puntos de reanalisis. Nunca se entra en ellos,
+        se pida o no.
+    #>
+    [CmdletBinding()]
+    [OutputType([object[]])]
+    param(
+        [Parameter(Mandatory)] [AllowNull()] [AllowEmptyString()] [string] $Ruta,
+        [ValidateSet('Archivos', 'Carpetas', 'Todo')] [string] $Que = 'Archivos',
+        [string] $Filtro = '*',
+        [AllowNull()] [scriptblock] $NoDescender,
+        [AllowNull()] [scriptblock] $Cancelado,
+        [switch] $IncluirEnlaces
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Ruta)) { return }
+
+    # La barra final se quita ANTES de componer nada. Con ella, la primera
+    # ruta compuesta saldria con dos separadores seguidos y dejaria de ser
+    # igual, como texto, a la que devuelve Windows; y estas rutas se
+    # comparan como texto en la guardia, en las exclusiones del usuario y
+    # en el comprobador del banco.
+    $raizLimpia = $Ruta.TrimEnd([char]'\', [char]'/')
+    if ([string]::IsNullOrEmpty($raizLimpia)) { return }
+
+    # El mismo prefijo que Get-CarpetaParaRecorrer pone para medir, pero
+    # aplicado a la CADENA y no a un DirectoryInfo ya construido: asi
+    # funciona tambien cuando la carpeta de partida ya es larga de por si,
+    # que es el caso que el otro camino no puede cubrir porque el
+    # constructor habria lanzado antes.
+    $rutaApi = ConvertTo-RutaLarga -Ruta $raizLimpia
+
+    try {
+        $raiz = [IO.DirectoryInfo]::new($rutaApi)
+        if (-not $raiz.Exists) { return }
+    } catch {
+        # Una etiqueta que no es una ruta ("docker system prune"), una
+        # unidad que no existe, caracteres que Windows no admite. Devolver
+        # vacio es lo que hacia Get-ChildItem -ErrorAction SilentlyContinue.
+        Write-Verbose ("No se puede recorrer '{0}': {1}" -f $Ruta, $_.Exception.Message)
+        return
+    }
+
+    $separador = [IO.Path]::DirectorySeparatorChar
+    $emiteArchivos = ($Que -eq 'Archivos' -or $Que -eq 'Todo')
+    $emiteCarpetas = ($Que -eq 'Carpetas' -or $Que -eq 'Todo')
+    # El objeto de una carpeta se construye si hay que devolverlo O si hay
+    # que preguntarle a la poda, que lo necesita para decidir.
+    $armaCarpetas  = $emiteCarpetas -or ($null -ne $NoDescender)
+
+    # Cada marco de la pila lleva DOS cosas: el DirectoryInfo con el que se
+    # llama a la API -que puede llevar el prefijo- y la ruta LIMPIA con la
+    # que se componen las que salen. Van juntas para que no puedan
+    # separarse: una ruta limpia calculada aparte se olvidaria de
+    # actualizar en el noveno sitio.
+    $pendientes = [Collections.Generic.Stack[object[]]]::new()
+    $pendientes.Push(@($raiz, $raizLimpia))
+
+    while ($pendientes.Count -gt 0) {
+        if ($null -ne $Cancelado -and (& $Cancelado)) { break }
+
+        $marco  = $pendientes.Pop()
+        $actual = [IO.DirectoryInfo]$marco[0]
+        $base   = [string]$marco[1]
+
+        # Dos try INDEPENDIENTES, uno por bucle, por lo mismo que en
+        # Get-ResumenArbol: con un try compartido, un "acceso denegado" al
+        # enumerar los ARCHIVOS se llevaba por delante el
+        # EnumerateDirectories de la misma carpeta y la rama entera del
+        # arbol se perdia sin un solo error. Ver [SEG-40].
+        if ($emiteArchivos) {
+            try {
+                foreach ($archivo in $actual.EnumerateFiles($Filtro)) {
+                    $nombre = $archivo.Name
+                    [pscustomobject]@{
+                        FullName       = $base + $separador + $nombre
+                        Name           = $nombre
+                        BaseName       = [IO.Path]::GetFileNameWithoutExtension($nombre)
+                        Extension      = $archivo.Extension
+                        Length         = $archivo.Length
+                        LastWriteTime  = $archivo.LastWriteTime
+                        LastAccessTime = $archivo.LastAccessTime
+                        CreationTime   = $archivo.CreationTime
+                        DirectoryName  = $base
+                        Attributes     = $archivo.Attributes
+                        EsCarpeta      = $false
+                    }
+                }
+            } catch {
+                # NO se escribe en el flujo de error, y es a proposito: en
+                # modo consola Cachivache.ps1 pone ErrorActionPreference a
+                # 'Stop', asi que un Write-Error aqui abortaria el analisis
+                # entero por una sola carpeta sin permisos. Queda el rastro
+                # en el flujo detallado, que no aborta nada.
+                Write-Verbose ("No se han podido leer los archivos de '{0}': {1}" -f $base, $_.Exception.Message)
+            }
+        }
+
+        try {
+            foreach ($sub in $actual.EnumerateDirectories()) {
+                $rutaSub = $base + $separador + $sub.Name
+                $esEnlace = ($sub.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0
+
+                $carpeta = $null
+                if ($armaCarpetas) {
+                    $carpeta = [pscustomobject]@{
+                        FullName       = $rutaSub
+                        Name           = $sub.Name
+                        BaseName       = $sub.Name
+                        Extension      = $sub.Extension
+                        Length         = 0.0
+                        LastWriteTime  = $sub.LastWriteTime
+                        LastAccessTime = $sub.LastAccessTime
+                        CreationTime   = $sub.CreationTime
+                        DirectoryName  = $base
+                        Attributes     = $sub.Attributes
+                        EsCarpeta      = $true
+                    }
+                }
+
+                if ($emiteCarpetas -and ($IncluirEnlaces -or -not $esEnlace)) { $carpeta }
+
+                # Un punto de reanalisis no se sigue JAMAS, se haya pedido
+                # devolverlo o no. Seguirlo seria proponer dos veces lo que
+                # hay al otro lado -que puede estar en cualquier sitio- o
+                # dar vueltas en un ciclo.
+                if ($esEnlace) { continue }
+                if ($null -ne $NoDescender -and (& $NoDescender $carpeta)) { continue }
+
+                $pendientes.Push(@($sub, $rutaSub))
+            }
+        } catch {
+            Write-Verbose ("No se han podido leer las subcarpetas de '{0}': {1}" -f $base, $_.Exception.Message)
+        }
+    }
+}
+
 function Measure-Ruta {
     <#
     .SYNOPSIS
@@ -732,11 +1115,66 @@ function Measure-Ruta {
     # previo sobraba, porque un Get-Item que no encuentra nada devuelve
     # $null y eso ya es la respuesta.
     $item = Get-Item -LiteralPath $Ruta -Force -ErrorAction SilentlyContinue
-    if ($null -eq $item)     { return 0.0 }
+    if ($null -eq $item)     { return (Measure-RutaLarga -Ruta $Ruta) }
     if (Test-EsEnlace $item) { return 0.0 }
     if (-not $item.PSIsContainer) { return [double]$item.Length }
 
     return (Get-ResumenArbol -Carpeta $item).Bytes
+}
+
+function Measure-RutaLarga {
+    <#
+    .SYNOPSIS
+        Lo que ocupa algo cuya ruta pasa de 260 caracteres, sin pasar por el
+        proveedor de PowerShell.
+
+    .DESCRIPTION
+        Existe por [COR-08], y es la mitad que faltaba de [COR-02].
+
+        Get-ResumenArbol ya median un arbol con descendientes largos, porque
+        el prefijo se pone en la RAIZ y los hijos heredan su forma. Lo que
+        no se podia medir era una raiz que YA es larga, y hasta ahora eso no
+        pasaba nunca: los modulos no llegaban a encontrar nada tan hondo. Al
+        arreglar el recorrido si llegan, y entonces Measure-Ruta devolvia
+        cero -Get-Item lanza PathTooLongException y se traga el error-, el
+        candidato quedaba por debajo del minimo y desaparecia de la lista.
+        O sea: encontrarlo mejor habria servido para tirarlo un paso
+        despues, otra vez en silencio.
+
+        Solo se llama cuando Get-Item ha devuelto $null, asi que no cambia
+        ni un caso de los que ya funcionaban: donde antes se devolvia cero,
+        ahora se mira una vez mas con System.IO, que si admite el prefijo.
+
+        Los puntos de reanalisis siguen midiendo cero, igual que arriba:
+        seguir una union significa contar el destino, que puede estar en
+        cualquier sitio.
+    #>
+    [CmdletBinding()]
+    [OutputType([double])]
+    param([AllowNull()] [AllowEmptyString()] [string] $Ruta)
+
+    if (-not (Test-RutaDemasiadoLarga -Ruta $Ruta)) { return 0.0 }
+
+    $larga = ConvertTo-RutaLarga -Ruta $Ruta
+    if ($larga -eq $Ruta) { return 0.0 }
+
+    try {
+        if ([IO.Directory]::Exists($larga)) {
+            $carpeta = [IO.DirectoryInfo]::new($larga)
+            if (Test-EsEnlace $carpeta) { return 0.0 }
+            return (Get-ResumenArbol -Carpeta $carpeta).Bytes
+        }
+        if ([IO.File]::Exists($larga)) {
+            $archivo = [IO.FileInfo]::new($larga)
+            if (Test-EsEnlace $archivo) { return 0.0 }
+            return [double]$archivo.Length
+        }
+    } catch {
+        # No existe, no hay permiso, o la cadena no era una ruta. Cero es lo
+        # que devolvia antes en todos esos casos.
+        Write-Verbose ("No se ha podido medir la ruta larga '{0}': {1}" -f $Ruta, $_.Exception.Message)
+    }
+    return 0.0
 }
 
 function Measure-RutaDetalle {

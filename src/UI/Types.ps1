@@ -197,6 +197,44 @@ namespace Cachivache
         /// decision. Ver [CNF-05].</summary>
         public string MotivoMarcado { get; set; }
 
+        /// <summary>La clave con la que este elemento se compara contra la
+        /// lista de "no tocar nunca" del usuario.
+        ///
+        /// VIENE DEL CANDIDATO TAL CUAL; aqui no se calcula nada. Quien
+        /// decide su forma es Get-ClaveExclusion: la ruta cuando la hay, y
+        /// una cadena sintetica con una barra vertical cuando no, porque
+        /// para un comando o para la papelera la ruta es una ETIQUETA y
+        /// compararla como si fuera una carpeta no significa nada.
+        ///
+        /// La orden "Excluir siempre esto" del menu contextual guarda
+        /// EXACTAMENTE esta cadena. Reconstruirla en la ventana seria un
+        /// segundo sitio calculando la misma clave, y asi es como se llega
+        /// a excluir una cosa y comparar otra. Ver [USO-06] y [ARQ-03].</summary>
+        public string ClaveExclusion { get; set; }
+
+        /// <summary>Si Ruta es una ruta de verdad y no una etiqueta.
+        ///
+        /// "Copiar ruta" sobre un comando del sistema o sobre la papelera
+        /// dejaria en el portapapeles algo que PARECE una ruta y no lo es,
+        /// y quien lo pegue en el Explorador o en un guion no tiene forma
+        /// de saberlo: el portapapeles no ensenya de donde salio.
+        ///
+        /// La pregunta se contesta con la clave de exclusion en vez de con
+        /// una segunda regla propia. Get-ClaveExclusion devuelve la ruta
+        /// TAL CUAL cuando la hay, asi que "la clave es la ruta" significa
+        /// exactamente "la ruta es de verdad". Una sola regla, en un solo
+        /// sitio, y ademas ya probada -incluido el caso que fallo en
+        /// [ARQ-03], donde una regla escrita a mano solo era correcta en
+        /// Windows y la suite corre en Linux. Ver [USO-06].</summary>
+        public bool TieneRutaReal
+        {
+            get
+            {
+                return !string.IsNullOrWhiteSpace(Ruta) &&
+                       string.Equals(Ruta, ClaveExclusion, StringComparison.Ordinal);
+            }
+        }
+
         /// <summary>El riesgo como NUMERO, para poder ordenar por el.
         ///
         /// Ordenar por la cadena "Riesgo" daria Alto, Bajo, Medio: el orden
@@ -305,6 +343,36 @@ namespace Cachivache
                     : "Pulsa para abrir el informe.";
             }
         }
+    }
+
+    /// <summary>Una exclusion del usuario, en la tarjeta de Ajustes.
+    ///
+    /// Los tres textos vienen HECHOS de Get-ExclusionVista, que es calculo
+    /// puro y esta probado; aqui no se decide nada. La clase existe solo
+    /// para que el enlace de datos de WPF tenga de donde leer.
+    ///
+    /// Ver [CNF-01].</summary>
+    public class ExclusionVista
+    {
+        /// <summary>La cadena EXACTA que esta guardada en RutasExcluidas.
+        ///
+        /// Es la que viaja en el Tag del boton "Quitar" y la que se saca de
+        /// la lista al pulsarlo. No es lo mismo que Titulo y no puede
+        /// serlo: para un comando o para la papelera, Titulo es el nombre
+        /// legible y la clave es "modulo:&lt;Id&gt;|&lt;Nombre&gt;". Quitar
+        /// por el titulo no encontraria nada que quitar.</summary>
+        public string Clave { get; set; }
+
+        /// <summary>Lo que el usuario lee: la ruta, o el nombre del
+        /// elemento cuando la clave es sintetica.</summary>
+        public string Titulo { get; set; }
+
+        /// <summary>Que clase de exclusion es y hasta donde llega.</summary>
+        public string Detalle { get; set; }
+
+        /// <summary>'carpeta', 'modulo' o 'texto'. No lo usa el XAML: viaja
+        /// para poder probar que cada clave se presenta como toca.</summary>
+        public string Tipo { get; set; }
     }
 
     /// <summary>Un informe ya generado, en la lista de Informes.</summary>

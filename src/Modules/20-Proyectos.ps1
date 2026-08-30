@@ -64,41 +64,49 @@ $BuscarProyectos = {
         # sumaban dos veces en el total que ve el usuario, y borrar el
         # padre dejaba a los hijos apuntando a rutas que ya no existian.
         # Ver [REN-32] y [R-06] en docs/OPTIMIZACIONES.md.
-        $encontradas = [Collections.Generic.List[IO.DirectoryInfo]]::new()
-        $pendientes  = [Collections.Generic.Stack[IO.DirectoryInfo]]::new()
-        $pendientes.Push((Get-Item -LiteralPath $raiz -Force -ErrorAction SilentlyContinue))
-
-        while ($pendientes.Count -gt 0) {
-            if (Test-Cancelacion $Sync) { break }
-            $actual = $pendientes.Pop()
-            if ($null -eq $actual) { continue }
-
-            try   { $hijas = @($actual.EnumerateDirectories()) }
-            catch { continue }
-
-            foreach ($hija in $hijas) {
-                if ($hija.Attributes -band [IO.FileAttributes]::ReparsePoint) { continue }
-                # El control de versiones no se toca ni se recorre.
-                if ($hija.Name -eq '.git' -or $hija.Name -eq '.svn') { continue }
-
-                $esCandidata = $hija.Name -match $patronInequivoco -or
-                               $hija.Name -match $patronAmbiguo -or
-                               ($hija.Name -eq 'cache' -and $actual.Name -eq '.angular')
-
-                if ($esCandidata) {
-                    $encontradas.Add($hija)
-                    continue    # <- la poda: no se entra
-                }
-                $pendientes.Push($hija)
-            }
+        #
+        # La pila propia que habia aqui hacia justo eso, pero SIN el
+        # prefijo de ruta larga: un node_modules a cinco niveles de una
+        # ruta ya honda no se veia. Ahora la pila es la compartida de
+        # Get-ElementosDelArbol, que si lo pone. Ver [COR-08].
+        #
+        # La regla de que es candidata se escribe UNA vez y se usa en los
+        # dos sitios que la necesitan -que se emite y donde no se entra-,
+        # porque son la misma pregunta: si se separaran, un dia se podaria
+        # una carpeta que no se propone o se propondria una en la que
+        # ademas se ha entrado, que es el doble conteo de [R-06] otra vez.
+        $esRegenerable = {
+            param($Carpeta)
+            if ($Carpeta.Name -match $patronInequivoco) { return $true }
+            if ($Carpeta.Name -match $patronAmbiguo)    { return $true }
+            # El unico caso que depende del padre: .angular\cache.
+            return ($Carpeta.Name -eq 'cache' -and
+                    [IO.Path]::GetFileName($Carpeta.DirectoryName) -eq '.angular')
         }
+
+        $noDescender = {
+            param($Carpeta)
+            # El control de versiones no se toca ni se recorre. Se devuelve
+            # igualmente y lo descarta el filtro de abajo, que es quien
+            # decide que se propone.
+            if ($Carpeta.Name -eq '.git' -or $Carpeta.Name -eq '.svn') { return $true }
+            return (& $esRegenerable $Carpeta)
+        }
+
+        $encontradas = [Collections.Generic.List[object]]::new()
+        Get-ElementosDelArbol -Ruta $raiz -Que Carpetas `
+                              -NoDescender $noDescender `
+                              -Cancelado { Test-Cancelacion $Sync } |
+            ForEach-Object {
+                if (& $esRegenerable $_) { $encontradas.Add($_) }
+            }
 
         foreach ($carpeta in $encontradas) {
             if (Test-Cancelacion $Sync) { break }
 
             # Las ambiguas exigen un manifiesto de proyecto al lado.
             if ($carpeta.Name -match $patronAmbiguo) {
-                $padre = $carpeta.Parent.FullName
+                $padre = $carpeta.DirectoryName
                 $tieneManifiesto = $false
                 foreach ($manifiesto in $manifiestos) {
                     if (Test-Path -LiteralPath (Join-Path $padre $manifiesto)) { $tieneManifiesto = $true; break }

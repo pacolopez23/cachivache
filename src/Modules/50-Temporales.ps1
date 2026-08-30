@@ -26,7 +26,11 @@ $BuscarTemporales = {
         if (Test-Cancelacion $Sync) { break }
         Set-Progreso $Sync "Revisando $(Get-RutaCorta $zona)..."
 
-        Get-ChildItem -LiteralPath $zona -Recurse -File -Force -ErrorAction SilentlyContinue |
+        # Get-ElementosDelArbol y no Get-ChildItem -Recurse: ver [COR-08].
+        # Este es el modulo donde mas se nota, porque es el que recorre las
+        # carpetas del usuario enteras: un .tmp o un .dmp al fondo de un
+        # node_modules anidado no se proponia nunca.
+        Get-ElementosDelArbol -Ruta $zona |
         Where-Object {
             $_.FullName -notmatch '\\node_modules\\|\\\.git\\' -and
             (

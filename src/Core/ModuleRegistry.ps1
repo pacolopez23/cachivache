@@ -82,14 +82,177 @@ function Get-ModuloLimpieza {
     return (Get-ModulosLimpieza -Raiz $Raiz | Where-Object { $_.Id -eq $Id } | Select-Object -First 1)
 }
 
+function Get-ReglasFiltroCandidato {
+    <#
+    .SYNOPSIS
+        Las reglas que el embudo aplica a TODOS los candidatos de TODOS los
+        módulos: nombre, coste y predicado.
+
+    .DESCRIPTION
+        Antes estos filtros estaban cableados a mano dentro de
+        Invoke-ModuloLimpieza, uno detras de otro. Funcionaba, pero cada
+        filtro nuevo habia que enchufarlo en el sitio correcto y nada
+        obligaba a que se aplicaran todos: olvidar uno no da ningun error,
+        propone DE MAS, que en este programa es el fallo caro. Ver [ARQ-02].
+
+        Ahora son datos: una lista que el embudo recorre entera. Anyadir la
+        cuarta regla es anyadir un elemento, y la prueba regla a regla de
+        tests/Embudo.Tests.ps1 exige que toda regla de esta lista tenga un
+        caso que demuestre que se aplica de verdad.
+
+        CONTRATO DE UNA REGLA
+        - Nombre: para las pruebas y para leer la lista. Unico.
+        - Coste: 0 = ni mira el candidato, 1 = solo texto en memoria,
+          2 = consulta el disco. Ver el porque del orden mas abajo.
+        - Predicado: bloque de filtro al estilo de Where-Object. Recibe el
+          candidato en $_, el contexto de New-ContextoEmbudo como unico
+          parametro, y devuelve $true para CONSERVARLO. Se aplica siempre
+          igual, desde el embudo y desde las pruebas:
+
+              @($candidatos) | Where-Object { & $regla.Predicado $contexto }
+
+        POR QUE UN CONTEXTO Y NO UN CIERRE. La primera version armaba los
+        predicados con .GetNewClosure(), que parece justo lo que hace falta:
+        el predicado se lleva dentro la configuracion. Y no vale: un cierre
+        se ejecuta en el ambito de un modulo dinamico nuevo, donde NO se ven
+        las funciones del nucleo, que se cargan dot-sourceando Bootstrap.ps1
+        en el ambito de quien llama y no son globales. El sintoma fue
+        "Test-UnidadSeleccionada no se reconoce" en seis pruebas: la regla
+        no filtraba de menos, es que reventaba. Con un parametro corriente
+        no hay ambito nuevo y no hay nada que resolver.
+
+        UNA REGLA SOLO PUEDE QUITAR CANDIDATOS, NUNCA ANYADIRLOS. Son
+        restricciones sobre lo que ya se propuso, no permisos.
+
+        EL ORDEN. Para el RESULTADO no importa: los predicados son puros y
+        no dependen unos de otros, asi que lo que sobrevive es la
+        interseccion, que es la misma se apliquen en el orden que se
+        apliquen. Hay una prueba que lo comprueba aplicandolas al reves.
+        Para el COSTE si importa, y por eso van de barata a cara: la
+        guardia es la unica que toca el disco -un Get-Item por candidato
+        mas uno por nivel de carpeta, dentro de Test-CadenaSinEnlaces-, y
+        preguntarle al disco por un candidato que la lista de exclusiones
+        ya iba a tirar es trabajo tirado. Antes iba primera, que era el
+        orden peor. Una prueba exige que los Coste no decrezcan.
+
+        Que la guardia vaya la ULTIMA no la debilita ni un poco: para
+        sobrevivir hay que pasarlas todas, y ninguna de las otras dos puede
+        dar por bueno lo que la guardia rechaza. Lo que decide es la
+        conjuncion, no la posicion.
+    #>
+    [CmdletBinding()]
+    [OutputType([object[]])]
+    param()
+
+    $reglas = [Collections.Generic.List[object]]::new()
+
+    # Regla 0. Defensa en profundidad: quien recoge los candidatos ya
+    # descarta los nulos, pero un $null que llegara hasta aqui haria que
+    # las demas reglas decidieran sobre propiedades vacias. Leer
+    # $null.Ruta no lanza en PowerShell, asi que el sintoma seria un
+    # candidato fantasma, no un error.
+    $reglas.Add([pscustomobject]@{
+        Nombre    = 'Candidato existente'
+        Coste     = 0
+        Predicado = { param($Contexto) $null -ne $_ }
+    })
+
+    # Regla 1. Las unidades que el usuario ha desmarcado.
+    $reglas.Add([pscustomobject]@{
+        Nombre    = 'Unidad seleccionada'
+        Coste     = 1
+        Predicado = {
+            param($Contexto)
+            Test-UnidadSeleccionada -Ruta $_.Ruta -Configuracion $Contexto.Configuracion
+        }
+    })
+
+    # Regla 2. Las carpetas que el usuario ha excluido a mano. Ver [CNF-01].
+    # Por ClaveExclusion y no por Ruta: lo que no tiene ruta real se
+    # compara exacto, no por prefijo de carpeta. Ver [ARQ-03].
+    $reglas.Add([pscustomobject]@{
+        Nombre    = 'Exclusiones del usuario'
+        Coste     = 1
+        Predicado = {
+            param($Contexto)
+            if ($Contexto.Excluidas.Count -eq 0) { return $true }
+            return -not (Test-ClaveExcluida -Clave $_.ClaveExclusion -Excluidas $Contexto.Excluidas)
+        }
+    })
+
+    # Regla 3. La guardia: ningun candidato que borre archivos se libra de
+    # ella. Es la unica que consulta el disco, de ahi el Coste 2 y de ahi
+    # que vaya la ultima.
+    $reglas.Add([pscustomobject]@{
+        Nombre    = 'Guardia de rutas'
+        Coste     = 2
+        Predicado = {
+            param($Contexto)
+            if ($Contexto.SinRuta -contains $_.Metodo) { return $true }
+            return (Test-RutaSegura -Ruta $_.Ruta -Raices $_.Raices `
+                                    -PermitirPersonales:$_.PermitirPersonales)
+        }
+    })
+
+    return @($reglas)
+}
+
+function New-ContextoEmbudo {
+    <#
+    .SYNOPSIS
+        Lo que las reglas del embudo necesitan saber, calculado una sola vez
+        por modulo en vez de una vez por candidato.
+
+    .DESCRIPTION
+        Calculo puro: no toca el disco ni el registro, solo lee la
+        configuracion. Existe por dos motivos, y los dos importan:
+
+        - RENDIMIENTO. Un predicado corre una vez por candidato, y sobre una
+          cache de 200.000 archivos eso son 200.000 veces. Leer
+          RutasExcluidas ahi dentro seria rehacer 200.000 veces un trabajo
+          cuyo resultado no cambia.
+        - PODER PROBAR UNA REGLA SUELTA. Una regla no depende de que exista
+          una variable con el nombre correcto en el ambito de quien la
+          invoca: recibe esto y ya esta.
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
+        'PSUseShouldProcessForStateChangingFunctions', '',
+        Justification = 'Solo construye un objeto en memoria: no cambia el estado de nada.')]
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        # AllowNull porque el modo consola y varias pruebas llaman al
+        # embudo sin configuracion, y las reglas tienen que saber
+        # responder a eso sin reventar.
+        [Parameter(Mandatory)] [AllowNull()] $Configuracion
+    )
+
+    # Los métodos que no tocan el sistema de archivos directamente
+    # (informativos, papelera y comandos oficiales de Windows) se validan
+    # por otras vias y no tienen una ruta convencional que comprobar.
+    $sinRuta = @('Informativo', 'Papelera', 'Comando')
+
+    $excluidas = @()
+    if ($null -ne $Configuracion -and $Configuracion.PSObject.Properties['RutasExcluidas']) {
+        $excluidas = @($Configuracion.RutasExcluidas)
+    }
+
+    return [pscustomobject]@{
+        Configuracion = $Configuracion
+        Excluidas     = $excluidas
+        SinRuta       = $sinRuta
+    }
+}
+
 function Invoke-ModuloLimpieza {
     <#
     .SYNOPSIS
         Ejecuta la busqueda de un módulo y devuelve sus candidatos.
     .DESCRIPTION
         Aisla los fallos: si un módulo revienta, se informa del error pero
-        el resto del análisis continua. Además filtra los resultados que no
-        pasen la guardia, por si un módulo se olvidara de comprobarlo.
+        el resto del análisis continua. Además pasa los resultados por
+        TODAS las reglas de Get-ReglasFiltroCandidato, por si un módulo se
+        olvidara de comprobarlas.
     #>
     [CmdletBinding()]
     param(
@@ -138,42 +301,19 @@ function Invoke-ModuloLimpieza {
 
     $candidatos = @($recogidos)
 
-    # Red de seguridad: ningún candidato que borre archivos escapa a la
-    # guardia. Los métodos que no tocan el sistema de archivos directamente
-    # (informativos, papelera y comandos oficiales de Windows) se validan
-    # por otras vias y no tienen una ruta convencional que comprobar.
-    $sinRuta = @('Informativo', 'Papelera', 'Comando')
-    $validos = @($candidatos | Where-Object {
-        $null -ne $_ -and (
-            $sinRuta -contains $_.Metodo -or
-            (Test-RutaSegura -Ruta $_.Ruta -Raices $_.Raices `
-                             -PermitirPersonales:$_.PermitirPersonales)
-        )
-    })
-
-    # Segundo filtro: las unidades que el usuario haya excluido. Se aplica
-    # AQUÍ, en el único sitio por el que pasan todos los candidatos de todos
-    # los módulos, y no módulo a módulo: así ninguno puede olvidarse de
-    # respetarlo, del mismo modo que ninguno puede saltarse la guardia.
+    # EL EMBUDO. Este es el único sitio por el que pasan todos los
+    # candidatos de todos los módulos: por eso los filtros viven aquí y no
+    # módulo a módulo. Así ninguno puede olvidarse de respetarlos y un
+    # módulo nuevo los hereda sin escribir una línea.
     #
-    # Solo puede QUITAR candidatos, nunca añadirlos: es una restriccion
-    # adicional sobre lo que ya aprobo la guardia, no un permiso.
-    $validos = @($validos | Where-Object { Test-UnidadSeleccionada -Ruta $_.Ruta -Configuracion $Configuracion })
-
-    # Tercer filtro: las carpetas que el usuario ha excluido a mano.
-    #
-    # Va AQUI y no en cada modulo, por el mismo motivo que los otros dos:
-    # es el unico sitio por el que pasan todos los candidatos de todos los
-    # modulos, asi que ninguno puede olvidarse de respetarlo, y un modulo
-    # nuevo lo hereda sin escribir una linea. Ver [CNF-01].
-    $excluidas = @()
-    if ($null -ne $Configuracion -and $Configuracion.PSObject.Properties['RutasExcluidas']) {
-        $excluidas = @($Configuracion.RutasExcluidas)
-    }
-    if ($excluidas.Count -gt 0) {
-        $validos = @($validos | Where-Object {
-            -not (Test-RutaExcluida -Ruta $_.Ruta -Excluidas $excluidas)
-        })
+    # Se recorre la lista ENTERA, sin elegir: la lista es el contrato. Si
+    # esto dejara de aplicar una regla no habria ningun error, se
+    # propondria de mas, que es justo el fallo que no se ve. Ver [ARQ-02] y
+    # las pruebas regla a regla de tests/Embudo.Tests.ps1.
+    $contexto = New-ContextoEmbudo -Configuracion $Configuracion
+    $validos  = @($candidatos)
+    foreach ($regla in (Get-ReglasFiltroCandidato)) {
+        $validos = @($validos | Where-Object { & $regla.Predicado $contexto })
     }
 
     return [pscustomobject]@{

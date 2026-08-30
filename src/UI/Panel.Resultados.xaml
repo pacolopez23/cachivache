@@ -118,6 +118,35 @@
                                     <ComboBoxItem Content="Solo riesgo medio"/>
                                     <ComboBoxItem Content="Solo riesgo alto"/>
                                 </ComboBox>
+                                <!--
+                                    OCULTAR LO YA ELIMINADO [USO-13].
+
+                                    Tras limpiar 800 elementos la lista se quedaba
+                                    con 800 filas fantasma al 45% de opacidad, y
+                                    para seguir trabajando había que bajar por
+                                    todas ellas.
+
+                                    Es una CASILLA y no algo automático, y esa es
+                                    la decisión del punto. Esconder solo el
+                                    resultado de la limpieza, justo cuando el
+                                    usuario acaba de pulsar el botón y va a mirar
+                                    qué ha pasado, es hacer el trabajo y no
+                                    decirlo: [USO-15] otra vez. Así el resultado
+                                    se ve siempre, y esconderlo es una decisión
+                                    del usuario, reversible con un clic.
+
+                                    Nace desmarcada y solo esconde lo que se borró
+                                    BIEN. Lo que falló se queda siempre a la
+                                    vista, y en rojo, porque es lo único que
+                                    todavía se puede arreglar y reintentar. Ver
+                                    [USO-02]: la decisión de qué se esconde vive
+                                    en el predicado del filtro, en PowerShell, no
+                                    en un disparador del XAML.
+                                -->
+                                <CheckBox x:Name="ChkOcultarHechos" Margin="12,0,0,0"
+                                          VerticalAlignment="Center"
+                                          Content="Ocultar lo ya eliminado"
+                                          ToolTip="Esconde las filas que se borraron bien. Lo que falló sigue viéndose siempre, en rojo, para que puedas reintentarlo."/>
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                                 <Button x:Name="BtnMarcarTodo"   Style="{StaticResource BotonTexto}" Content="Marcar todo"/>
@@ -131,7 +160,60 @@
                         </Grid>
 
                         <!-- Lista -->
-                        <DataGrid x:Name="TablaResultados" Grid.Row="2" Margin="20,0,20,0">
+                        <!--
+                            IsReadOnly: aquí no se edita nada. Ninguna columna
+                            declara plantilla de edición, así que entrar en modo
+                            edición no cambiaba nada visible, pero el doble clic
+                            SI lo abría, y desde [USO-06] el doble clic tiene otro
+                            trabajo: abrir la ubicación. Las casillas de la
+                            primera columna siguen funcionando: viven en la
+                            CellTemplate, y esto solo impide entrar a editar.
+                        -->
+                        <DataGrid x:Name="TablaResultados" Grid.Row="2" Margin="20,0,20,0"
+                                  IsReadOnly="True">
+                            <!--
+                                MENU CONTEXTUAL DE LA FILA [USO-06].
+
+                                "Abrir ubicación" existía y obligaba a seleccionar
+                                la fila y subir a la barra de herramientas; copiar
+                                una ruta no se podía hacer de ninguna forma.
+
+                                Va colgado de la TABLA y no del estilo de fila a
+                                propósito. Dentro de un Style los MenuItem nacen y
+                                mueren con el panel virtualizado, no tienen ámbito
+                                de nombres y FindName no los encuentra: habría que
+                                repetir el apaño de la cabecera de grupo
+                                (AddHandler y mirar quién disparó). Aquí son
+                                cuatro controles con nombre, resueltos en la lista
+                                de $c como todos los demás, y sus manejadores son
+                                Add_Click normales.
+
+                                El precio de colgarlo de la tabla es que el menú
+                                también sale sobre la cabecera y sobre el hueco
+                                vacío, donde no hay fila elegida. Los cuatro
+                                manejadores lo comprueban y lo dicen, igual que
+                                hacen los botones de la barra.
+
+                                El color va en el menú Y en cada entrada: la
+                                plantilla nativa del sistema puede no heredarlo, y
+                                aquí no hay WPF con el que comprobarlo. Un menú
+                                oscuro con letra oscura no se lee.
+                            -->
+                            <DataGrid.ContextMenu>
+                                <ContextMenu Background="{DynamicResource FondoElevado}"
+                                             Foreground="{DynamicResource Texto}"
+                                             BorderBrush="{DynamicResource Borde}">
+                                    <MenuItem x:Name="MenuAbrirUbicacion" Header="Abrir ubicación"
+                                              Foreground="{DynamicResource Texto}"/>
+                                    <MenuItem x:Name="MenuCopiarRuta" Header="Copiar ruta"
+                                              Foreground="{DynamicResource Texto}"/>
+                                    <Separator/>
+                                    <MenuItem x:Name="MenuExcluirSiempre" Header="Excluir siempre esto"
+                                              Foreground="{DynamicResource Texto}"/>
+                                    <MenuItem x:Name="MenuDesmarcarGrupo" Header="Desmarcar el grupo"
+                                              Foreground="{DynamicResource Texto}"/>
+                                </ContextMenu>
+                            </DataGrid.ContextMenu>
                             <DataGrid.GroupStyle>
                                 <GroupStyle>
                                     <GroupStyle.ContainerStyle>
@@ -508,6 +590,20 @@
                                         HorizontalAlignment="Center"
                                         Content="Quitar los filtros"
                                         ToolTip="Vacía el cuadro de filtro y vuelve a poner el desplegable en Todos los riesgos"/>
+                                <!--
+                                    El otro motivo de que la tabla se quede vacia: la
+                                    casilla de [USO-13]. Boton propio y no uno
+                                    compartido, porque cada uno destapa una cosa
+                                    distinta y un boton que promete lo que no hace es
+                                    justo lo que evita este cartel. Nunca se ven los
+                                    dos a la vez: hay prueba que recorre las 144
+                                    combinaciones y lo exige. Ver [USO-09] y [USO-13].
+                                -->
+                                <Button x:Name="BtnMostrarHechos" Style="{StaticResource BotonSecundario}"
+                                        Visibility="Collapsed" Margin="0,16,0,0"
+                                        HorizontalAlignment="Center"
+                                        Content="Mostrar lo ya eliminado"
+                                        ToolTip="Vuelve a enseñar las filas que se borraron bien"/>
                             </StackPanel>
                         </Border>
 
@@ -548,6 +644,21 @@
                                             Content="Abrir la papelera" Margin="0,0,10,0" Visibility="Collapsed"/>
                                     <Button x:Name="BtnCancelarBorrado" Style="{StaticResource BotonSecundario}"
                                             Content="Detener" Margin="0,0,10,0" Visibility="Collapsed"/>
+                                    <!--
+                                        [USO-12]. Va pegada al boton que guarda el informe, por
+                                        el mismo motivo que la de simular va pegada al boton rojo:
+                                        cambia lo que produce ese boton, asi que tiene que verse
+                                        desde el.
+
+                                        Existia solo como -InformeAnonimo en la consola, y el
+                                        informe que genera la ventana lleva el nombre de usuario
+                                        de Windows en CADA fila. Es justo el que uno adjunta a una
+                                        incidencia, o sea, el que se acaba publicando.
+                                    -->
+                                    <CheckBox x:Name="ChkAnonimizar" VerticalAlignment="Center"
+                                              Margin="0,0,18,0"
+                                              Content="Anonimizar rutas"
+                                              ToolTip="En el informe que guardes, tu nombre de usuario, tu carpeta de perfil y el nombre del equipo se sustituyen por marcadores. Márcala si vas a adjuntarlo a una incidencia."/>
                                     <Button x:Name="BtnExportar" Style="{StaticResource BotonSecundario}"
                                             Content="Guardar informe" Margin="0,0,10,0"/>
                                     <Button x:Name="BtnEliminar" Style="{StaticResource BotonPeligro}"

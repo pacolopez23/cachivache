@@ -44,7 +44,10 @@ $BuscarAccesosRotos = {
         if (Test-Cancelacion $Sync) { break }
         Set-Progreso $Sync "Comprobando destinos en $(Get-RutaCorta $zona)..."
 
-        Get-ChildItem -LiteralPath $zona -Recurse -Filter '*.lnk' -Force -ErrorAction SilentlyContinue |
+        # Get-ElementosDelArbol y no Get-ChildItem -Recurse: ver [COR-08].
+        # El filtro sigue siendo el de Windows, no un Where-Object: en un
+        # menu Inicio con cientos de carpetas la diferencia se nota.
+        Get-ElementosDelArbol -Ruta $zona -Filtro '*.lnk' |
         ForEach-Object {
             if (Test-Cancelacion $Sync) { return }
 

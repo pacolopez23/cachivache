@@ -111,6 +111,101 @@ que se hace una vez a un hábito después de cada tanda de cambios.
   que de verdad muerde— que un nombre enlazado apunte a una propiedad **que exista**: un
   `{Binding}` mal escrito no lanza, WPF lo resuelve a vacío y el control se queda igual de mudo,
   pero con el atributo puesto y aparentando estar arreglado. `[A11Y-01]`
+- **Excluir un comando ya significa algo.** La lista de «no tocar nunca» comparaba contra la ruta del
+  elemento, y para un comando o para la papelera esa «ruta» es una **etiqueta**: se comparaba en
+  minúsculas, sin barra final y por prefijo de carpeta, sobre algo que no tiene carpetas. Ahora cada
+  candidato lleva una clave estable —la ruta cuando la hay, y una clave sintética con una barra
+  vertical cuando no, que ninguna exclusión de carpeta puede alcanzar—. Para todo lo que ya
+  funcionaba no cambia nada. `[ARQ-03]`
+- **Y un comando excluido ya se comprueba también antes de ejecutarse.** La revalidación de la
+  exclusión en el motor estaba dentro del `if` que separa los comandos del resto, así que la única
+  clase de candidato que lanza un binario externo era justo la que se la saltaba. `[ARQ-03]`
+- **El programa ya encuentra lo que hay al fondo de una ruta larga.** `COR-02` arregló medir y
+  borrar las rutas de más de 260 caracteres, pero no **encontrarlas**: los ocho módulos recorrían con
+  `Get-ChildItem -Recurse`, que en PowerShell 5.1 se para ahí y bajo `SilentlyContinue` no dice nada.
+  Un `node_modules` anidado o una caché de Gradle desbordan el límite con facilidad, y el programa
+  medía de menos y borraba de menos, igual que antes de `COR-02` pero por otro motivo. `[COR-08]`
+- **Y de paso, dos sitios peores que ese.** La comprobación que busca enlaces dentro de una carpeta
+  antes de borrarla recursivamente se paraba a los 260 — pero el borrado que viene después **no**,
+  porque ya usaba el prefijo: una guardia que mira menos que la acción que protege. Y la lista de
+  programas instalados que consulta la guardia se truncaba, con lo que una carpeta legítima podía
+  parecer desconocida y **proponerse para borrar**. `[COR-08]`
+- **El banco de pruebas se ejecuta solo, en cada push.** La integración continua lo monta en un
+  agente de Windows y hace una limpieza **real**: comprueba que los cebos aparecen, que no se propone
+  nada del sistema, las rutas largas, los enlaces duros, dos análisis seguidos y —gratis, porque los
+  agentes están en inglés— buena parte de lo que `I18N-03` avisaba y nadie había ejecutado nunca
+  fuera del español. `[VAL-03]`
+- **Y lo primero que encontró fue que el banco no podía funcionar.** Tres de los cebos empezaban por
+  palabras de la lista de archivos personales de la guardia, así que quedaban protegidos como trabajo
+  del usuario y **no se proponían nunca**: los dos pasos que ese documento existe para comprobar
+  —la papelera que no cabe y las rutas largas— eran incomprobables. `[VAL-03]`
+- **Ya se pueden QUITAR las exclusiones desde la ventana.** `CNF-01` daba por hecha en su banner una
+  tarjeta de Ajustes que nunca se hizo, y cuando `USO-06` añadió *Excluir siempre esto* al menú
+  contextual quedó una puerta de un solo sentido: se añadían exclusiones pero deshacerlo exigía
+  editar `preferencias.json` a mano. Ahora está la tarjeta *Lo que no se toca nunca*, con la lista y
+  un botón por fila. Una clave interna como `modulo:dockerwsl|Caché de Docker` se enseña legible sin
+  perder la clave real, que es la que hay que quitar. **Quitar no pide confirmación y añadir sí**: la
+  asimetría sigue la dirección del daño, no la del esfuerzo. `[CNF-01]`
+- **Menú contextual en la tabla, y doble clic.** *Abrir ubicación · Copiar ruta · Excluir siempre
+  esto · Desmarcar el grupo*; el doble clic abre la carpeta. Copiar una ruta no se podía hacer de
+  ninguna forma. Copiar algo que **no tiene ruta real** —un comando, la papelera— no copia nada y lo
+  dice: el portapapeles no cuenta de dónde salió lo que lleva dentro, y el usuario lo descubriría al
+  pegarlo, en otro programa y sin ninguna pista. `[USO-06]`
+- **Casilla «Ocultar lo ya eliminado».** Esconde lo que se borró bien; **lo que falló sigue viéndose
+  siempre, en rojo**. Es casilla y no automático: esconder el resultado justo cuando acabas de
+  pulsar el botón es hacer el trabajo y no decirlo. `[USO-13]`
+- **El resumen del análisis compara con el anterior**: *«(hace 4 días eran 890 elementos y 3,20
+  GB)»*. Un análisis incompleto, o hecho con otro perfil, se compara **diciendo que no son cifras
+  equiparables**; y cuando no hay con qué comparar, no se dice nada — no hay ningún «0 elementos
+  antes» que inventar. `[CNF-06]`
+- **Buscar si hay una versión nueva**, en *Acerca de*. **Solo si pulsas el botón**: ni al arrancar,
+  ni al abrir ese panel, ni con un temporizador. El programa presume de no tener comunicación de
+  red, y una consulta automática entrega tu IP y la hora a un tercero cada vez que abres una
+  pantalla. Con el botón, la promesa sigue siendo cierta y además es comprobable. `[DIS-05]`
+- **Anonimizar rutas al guardar un informe, y copiar el diagnóstico**, las dos desde la ventana.
+  Estaban solo en la consola, que es donde no llega quien abre el programa con doble clic. Llaman a
+  la misma función que la CLI, con invariantes que impiden que se separen. `[USO-12]`
+- **Los filtros del embudo son ahora una lista de reglas**, y eran **cuatro**, no tres: había un
+  filtro sin nombre escondido dentro de otro. La guardia, que es la única que toca el disco, estaba
+  la primera: ahora va la última y a un candidato de una unidad no elegida ya no se le pregunta al
+  disco. `[ARQ-02]`
+- **El aviso para quien traduzca el programa es ahora una prueba que falla.** Las listas de palabras
+  de la guardia son lógica de seguridad, no texto de interfaz: si alguien se las lleva a un archivo
+  de idioma, rompe la guardia en silencio. `[I18N-02]`
+
+### Corregido en esta tanda
+
+- **`-Quitar` no podía desmontar el banco de pruebas.** Recorría con `Get-ChildItem -Recurse`, que en
+  PowerShell 5.1 se para a los 260 caracteres y bajo `-ErrorAction SilentlyContinue` no dice nada:
+  las carpetas del cebo de ruta larga no se veían, no se borraban, y después reventaba al intentar
+  borrar una carpeta que creía vacía. `[VAL-03]`
+
+- **`.editorconfig` decía `crlf` y el repositorio entero está en `lf`.** Se contradecían, y ganaba el
+  disco: un editor que obedeciera al archivo habría tumbado la prueba que compara el XAML montado
+  byte a byte, con un error que no habla de finales de línea.
+- **Dos pruebas que afirmaban más de lo que comprobaban.** Una contaba 1400 caracteres desde un punto
+  del archivo y decía «dentro del manejador» cuando en realidad medía «cerca» — y ya había empezado a
+  mandar sobre el código, obligando a colocar un cierre donde no tocaba para que cayera dentro de la
+  ventana. Otra fijaba una línea de **texto** en vez de un comportamiento, y por eso descartó la forma
+  más simple de escribir las reglas del embudo en `[ARQ-02]`. Las dos reescritas: la primera por AST,
+  la segunda ejecutando el embudo de verdad.
+
+- **Una limpieza detenida no se anotaba en el historial.** El `ValidateSet` admitía `analisis` y
+  `limpieza`, la ventana llevaba desde `[CNF-04]` llamando con `limpieza-interrumpida`, la llamada
+  lanzaba, el `catch` de al lado se lo tragaba y **no se guardaba nada**. La parte de `[CNF-04]` que
+  promete «una limpieza detenida se anota como tal» no funcionaba por el camino normal del programa.
+- **«hace 1 meses»**, durante un mes de cada año, en cualquier sitio que dijera la antigüedad de
+  algo. Mismo descuido que el «1 elementos» de las cabeceras de grupo.
+- **La integración continua estaba rota desde que se escribió, y no se sabía.** `ci.yml` ponía
+  `shell: ${{ matrix.shell }}` en dos pasos, y la clave `shell:` de un paso es de los pocos sitios
+  de un flujo donde el contexto `matrix` **no** está disponible. Eso no da un shell equivocado:
+  invalida el archivo entero, y GitHub no ejecuta nada. Se descubrió en el primer push del
+  proyecto, porque hasta entonces no había repositorio donde ejecutarlo — el único archivo que
+  nadie había verificado nunca era justo el que existe para verificar todo lo demás. El shell pasa
+  a `jobs.<id>.defaults.run.shell`, que sí admite el contexto, y hay dos invariantes: una prohíbe
+  la expresión en un paso, y otra exige que el `defaults` esté — sin ella, quitar lo primero y
+  olvidar lo segundo dejaría las dos ramas de la matriz corriendo `pwsh` y PowerShell 5.1 sin
+  probarse jamás, todo en verde.
 - **Instalable con Scoop, y listo para winget.** Cada versión publica también su manifiesto de
   Scoop y los tres `.yaml` de winget, **generados por la propia publicación** con el hash del `.zip`
   que acaba de armar. Se generan y no se mantienen a mano porque declaran cuatro datos que caducan a

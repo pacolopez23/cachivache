@@ -51,7 +51,8 @@ $BuscarDescargas = {
         if (Test-Cancelacion $Sync) { break }
         Set-Progreso $Sync "Revisando $(Get-RutaCorta $zona)..."
 
-        Get-ChildItem -LiteralPath $zona -Recurse -File -Force -ErrorAction SilentlyContinue |
+        # Get-ElementosDelArbol y no Get-ChildItem -Recurse: ver [COR-08].
+        Get-ElementosDelArbol -Ruta $zona |
         # Solo LastWriteTime, NO la fecha de ultimo acceso, y es una
         # decision meditada en contra de lo que proponia [FAL-12].
         #

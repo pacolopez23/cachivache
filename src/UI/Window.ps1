@@ -294,6 +294,15 @@ function Show-VentanaPrincipal {
         # palabra provoca una pasada por la tabla y no una por letra. Vive
         # aquí para que no se lo lleve el recolector de basura.
         TemporizadorFiltro = $null
+        # Comprobación de versión nueva [DIS-05]. Viven aquí por lo mismo
+        # que el temporizador del filtro: mientras la consulta esta en
+        # marcha, el recolector de basura no puede llevarse ni el
+        # temporizador que la sondea ni el trabajo que la ejecuta.
+        #
+        # TrabajoVersion es $null cuando no hay ninguna consulta en curso, y
+        # es lo que impide que dos pulsaciones seguidas del boton abran dos.
+        TemporizadorVersion = $null
+        TrabajoVersion      = $null
     }
 
     # Una cabecera por arranque de la interfaz, con el ID de sesión que va
@@ -313,8 +322,10 @@ function Show-VentanaPrincipal {
         'TxtEstadoInicio', 'BarraInicio', 'BtnAnalizar', 'BtnCancelar',
         'TxtResumenAnalisis', 'CampoFiltro', 'FiltroRiesgo',
         'BtnMarcarTodo', 'BtnDesmarcarTodo', 'BtnSoloSeguros', 'BtnAbrirCarpeta', 'BtnVerContenido',
+        'ChkOcultarHechos', 'BtnMostrarHechos',
+        'MenuAbrirUbicacion', 'MenuCopiarRuta', 'MenuExcluirSiempre', 'MenuDesmarcarGrupo',
         'TablaResultados', 'TxtSeleccion', 'TxtProyeccion', 'BarraBorrado',
-        'BtnExportar', 'BtnEliminar', 'BtnCancelarBorrado', 'ChkSimular', 'BtnAbrirPapelera',
+        'BtnExportar', 'BtnEliminar', 'BtnCancelarBorrado', 'ChkSimular', 'ChkAnonimizar', 'BtnAbrirPapelera',
         'EstadoVacio', 'TxtEstadoVacio', 'BtnQuitarFiltros',
         'AvisoIncompleto', 'TxtAvisoIncompleto',
         'AvisoSimulacion', 'TxtAvisoSimulacion',
@@ -326,8 +337,10 @@ function Show-VentanaPrincipal {
         'ListaHistorial', 'TxtHistorialVacio',
         'SliderMinimoMB', 'TxtMinimoMB', 'SliderDias', 'TxtDiasSinUso',
         'ChkMenores', 'ChkPermanente', 'TxtEstadoAdmin', 'BtnReiniciarAdmin',
+        'TxtResumenExclusiones', 'ListaExclusiones',
         'TxtCarpetaDatos', 'BtnAbrirDatos', 'BtnRestablecer',
-        'TxtVersionAcerca', 'BtnRepositorio')) {
+        'TxtVersionAcerca', 'BtnRepositorio',
+        'TxtActualizacion', 'BtnBuscarActualizacion', 'BtnIrAVersionNueva', 'BtnCopiarDiagnostico')) {
         $c[$nombre] = $ventana.FindName($nombre)
     }
 

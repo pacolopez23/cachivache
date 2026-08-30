@@ -133,6 +133,7 @@ Describe 'Ningun campo del contrato puede nacer invisible en la interfaz (COR-05
         #>
         $script:NoVanALaFila = [ordered]@{
 
+
             # Quien lo propone. La tabla agrupa por Categoria, no por
             # modulo, y el nombre del modulo ya se escribe en el panel de
             # Registro una vez por modulo -no una vez por fila-. Ponerlo
@@ -376,5 +377,175 @@ Describe 'Ninguna propiedad de ItemVista se queda sin quien la use' {
         $huerfanas | Should -BeNullOrEmpty -Because (
             'una propiedad que nadie enlaza ni lee llega a la fila y no la ve nadie: ' +
             'el dato viaja entero y muere en la tabla')
+    }
+}
+
+Describe 'ARQ-03: la clave de exclusion no puede ser la ruta a secas' {
+    <#
+        [ARQ-03], y lo dejo escrito [CNF-01] al cerrarse.
+
+        Hasta ahora la exclusion comparaba contra Ruta. Para lo que tiene
+        ruta, bien. Para lo que no -un comando como "docker system prune",
+        la papelera-, eso es tratar una ETIQUETA como si fuera una carpeta:
+        normalizada a minusculas, sin barra final y con una regla de prefijo
+        que da por hecha una jerarquia que ahi no existe.
+    #>
+
+    BeforeAll {
+        $script:RaizArq = Split-Path $PSScriptRoot -Parent
+        . (Join-Path (Join-Path (Join-Path $script:RaizArq 'src') 'Core') 'Bootstrap.ps1')
+    }
+
+    Context 'Get-ClaveExclusion' {
+
+        It 'con ruta de verdad, la clave ES la ruta' {
+            # Que no cambie nada para lo que hoy funciona es el requisito
+            # numero uno: esto toca el camino del borrado.
+            Get-ClaveExclusion -Ruta 'C:\Users\x\Downloads\a.tmp' -ModuloId 'temporales' -Nombre 'a.tmp' |
+                Should -Be 'C:\Users\x\Downloads\a.tmp'
+        }
+
+        It 'reconoce las tres formas de ruta anclada' -ForEach @(
+            @{ Que = 'unidad con barra invertida'; Ruta = 'C:\datos\x' }
+            @{ Que = 'unidad con barra normal';    Ruta = 'C:/datos/x' }
+            @{ Que = 'recurso de red';             Ruta = '\\equipo\recurso\x' }
+            @{ Que = 'raiz POSIX';                 Ruta = '/tmp/x' }
+        ) {
+            # La POSIX no sobra: la suite se ejecuta en Linux. Sin ella, una
+            # ruta de verdad se tomaba por etiqueta y la exclusion del
+            # usuario dejaba de aplicarse. Lo cazo una prueba de [CNF-01].
+            Get-ClaveExclusion -Ruta $Ruta -ModuloId 'm' -Nombre 'n' | Should -Be $Ruta
+        }
+
+        It 'sin ruta real, la clave es sintetica y lleva modulo y nombre' {
+            Get-ClaveExclusion -Ruta 'docker system prune -a -f' -ModuloId 'dockerwsl' -Nombre 'Cache de Docker' |
+                Should -Be 'modulo:dockerwsl|Cache de Docker'
+        }
+
+        It 'la clave sintetica lleva una barra vertical, que una ruta no puede llevar' {
+            # Es lo que hace imposible confundirlas. Windows no admite "|"
+            # en un nombre de archivo, asi que ninguna exclusion de carpeta
+            # podra casar nunca con una clave sintetica.
+            $clave = Get-ClaveExclusion -Ruta 'Papelera de reciclaje' -ModuloId 'papelera' -Nombre 'Papelera'
+            $clave | Should -BeLike '*|*'
+            $clave | Should -Not -Match '^[A-Za-z]:'
+        }
+
+        It 'es estable: dos analisis dan la misma clave' {
+            # Si dependiera de la ejecucion, excluir algo hoy no lo
+            # excluiria manyana, que es el fallo que la exclusion arregla.
+            $a = Get-ClaveExclusion -Ruta 'docker system prune' -ModuloId 'dockerwsl' -Nombre 'Cache'
+            $b = Get-ClaveExclusion -Ruta 'docker system prune' -ModuloId 'dockerwsl' -Nombre 'Cache'
+            $a | Should -Be $b
+        }
+
+        It 'no revienta con nulos' {
+            { Get-ClaveExclusion -Ruta $null -ModuloId $null -Nombre $null } | Should -Not -Throw
+            Get-ClaveExclusion -Ruta $null -ModuloId 'm' -Nombre 'n' | Should -Be 'modulo:m|n'
+        }
+    }
+
+    Context 'Test-ClaveExcluida' {
+
+        It 'una clave de ruta se compara por prefijo de carpeta' {
+            Test-ClaveExcluida -Clave 'C:\Datos\sub\a.tmp' -Excluidas @('C:\Datos') | Should -BeTrue
+        }
+
+        It 'y sigue exigiendo separador: "C:\Datos" no excluye "C:\Datos Antiguos"' {
+            Test-ClaveExcluida -Clave 'C:\Datos Antiguos\a.tmp' -Excluidas @('C:\Datos') | Should -BeFalse
+        }
+
+        It 'una clave sintetica solo casa EXACTA' {
+            $clave = 'modulo:dockerwsl|Cache de Docker'
+            Test-ClaveExcluida -Clave $clave -Excluidas @($clave)              | Should -BeTrue
+            Test-ClaveExcluida -Clave $clave -Excluidas @('modulo:dockerwsl')  | Should -BeFalse
+            Test-ClaveExcluida -Clave $clave -Excluidas @('modulo:dockerwsl|') | Should -BeFalse
+        }
+
+        It 'una exclusion de carpeta NO puede alcanzar a una clave sintetica' {
+            # El caso que motiva todo esto. Antes, excluir "C:\" o incluso
+            # una cadena vacia mal normalizada podia rozar una etiqueta.
+            $clave = 'modulo:dockerwsl|Cache de Docker'
+            foreach ($excl in @('C:\', 'C:\Datos', 'modulo:', '/', '\\')) {
+                Test-ClaveExcluida -Clave $clave -Excluidas @($excl) |
+                    Should -BeFalse -Because "'$excl' no deberia alcanzar a una clave sintetica"
+            }
+        }
+
+        It 'sin exclusiones, ni con nulos, excluye nada' {
+            Test-ClaveExcluida -Clave 'C:\x' -Excluidas @()   | Should -BeFalse
+            Test-ClaveExcluida -Clave $null  -Excluidas @('C:\x') | Should -BeFalse
+            { Test-ClaveExcluida -Clave $null -Excluidas $null } | Should -Not -Throw
+        }
+    }
+
+    Context 'El contrato y los dos sitios que comparan' {
+
+        It 'todo candidato nace con su ClaveExclusion' {
+            $c = New-Candidato -ModuloId 'm' -Categoria 'c' -Nombre 'n' -Ruta 'C:\x\y' -Bytes 1 -Metodo 'Ruta'
+            $c.ClaveExclusion | Should -Be 'C:\x\y'
+        }
+
+        It 'un candidato sin ruta real tambien, y sintetica' {
+            $c = New-Candidato -ModuloId 'dockerwsl' -Categoria 'c' -Nombre 'Cache' `
+                    -Ruta 'docker system prune' -Bytes 1 -Metodo 'Comando' -Comando 'docker system prune'
+            $c.ClaveExclusion | Should -Be 'modulo:dockerwsl|Cache'
+        }
+
+        It 'el embudo del analisis excluye por la clave, no por la ruta' {
+            # Esto era una prueba de TEXTO que exigia la linea literal
+            # "Test-ClaveExcluida -Clave $_.ClaveExclusion" dentro de
+            # ModuleRegistry.ps1. Funcionaba, pero fijaba una FIRMA en vez
+            # de un comportamiento, y eso tiene consecuencias: al hacer
+            # [ARQ-02] esa linea literal descarto la forma mas aburrida de
+            # escribir las reglas del embudo, porque renombrar la variable
+            # habria hecho caer esta prueba. Una invariante que fija texto
+            # acaba mandando sobre el disenyo de quien venga despues.
+            #
+            # Ahora se comprueba lo unico que importa: que un candidato SIN
+            # ruta real, excluido por su clave sintetica, no sale del
+            # embudo. Da igual como este escrito por dentro.
+            $sinRuta = New-Candidato -ModuloId 'dockerwsl' -Categoria 'c' -Nombre 'Cache' `
+                           -Ruta 'docker system prune' -Bytes 1 -Metodo 'Comando' `
+                           -Comando 'docker system prune'
+
+            $script:EmisionContrato = @($sinRuta)
+            $modulo = New-ModuloLimpieza -Id 'contrato' -Orden 99 `
+                          -Nombre 'Modulo del contrato' -Descripcion 'Emite un candidato sin ruta.' `
+                          -Buscar {
+                              param($Configuracion, $Sync)
+                              foreach ($c in $script:EmisionContrato) { $c }
+                          }
+
+            $base = [pscustomobject]@{
+                Unidad = 'C:'; UnidadesSeleccionadas = @(); RutasExcluidas = @()
+            }
+
+            # Sin exclusion, sale. Sin esta mitad, un embudo que no
+            # devolviera nada pasaria la comprobacion de abajo.
+            $sin = Invoke-ModuloLimpieza -Modulo $modulo -Configuracion $base
+            @($sin.Candidatos).Count | Should -Be 1 -Because 'si no sale nunca, lo de abajo no prueba nada'
+
+            # Con la clave sintetica en la lista, no sale.
+            $base.RutasExcluidas = @($sinRuta.ClaveExclusion)
+            $con = Invoke-ModuloLimpieza -Modulo $modulo -Configuracion $base
+            @($con.Candidatos).Count | Should -Be 0 -Because 'comparado por Ruta esa etiqueta no casaria como carpeta'
+        }
+
+        It 'el motor revalida la exclusion FUERA del if de Comando' {
+            # El hueco que salio al hacer este punto: la revalidacion estaba
+            # dentro de "if Metodo -ne Comando", asi que la unica clase de
+            # candidato que ejecuta un binario externo era justo la que se
+            # la saltaba.
+            $texto = Get-Content -Raw -LiteralPath (
+                Join-Path (Join-Path (Join-Path $script:RaizArq 'src') 'Core') 'Remove.ps1')
+
+            $posExclusion = $texto.IndexOf('Test-ClaveExcluida')
+            $posIfComando = $texto.IndexOf("if (`$Candidato.Metodo -ne 'Comando')")
+
+            $posExclusion | Should -BeGreaterThan 0
+            $posIfComando | Should -BeGreaterThan 0
+            $posExclusion | Should -BeLessThan $posIfComando -Because 'dentro del if, un comando excluido no se revalida'
+        }
     }
 }

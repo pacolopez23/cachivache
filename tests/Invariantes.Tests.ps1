@@ -2298,3 +2298,323 @@ Describe 'Nada que no sea codigo puede colarse en lo que se publica' {
         $raros | Should -BeNullOrEmpty
     }
 }
+
+Describe 'Un flujo de trabajo invalido no llega ni a ejecutarse' {
+    <#
+        Encontrado en el primer push del repositorio, y es de la peor
+        familia: la comprobacion rota.
+
+        ci.yml tenia "shell: ${{ matrix.shell }}" en dos pasos. La clave
+        "shell:" de un paso es de los POCOS sitios de un flujo donde el
+        contexto "matrix" no esta disponible, asi que eso no da un shell
+        equivocado: invalida el ARCHIVO ENTERO. GitHub no ejecuta nada y
+        marca la ejecucion en rojo con "Invalid workflow file".
+
+        Llevaba asi desde que se escribio. No se noto porque hasta hoy el
+        proyecto no tenia repositorio, asi que no habia donde ejecutarlo: el
+        unico archivo del proyecto que nadie habia verificado nunca era
+        justamente el que existe para verificar todo lo demas.
+
+        La regla, entonces: ninguna clave "shell:" lleva expresion. Cuando
+        haga falta variar el shell por matriz, va en
+        jobs.<id>.defaults.run.shell, que si admite el contexto.
+
+        Esto NO sustituye a actionlint -que caza muchas mas cosas y con el
+        que se arreglo esto-, pero actionlint no esta en el entorno de
+        pruebas y esta regla concreta si se puede exigir aqui, que es donde
+        se para antes de subir.
+    #>
+
+    BeforeAll {
+        $script:CarpetaFlujos = Join-Path (Join-Path (Split-Path $PSScriptRoot -Parent) '.github') 'workflows'
+
+        $script:Flujos = @{}
+        foreach ($archivo in (Get-ChildItem $script:CarpetaFlujos -Filter '*.yml' -ErrorAction SilentlyContinue)) {
+            $script:Flujos[$archivo.Name] = Get-Content -Raw -LiteralPath $archivo.FullName
+        }
+    }
+
+    It 'la prueba lee los flujos de verdad: si no, no comprueba nada' {
+        $script:Flujos.Count | Should -BeGreaterThan 1
+        @($script:Flujos.Values | Where-Object { $_ -match '(?m)^\s*runs-on:' }).Count |
+            Should -BeGreaterThan 1
+    }
+
+    It 'ninguna clave shell de un PASO lleva una expresion' {
+        # Se quitan primero los bloques defaults.run.shell, que son el sitio
+        # donde la expresion SI vale. La primera version de esta prueba no
+        # los quitaba y fallaba sobre el arreglo correcto: habria empujado a
+        # deshacerlo para callarla, que es la peor forma de fallar que tiene
+        # una prueba.
+        $malos = @()
+        foreach ($nombre in $script:Flujos.Keys) {
+            $texto = [regex]::Replace($script:Flujos[$nombre],
+                        '(?m)^\s*defaults:\s*\r?\n\s*run:\s*\r?\n\s*shell:.*$', '')
+
+            foreach ($m in [regex]::Matches($texto, '(?m)^\s*shell:\s*(.+)$')) {
+                if ($m.Groups[1].Value -match '\$\{\{') {
+                    $malos += ('{0}: {1}' -f $nombre, $m.Groups[0].Value.Trim())
+                }
+            }
+        }
+
+        $malos | Should -BeNullOrEmpty -Because (
+            'no da un shell equivocado: invalida el archivo entero y el flujo no llega a ejecutarse')
+    }
+
+    It 'el trabajo con matriz declara su shell donde SI se admite' {
+        # La otra mitad de la regla. Sin esto, quitar la expresion del paso
+        # y no ponerla en defaults deja el flujo valido y ejecutando las
+        # pruebas de PowerShell 5.1 con pwsh: las dos ramas de la matriz
+        # correrian lo mismo, en verde, sin comprobar 5.1 jamas.
+        $ci = $script:Flujos['ci.yml']
+        $ci | Should -Not -BeNullOrEmpty
+
+        $ci | Should -Match '(?s)strategy:.*?matrix:.*?defaults:\s*\r?\n\s*run:\s*\r?\n\s*shell:\s*\$\{\{\s*matrix\.shell'
+    }
+}
+
+Describe 'El historial no puede rechazar un tipo que el programa le manda' {
+    <#
+        Encontrado al integrar [CNF-06], y llevaba roto desde [CNF-04].
+
+        El ValidateSet de Add-EntradaHistorial admitia 'analisis' y
+        'limpieza'. La ventana lleva desde [CNF-04] llamando ademas con
+        'limpieza-interrumpida'. El ValidateSet rechazaba la llamada, la
+        excepcion caia en el catch de al lado -que solo hace Write-Verbose,
+        y con razon: eso ocurre al cerrar la ventana, donde ya no hay a
+        quien avisar- y NO SE ANOTABA NADA.
+
+        O sea: la parte de [CNF-04] que promete "una limpieza detenida se
+        anota como tal" no funcionaba por el camino de la ventana, que es el
+        camino normal del programa. Y no lo veia nadie porque las dos
+        listas -la que valida y la que llama- viven en archivos distintos y
+        nada las comparaba.
+
+        Es [COR-04] con otra pareja de listas, y la solucion es la misma:
+        compararlas.
+    #>
+
+    BeforeAll {
+        $script:RaizHist = Split-Path $PSScriptRoot -Parent
+        $script:TextoHistorial = Get-Content -Raw -LiteralPath (
+            Join-Path (Join-Path (Join-Path $script:RaizHist 'src') 'Core') 'Historial.ps1')
+
+        # Lo que el ValidateSet admite.
+        $m = [regex]::Match($script:TextoHistorial,
+                "ValidateSet\(((?:\s*'[^']+'\s*,?)+)\)\]\s*\[string\]\s*\`$Tipo")
+        $script:TiposAdmitidos = @()
+        if ($m.Success) {
+            foreach ($t in [regex]::Matches($m.Groups[1].Value, "'([^']+)'")) {
+                $script:TiposAdmitidos += $t.Groups[1].Value
+            }
+        }
+
+        # Lo que el programa manda de verdad, en TODO src. Sin comentarios:
+        # un ejemplo escrito en una cabecera no es una llamada.
+        $script:TiposUsados = @{}
+        foreach ($archivo in (Get-ChildItem (Join-Path $script:RaizHist 'src') -Recurse -Filter '*.ps1')) {
+            $texto = [regex]::Replace((Get-Content -Raw -LiteralPath $archivo.FullName), '(?m)^\s*#.*$', '')
+            foreach ($u in [regex]::Matches($texto, "Add-EntradaHistorial\s+-Tipo\s+'([^']+)'")) {
+                $script:TiposUsados[$u.Groups[1].Value] = $archivo.Name
+            }
+        }
+    }
+
+    It 'la prueba encuentra las dos listas: si no, no comprueba nada' {
+        $script:TiposAdmitidos.Count | Should -BeGreaterThan 1 -Because 'si no, se leyo mal el ValidateSet'
+        $script:TiposUsados.Count    | Should -BeGreaterThan 1 -Because 'si no, no se encontro ninguna llamada'
+    }
+
+    It 'todo tipo que el programa manda esta admitido' {
+        $rechazados = @($script:TiposUsados.Keys |
+            Where-Object { $script:TiposAdmitidos -notcontains $_ } |
+            ForEach-Object { ('{0} (desde {1})' -f $_, $script:TiposUsados[$_]) })
+
+        $rechazados | Should -BeNullOrEmpty -Because (
+            'el ValidateSet lanza, el catch se lo traga y la entrada no se anota: el historial miente por omision')
+    }
+}
+
+Describe 'El texto que lee el usuario concuerda en singular' {
+    <#
+        "hace 1 meses" y "hace mas de 1 anyos", en Format-Antiguedad.
+
+        Es el mismo descuido que ya se corrigio en las cabeceras de grupo
+        -"1 elementos", ver [USO-15]- y vuelve a aparecer donde nadie
+        miraba: solo se ve durante un mes de cada anyo. Encontrado al
+        integrar [CNF-06], que reutiliza esa funcion.
+
+        No es una invariante general sobre plurales -eso seria un mecanismo
+        que aqui no se puede verificar-: son los casos concretos, escritos.
+    #>
+
+    BeforeAll {
+        $script:RaizPlural = Split-Path $PSScriptRoot -Parent
+        . (Join-Path (Join-Path (Join-Path $script:RaizPlural 'src') 'Core') 'Bootstrap.ps1')
+    }
+
+    It 'un solo mes se dice en singular' {
+        $texto = Format-Antiguedad -Fecha ((Get-Date).AddDays(-40))
+        $texto | Should -Not -Match '\b1 meses\b'
+        $texto | Should -Be 'hace un mes'
+    }
+
+    It 'y varios, en plural' {
+        Format-Antiguedad -Fecha ((Get-Date).AddDays(-100)) | Should -Be 'hace 3 meses'
+    }
+
+    It 'un solo anyo se dice en singular' {
+        # Este ya estaba bien de antes. La prueba se queda igual: es la que
+        # destapo que, al arreglar el de los meses, se habia colado una
+        # segunda rama identica -inalcanzable- justo encima.
+        $texto = Format-Antiguedad -Fecha ((Get-Date).AddDays(-400))
+        $texto | Should -Not -Match '\b1 años\b'
+        $texto | Should -Be 'hace más de 1 año'
+    }
+
+    It 'los casos cortos siguen como estaban' {
+        Format-Antiguedad -Fecha (Get-Date)                    | Should -Be 'hoy'
+        Format-Antiguedad -Fecha ((Get-Date).AddDays(-1))      | Should -Be 'ayer'
+        Format-Antiguedad -Fecha ((Get-Date).AddDays(-5))      | Should -Be 'hace 5 días'
+    }
+
+    It 'ningun tramo devuelve un numero pegado a un plural equivocado' {
+        # Recorrido por todos los tramos, que es lo que habria cazado el
+        # fallo sin tener que sospecharlo: ninguna respuesta puede empezar
+        # por "1 " y seguir con una palabra en plural.
+        foreach ($dias in @(0, 1, 2, 15, 29, 30, 45, 59, 60, 200, 364, 365, 400, 800)) {
+            $texto = Format-Antiguedad -Fecha ((Get-Date).AddDays(-$dias))
+            $texto | Should -Not -Match '\b1 (días|meses|años)\b' -Because "con $dias dias dice '$texto'"
+        }
+    }
+}
+
+Describe 'COR-08: el programa no puede volver a recorrer con Get-ChildItem -Recurse' {
+
+    <#
+        Es la invariante del punto. [COR-02] arreglo medir y borrar una ruta
+        de mas de 260 caracteres; lo que no arreglo fue ENCONTRARLA, porque
+        los modulos recorrian con
+
+            Get-ChildItem -LiteralPath $zona -Recurse -File -Force -ErrorAction SilentlyContinue
+
+        y en Windows PowerShell 5.1 eso se para en MAX_PATH y bajo ese
+        SilentlyContinue no dice nada de nada. El sintoma no es un error:
+        es que un candidato no aparece. Y en la otra direccion -el
+        vocabulario de Registry.ps1, la busqueda de enlaces de Remove.ps1-
+        el sintoma es peor todavia: se propone DE MAS.
+
+        Por eso la regla se escribe aqui y NO SE DEJA NINGUNA EXCEPCION. Una
+        invariante con excepciones sin motivo escrito es un colador, y el
+        noveno modulo -el que todavia no existe- es exactamente para quien
+        esta escrita: quien lo escriba copiara la linea del modulo de al
+        lado, y la del modulo de al lado ya no puede ser la mala.
+
+        ALCANCE: todo src/ mas Cachivache.ps1, o sea el programa que se
+        entrega. Las pruebas quedan fuera a proposito -se ejecutan en el
+        repositorio, sobre rutas cortas, y no proponen borrar nada-, y
+        tools/Banco-Pruebas.ps1 ya tiene la suya en Banco.Tests.ps1 desde
+        que -Quitar no podia desmontar el cebo de ruta larga.
+    #>
+
+    BeforeAll {
+        $script:RaizRec = Split-Path $PSScriptRoot -Parent
+        $script:FuentesRec = @(Get-ChildItem -Path (Join-Path $script:RaizRec 'src') -Filter '*.ps1' -Recurse) +
+                             @(Get-ChildItem -Path $script:RaizRec -Filter 'Cachivache.ps1')
+    }
+
+    It 'la prueba encuentra los archivos: si no, no comprueba nada' {
+        @($script:FuentesRec).Count | Should -BeGreaterThan 20
+    }
+
+    It 'ningun archivo del programa recorre con Get-ChildItem -Recurse' {
+        $culpables = @()
+        foreach ($archivo in $script:FuentesRec) {
+            # Sin los comentarios: media docena de ellos explican justamente
+            # por que ya NO se usa Get-ChildItem -Recurse, y contarlos haria
+            # fallar la prueba por documentar bien el motivo. Ha pasado seis
+            # veces en este proyecto, y aqui pasaria en tres archivos a la
+            # vez.
+            #
+            # Los bloques <# ... #> se sustituyen por sus mismos saltos de
+            # linea en vez de borrarse: asi el numero de linea del culpable
+            # sigue siendo el de verdad, que es lo unico que sirve para ir a
+            # arreglarlo.
+            $texto = Get-Content -Raw -LiteralPath $archivo.FullName
+            $sinBloques = [regex]::Replace($texto, '(?s)<#.*?#>', {
+                param($coincidencia)
+                return ("`n" * @([regex]::Matches($coincidencia.Value, "`n")).Count)
+            })
+
+            $n = 0
+            foreach ($linea in ($sinBloques -split "`n")) {
+                $n++
+                if ($linea -match '^\s*#') { continue }
+                if ($linea -match 'Get-ChildItem[^\r\n]*-Recurse') {
+                    $culpables += ('{0}:{1}' -f $archivo.Name, $n)
+                }
+            }
+        }
+        $culpables | Should -BeNullOrEmpty -Because (
+            'hay que usar Get-ElementosDelArbol: Get-ChildItem -Recurse se para a los 260 caracteres y no lo dice')
+    }
+
+    It 'los ocho modulos que se migraron llaman al recorrido compartido' -ForEach @(
+        @{ Modulo = '20-Proyectos.ps1' }
+        @{ Modulo = '25-Papelera.ps1' }
+        @{ Modulo = '35-Descargas.ps1' }
+        @{ Modulo = '45-AccesosRotos.ps1' }
+        @{ Modulo = '50-Temporales.ps1' }
+        @{ Modulo = '55-Duplicados.ps1' }
+        @{ Modulo = '60-ArchivosGrandes.ps1' }
+        @{ Modulo = '85-DockerWsl.ps1' }
+    ) {
+        # La otra mitad de la invariante. Sin esto, borrar el recorrido de
+        # un modulo entero tambien pasaria la prueba de arriba: no habria
+        # Get-ChildItem -Recurse porque no habria recorrido, y el modulo
+        # dejaria de encontrar nada sin un solo error.
+        $ruta = Join-Path (Join-Path (Join-Path $script:RaizRec 'src') 'Modules') $Modulo
+        $codigo = @(Get-Content -LiteralPath $ruta | Where-Object { $_ -notmatch '^\s*#' }) -join "`n"
+        $codigo | Should -Match 'Get-ElementosDelArbol'
+    }
+
+    It 'el recorrido compartido pone el prefijo de ruta larga' {
+        # Lo que no se puede comprobar ejecutando: el limite de 260 es de
+        # Windows y aqui las rutas largas funcionan solas, asi que quitar el
+        # prefijo no haria fallar ni una prueba de comportamiento. Se fija
+        # por texto, que es lo unico que queda, y lo comprueba de verdad la
+        # CI del banco sobre un archivo a 546 caracteres de un Windows real.
+        $texto = Get-Content -Raw -LiteralPath (
+            Join-Path (Join-Path (Join-Path $script:RaizRec 'src') 'Core') 'FileSystem.ps1')
+        $desde = $texto.IndexOf('function Get-ElementosDelArbol')
+        $hasta = $texto.IndexOf('function Measure-Ruta')
+        $desde | Should -BeGreaterThan 0
+        $hasta | Should -BeGreaterThan $desde
+
+        $cuerpo = @((($texto.Substring($desde, $hasta - $desde)) -split "`n") |
+                    Where-Object { $_ -notmatch '^\s*#' }) -join "`n"
+        $cuerpo | Should -Match '\$rutaApi\s*=\s*ConvertTo-RutaLarga -Ruta \$raizLimpia'
+        $cuerpo | Should -Match '\[IO\.DirectoryInfo\]::new\(\$rutaApi\)'
+    }
+
+    It 'y la ruta que devuelve se compone con la limpia, no se lee de FullName' {
+        # La regla que no se puede romper. Un FileInfo nacido de una
+        # enumeracion con prefijo lo lleva METIDO en su FullName, y esa
+        # ruta acaba en el campo Ruta de un candidato: la guardia
+        # compararia "\\?\C:\Windows" contra su lista negra "C:\Windows" y
+        # no coincidiria. Un prefijo puesto para encontrar mejor seria un
+        # agujero para borrar el sistema.
+        $texto = Get-Content -Raw -LiteralPath (
+            Join-Path (Join-Path (Join-Path $script:RaizRec 'src') 'Core') 'FileSystem.ps1')
+        $desde = $texto.IndexOf('function Get-ElementosDelArbol')
+        $hasta = $texto.IndexOf('function Measure-Ruta')
+        $cuerpo = @((($texto.Substring($desde, $hasta - $desde)) -split "`n") |
+                    Where-Object { $_ -notmatch '^\s*#' }) -join "`n"
+
+        $cuerpo | Should -Match 'FullName\s*=\s*\$base \+ \$separador \+ \$nombre'
+        $cuerpo | Should -Match '\$rutaSub\s*=\s*\$base \+ \$separador \+ \$sub\.Name'
+        $cuerpo | Should -Not -Match 'FullName\s*=\s*\$archivo\.FullName'
+        $cuerpo | Should -Not -Match 'FullName\s*=\s*\$sub\.FullName'
+    }
+}

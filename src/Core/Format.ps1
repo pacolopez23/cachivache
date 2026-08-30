@@ -352,8 +352,20 @@ function Format-Antiguedad {
     if ($dias -le 0)   { return 'hoy' }
     if ($dias -eq 1)   { return 'ayer' }
     if ($dias -lt 30)  { return "hace $dias días" }
-    if ($dias -lt 365) { return ('hace {0:N0} meses' -f [Math]::Floor($dias / 30)) }
+    if ($dias -lt 365) {
+        # Singular. Decia "hace 1 meses" durante todo un mes del anyo, que
+        # es el mismo descuido que ya se corrigio en las cabeceras de grupo
+        # ("1 elementos", ver [USO-15]). Aqui se arregla con un if y no con
+        # un plural automatico: son dos casos, no un mecanismo.
+        $meses = [int][Math]::Floor($dias / 30)
+        if ($meses -eq 1) { return 'hace un mes' }
+        return ('hace {0} meses' -f $meses)
+    }
     $anios = [Math]::Floor($dias / 365)
+    # El singular de los anyos ya estaba resuelto aqui desde antes. Al
+    # arreglar el de los meses anyadi una segunda rama identica sin mirar
+    # que esta existia: codigo muerto, inalcanzable, y de los que no falla
+    # nunca. Lo cazo la prueba al esperar un texto que no salia.
     if ($anios -eq 1) { return 'hace más de 1 año' }
     return "hace más de $anios años"
 }

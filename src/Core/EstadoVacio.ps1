@@ -132,13 +132,20 @@ function Get-EstadoVacio {
         que ofrecer quitar el filtro.
 
     .DESCRIPTION
-        Devuelve un objeto con cinco campos:
+        Devuelve un objeto con seis campos:
 
-          Vacio               si hay que ensenyar el cartel
-          Caso                cual de las situaciones es (para poder probarlo)
-          Texto               lo que lee el usuario
-          OfrecerQuitarFiltro si procede el boton
-          TextoBoton          como se rotula ese boton
+          Vacio                si hay que ensenyar el cartel
+          Caso                 cual de las situaciones es (para poder probarlo)
+          Texto                lo que lee el usuario
+          OfrecerQuitarFiltro  si procede el boton que quita los filtros
+          OfrecerMostrarHechos si procede el que destapa lo ya eliminado
+          TextoBoton           como se rotula el boton que toque
+
+        TextoBoton lo comparten los dos botones porque NUNCA se ofrecen los
+        dos a la vez: cada caso ensenya como mucho una salida, y ofrecer
+        dos botones para una tabla vacia es pedirle al usuario que adivine
+        cual de los dos era. Hay una prueba que lo exige, porque el dia que
+        se ofrecieran los dos, uno de ellos llevaria el rotulo del otro.
 
         EL ORDEN DE LAS PREGUNTAS NO ES CAPRICHOSO. Se mira primero si hay
         algo a la vista, luego si la coleccion completa trae algo, y solo al
@@ -147,6 +154,30 @@ function Get-EstadoVacio {
         diria "la lista se ira llenando sola" delante de setecientas filas
         escondidas por el filtro, que es exactamente la mentira que este
         punto viene a quitar.
+
+        Y dentro de "hay elementos pero no se ve ninguno" se pregunta
+        ANTES por la casilla "Ocultar lo ya eliminado" que por el filtro.
+        Por dos razones:
+
+          - El filtro se ve. Quien lo puso tiene su propio texto delante,
+            en el cuadro, mientras lee el cartel. La casilla es una marca
+            pequenya que pudo quedarse puesta en una limpieza de hace
+            veinte minutos y que sobrevive a cada refresco de la lista: es
+            la causa que el usuario NO tiene a la vista, y un cartel que
+            existe para nombrar lo que no se ve tiene que nombrar esa.
+          - Y por el boton. El de los filtros vacia el cuadro de texto y
+            el desplegable, y NO destapa lo ya eliminado. Si la casilla es
+            lo que esta vaciando la tabla y el cartel culpara al filtro, el
+            usuario pulsaria y no cambiaria nada: un boton que se pulsa y
+            no hace nada es indistinguible de uno roto, que es [USO-15] y
+            justo el fallo que este cartel vino a evitar.
+
+        Cuando estan las dos cosas puestas, el texto NOMBRA LAS DOS. Ahi
+        ningun boton puede prometer que la tabla se llene -quitar los
+        filtros deja la casilla, y destapar lo eliminado deja el filtro-,
+        asi que lo unico honesto es no dejar ninguna de las dos causas sin
+        decir. El boton que se ofrece sigue siendo el de la casilla, y su
+        rotulo no miente: dice lo que hace, no que vaya a resolverlo.
 
         Que "Total mayor que cero y nada a la vista" signifique "hay un
         filtro" es una deduccion, no un dato, asi que se comprueba: si
@@ -170,6 +201,17 @@ function Get-EstadoVacio {
         Lo que hay escrito en el cuadro de filtro. Puede llegar nulo.
     .PARAMETER RiesgoFiltro
         El nivel elegido en el desplegable, vacio si estan todos.
+    .PARAMETER OcultandoHechos
+        La casilla "Ocultar lo ya eliminado" de [USO-13] esta marcada. NO
+        entra en Test-HayFiltroPuesto y no es un descuido: esa funcion
+        contesta "hay un filtro de BUSQUEDA puesto", y de esa respuesta
+        depende el rotulo del boton que quita los filtros. Si la casilla
+        contara como filtro, ese boton prometeria quitar algo que no
+        quita.
+
+        Por defecto $false, que es como se comportaba antes de [USO-13]:
+        quien no pase el dato nunca vera al programa culpar a una casilla
+        que a lo mejor no esta marcada.
     #>
     [CmdletBinding()]
     [OutputType([psobject])]
@@ -178,25 +220,56 @@ function Get-EstadoVacio {
         [Parameter(Mandatory)] [AllowNull()] [int] $Total,
         [Parameter(Mandatory)] [AllowNull()] [bool] $HayVisibles,
         [AllowNull()] [AllowEmptyString()] [string] $TextoFiltro  = '',
-        [AllowNull()] [AllowEmptyString()] [string] $RiesgoFiltro = ''
+        [AllowNull()] [AllowEmptyString()] [string] $RiesgoFiltro = '',
+        [AllowNull()] [bool] $OcultandoHechos = $false
     )
 
     if ($Total -lt 0) { $Total = 0 }
 
     if ($HayVisibles) {
         return [pscustomobject]@{
-            Vacio               = $false
-            Caso                = 'con-datos'
-            Texto               = ''
-            OfrecerQuitarFiltro = $false
-            TextoBoton          = ''
+            Vacio                = $false
+            Caso                 = 'con-datos'
+            Texto                = ''
+            OfrecerQuitarFiltro  = $false
+            OfrecerMostrarHechos = $false
+            TextoBoton           = ''
         }
     }
 
     if ($Total -gt 0) {
-        $cuantos = if ($Total -eq 1) { '1 elemento' } else { '{0} elementos' -f $Total }
+        $cuantos   = if ($Total -eq 1) { '1 elemento' } else { '{0} elementos' -f $Total }
+        $hayFiltro = Test-HayFiltroPuesto -TextoFiltro $TextoFiltro -RiesgoFiltro $RiesgoFiltro
 
-        if (Test-HayFiltroPuesto -TextoFiltro $TextoFiltro -RiesgoFiltro $RiesgoFiltro) {
+        # La casilla ANTES que el filtro. Ver la explicacion larga de la
+        # cabecera: el filtro se ve, la casilla no, y el boton de los
+        # filtros no destapa lo ya eliminado.
+        if ($OcultandoHechos) {
+            # Con las dos cosas puestas se nombran las dos. Ningun boton
+            # puede prometer aqui que la tabla se llene, asi que callar una
+            # de las dos causas seria mandar al usuario a pelearse con la
+            # que no era.
+            $texto = if ($hayFiltro) {
+                ('El análisis encontró {0} y ahora mismo no se ve ninguno: tienes puesto el filtro ' +
+                 'y además la casilla "Ocultar lo ya eliminado". La lista no está vacía: está escondida.') -f $cuantos
+            } else {
+                ('El análisis encontró {0}, y la casilla "Ocultar lo ya eliminado" los está escondiendo ' +
+                 'porque ya se eliminaron. La lista no está vacía: está escondida.') -f $cuantos
+            }
+            return [pscustomobject]@{
+                Vacio                = $true
+                Caso                 = 'ocultando-hechos'
+                Texto                = $texto
+                OfrecerQuitarFiltro  = $false
+                OfrecerMostrarHechos = $true
+                # El rotulo dice lo que el boton HACE, no que vaya a
+                # resolverlo: con un filtro puesto encima puede seguir sin
+                # verse nada, y prometerlo seria [USO-15] otra vez.
+                TextoBoton           = 'Mostrar lo ya eliminado'
+            }
+        }
+
+        if ($hayFiltro) {
             # Parentesis alrededor de la concatenacion ANTES del -f: el -f se
             # enlaza mas fuerte que el +, asi que sin ellos solo se formatea
             # el ultimo trozo y el {0} del primero llega literal a la
@@ -204,40 +277,44 @@ function Get-EstadoVacio {
             $texto = ('El análisis encontró {0}, pero el filtro que tienes puesto no deja pasar ninguno. ' +
                       'La lista no está vacía: está filtrada.') -f $cuantos
             return [pscustomobject]@{
-                Vacio               = $true
-                Caso                = 'filtrado'
-                Texto               = $texto
-                OfrecerQuitarFiltro = $true
-                TextoBoton          = (Get-TextoQuitarFiltros -TextoFiltro $TextoFiltro -RiesgoFiltro $RiesgoFiltro)
+                Vacio                = $true
+                Caso                 = 'filtrado'
+                Texto                = $texto
+                OfrecerQuitarFiltro  = $true
+                OfrecerMostrarHechos = $false
+                TextoBoton           = (Get-TextoQuitarFiltros -TextoFiltro $TextoFiltro -RiesgoFiltro $RiesgoFiltro)
             }
         }
 
         return [pscustomobject]@{
-            Vacio               = $true
-            Caso                = 'oculto'
-            Texto               = ('Ninguno de los {0} que encontró el análisis se está viendo en la tabla.' -f $cuantos)
-            OfrecerQuitarFiltro = $false
-            TextoBoton          = ''
+            Vacio                = $true
+            Caso                 = 'oculto'
+            Texto                = ('Ninguno de los {0} que encontró el análisis se está viendo en la tabla.' -f $cuantos)
+            OfrecerQuitarFiltro  = $false
+            OfrecerMostrarHechos = $false
+            TextoBoton           = ''
         }
     }
 
     if ($Fase -eq 'analizando') {
         return [pscustomobject]@{
-            Vacio               = $true
-            Caso                = 'analizando'
-            Texto               = 'Analizando: la lista se irá llenando sola. Todavía no ha aparecido nada.'
-            OfrecerQuitarFiltro = $false
-            TextoBoton          = ''
+            Vacio                = $true
+            Caso                 = 'analizando'
+            Texto                = 'Analizando: la lista se irá llenando sola. Todavía no ha aparecido nada.'
+            OfrecerQuitarFiltro  = $false
+            OfrecerMostrarHechos = $false
+            TextoBoton           = ''
         }
     }
 
     if ($Fase -ne 'terminado') {
         return [pscustomobject]@{
-            Vacio               = $true
-            Caso                = 'sin-analizar'
-            Texto               = 'Todavía no se ha analizado nada. Ve a Inicio, pulsa "Analizar el equipo" y lo que se encuentre aparecerá aquí.'
-            OfrecerQuitarFiltro = $false
-            TextoBoton          = ''
+            Vacio                = $true
+            Caso                 = 'sin-analizar'
+            Texto                = 'Todavía no se ha analizado nada. Ve a Inicio, pulsa "Analizar el equipo" y lo que se encuentre aparecerá aquí.'
+            OfrecerQuitarFiltro  = $false
+            OfrecerMostrarHechos = $false
+            TextoBoton           = ''
         }
     }
 
@@ -248,12 +325,13 @@ function Get-EstadoVacio {
     # porque prometer "tu equipo esta limpio" seria pasarse: con otro perfil
     # el mismo equipo puede tener gigas.
     return [pscustomobject]@{
-        Vacio               = $true
-        Caso                = 'sin-resultados'
-        Texto               = ('El análisis ha terminado y no ha encontrado nada que borrar. ' +
-                               'No es un fallo, es una buena noticia: no hay basura que limpiar ' +
-                               'con los módulos y los ajustes que has usado.')
-        OfrecerQuitarFiltro = $false
-        TextoBoton          = ''
+        Vacio                = $true
+        Caso                 = 'sin-resultados'
+        Texto                = ('El análisis ha terminado y no ha encontrado nada que borrar. ' +
+                                'No es un fallo, es una buena noticia: no hay basura que limpiar ' +
+                                'con los módulos y los ajustes que has usado.')
+        OfrecerQuitarFiltro  = $false
+        OfrecerMostrarHechos = $false
+        TextoBoton           = ''
     }
 }

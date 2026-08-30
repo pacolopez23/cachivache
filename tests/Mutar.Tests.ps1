@@ -36,6 +36,14 @@ Describe 'Get-TextoMutado' {
             Should -Throw -ExpectedMessage '*Aparece 2 veces*'
     }
 
+    It 'admite BORRAR: poner cadena vacia es una mutacion valida' {
+        # Quitar una linea entera -".que prueba se entera si suprimo esta
+        # comprobacion?"- es de las mutaciones mas utiles que hay. La
+        # primera version la rechazaba por ser cadena vacia, y dos
+        # mutaciones de [ARQ-03] no llegaron a ejecutarse.
+        Get-TextoMutado -Texto 'uno dos tres' -Buscar ' dos' -Poner '' | Should -Be 'uno tres'
+    }
+
     It 'LANZA si la mutacion no cambia nada' {
         { Get-TextoMutado -Texto 'uno dos' -Buscar 'dos' -Poner 'dos' } |
             Should -Throw -ExpectedMessage '*no cambia nada*'

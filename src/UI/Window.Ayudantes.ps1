@@ -126,6 +126,112 @@
         & $actualizarUnidadesElegidas
     }
 
+    # =================================================================
+    #  LO QUE EL USUARIO HA DICHO QUE NO SE TOQUE NUNCA [CNF-01]
+    # =================================================================
+    # La tarjeta de Ajustes que [CNF-01] daba por hecha en su banner y que
+    # nunca se hizo. Desde [USO-06] se podian anyadir exclusiones desde el
+    # menu contextual de la tabla pero no quitarlas, asi que el propio
+    # dialogo de confirmacion tenia que avisar de que aquello solo se
+    # deshacia editando preferencias.json a mano.
+    #
+    # La lista se rehace entera cada vez, como la de informes: son unas
+    # pocas filas y se mira de tarde en tarde, asi que mantener viva una
+    # coleccion sincronizada con las preferencias costaria mas de lo que
+    # ahorra.
+    #
+    # COMO SE PRESENTA CADA CLAVE LO DECIDE Get-ExclusionVista, que es
+    # calculo puro y esta probado. Aqui no se parte ninguna cadena ni se
+    # busca ningun "modulo:": si esto compusiera su propio texto, habria dos
+    # sitios interpretando la misma clave, que es como se llega a ensenyar
+    # una cosa y borrar otra.
+    $refrescarExclusiones = {
+        $lista = New-Object System.Collections.ObjectModel.ObservableCollection[Cachivache.ExclusionVista]
+        foreach ($clave in @($estado.Preferencias.RutasExcluidas)) {
+            $vista = Get-ExclusionVista -Clave ([string]$clave)
+            # Nulo es "esto no se puede ensenyar" -una entrada en blanco de
+            # un preferencias.json editado a mano-. Se salta en vez de
+            # producir una fila vacia que nadie sabria por que esta ahi.
+            if ($null -eq $vista) { continue }
+
+            $fila = New-Object Cachivache.ExclusionVista
+            $fila.Clave   = $vista.Clave
+            $fila.Titulo  = $vista.Titulo
+            $fila.Detalle = $vista.Detalle
+            $fila.Tipo    = $vista.Tipo
+            $lista.Add($fila)
+        }
+
+        $c.ListaExclusiones.ItemsSource = $lista
+        # Se cuenta lo que de verdad se ve, no lo que hay en las
+        # preferencias: si una entrada se ha saltado por venir en blanco, el
+        # rotulo diria "hay 3" delante de dos filas.
+        $c.TxtResumenExclusiones.Text = Get-TextoListaExclusiones -Cuantas $lista.Count
+    }
+
+    # Quitar una exclusion.
+    #
+    # NO PREGUNTA, Y ANYADIR SI PREGUNTA ([USO-06]). La asimetria no es un
+    # descuido: sigue la direccion del danyo.
+    #
+    #   - Anyadir es una promesa de "nunca mas". A partir de ahi el elemento
+    #     desaparece de TODOS los analisis, y lo que ya no se propone no se
+    #     ve: una exclusion puesta por error es invisible justo despues de
+    #     ponerla. Ademas el menu actua sobre la fila seleccionada, asi que
+    #     la pregunta es tambien lo que convierte un "se abrio el menu sobre
+    #     otra fila" en algo que se ve antes de que pase.
+    #   - Quitar no destruye nada. Devuelve el elemento a estar PROPUESTO,
+    #     que es de donde salio, y entre proponer y borrar siguen estando la
+    #     casilla, el dialogo de confirmacion y la guardia del motor. El
+    #     error se ve al momento -la fila desaparece de la tarjeta- y se
+    #     deshace en dos clics desde Resultados.
+    #
+    # Y hay un motivo de fondo: una confirmacion que sale siempre se
+    # aprende a despachar sin leerla, y entonces deja de proteger tambien
+    # donde importa, que en este programa es el dialogo que borra. Preguntar
+    # por todo es la forma barata de que no valga nada preguntar.
+    $quitarExclusion = {
+        param([string] $Clave)
+
+        if ([string]::IsNullOrWhiteSpace($Clave)) { return }
+
+        # Comparacion EXACTA y ordinal: la clave viene del Tag de la fila,
+        # o sea que es la misma cadena que esta guardada, caracter por
+        # caracter. Comparar sin distinguir mayusculas se llevaria por
+        # delante otra entrada que solo se diferencie en eso, y el usuario
+        # veria desaparecer una fila que no habia tocado.
+        $antes  = @($estado.Preferencias.RutasExcluidas)
+        $quedan = @($antes | Where-Object { -not [string]::Equals([string]$_, $Clave, [StringComparison]::Ordinal) })
+
+        if ($quedan.Count -eq $antes.Count) {
+            # No deberia ocurrir: la fila salio de esta misma lista. Si
+            # ocurre, la tarjeta esta ensenyando algo que ya no existe y lo
+            # util es volver a pintarla, no callarse.
+            & $escribir ('Se ha pedido quitar una exclusión que ya no estaba en la lista: {0}' -f $Clave) 'AVISO'
+            & $refrescarExclusiones
+            return
+        }
+
+        # A las preferencias, que es donde vive la lista desde [CNF-01], y a
+        # la configuracion, que es la copia que miran el embudo del analisis
+        # y el motor de borrado. LAS DOS, porque solo se sincronizan al
+        # refrescar los discos: sin la segunda linea el elemento seguiria
+        # rechazado en la limpieza que el usuario esta a punto de lanzar, y
+        # la tarjeta estaria diciendo que ya no lo esta. Es lo mismo que
+        # hace "Excluir siempre esto" en el otro sentido.
+        $estado.Preferencias.RutasExcluidas  = $quedan
+        $estado.Configuracion.RutasExcluidas = @($estado.Preferencias.RutasExcluidas)
+
+        # Se guarda al momento y no al cerrar la ventana, por lo mismo que
+        # al anyadir: si "nunca mas" se escribe en disco en cuanto se
+        # promete, lo contrario tambien tiene que escribirse en cuanto se
+        # retira. Un cierre anormal que resucitara una exclusion que el
+        # usuario acaba de quitar es la misma promesa rota del reves.
+        & $guardarPreferencias
+        & $refrescarExclusiones
+        & $escribir ('Ya no está excluido: {0}. Volverá a proponerse en los próximos análisis.' -f $Clave)
+    }
+
     # Las tres listas de informes ya generados. Se rehacen enteras cada vez
     # que se abre el panel: los archivos pueden haber cambiado por fuera
     # (el usuario borra uno, o llega otro de una ejecución por consola) y
@@ -321,7 +427,7 @@
     # silencio, que es EL MISMO fallo que viene a arreglar este punto.
     # Se anota y se sigue: quedarse sin la explicacion de la tabla vacia
     # es malo, pero no abrir el programa por eso es peor.
-    $faltanControlesVacio = @(@('EstadoVacio', 'TxtEstadoVacio', 'BtnQuitarFiltros') |
+    $faltanControlesVacio = @(@('EstadoVacio', 'TxtEstadoVacio', 'BtnQuitarFiltros', 'BtnMostrarHechos') |
                               Where-Object { $null -eq $c[$_] })
     if ($faltanControlesVacio.Count -gt 0) {
         Write-Registro -Sync $estado.Sync -Nivel 'ERROR' -Mensaje (
@@ -352,7 +458,8 @@
 
         $veredicto = Get-EstadoVacio -Fase $fase -Total $estado.Items.Count -HayVisibles $hayVisibles `
                          -TextoFiltro $c.CampoFiltro.Text `
-                         -RiesgoFiltro (Get-RiesgoDelFiltro -Indice $c.FiltroRiesgo.SelectedIndex)
+                         -RiesgoFiltro (Get-RiesgoDelFiltro -Indice $c.FiltroRiesgo.SelectedIndex) `
+                         -OcultandoHechos ([bool]$c.ChkOcultarHechos.IsChecked)
 
         $c.TxtEstadoVacio.Text = $veredicto.Texto
 
@@ -364,6 +471,17 @@
             $c.BtnQuitarFiltros.Visibility = 'Visible'
         } else {
             $c.BtnQuitarFiltros.Visibility = 'Collapsed'
+        }
+
+        # El segundo boton, por el mismo criterio: rotulo solo cuando se ve.
+        # Los dos no pueden ofrecerse a la vez -Get-EstadoVacio lo garantiza
+        # y hay prueba-, pero cada uno se apaga por su cuenta: si dependieran
+        # uno del otro, un cambio en la funcion dejaria uno colgado visible.
+        if ($veredicto.OfrecerMostrarHechos) {
+            $c.BtnMostrarHechos.Content    = $veredicto.TextoBoton
+            $c.BtnMostrarHechos.Visibility = 'Visible'
+        } else {
+            $c.BtnMostrarHechos.Visibility = 'Collapsed'
         }
 
         $c.EstadoVacio.Visibility = if ($veredicto.Vacio) { 'Visible' } else { 'Collapsed' }
@@ -394,6 +512,73 @@
         # control que ya no esta deja al teclado en ninguna parte. Ver
         # [A11Y-06].
         [void] $c.CampoFiltro.Focus()
+    }
+
+    # =================================================================
+    #  ABRIR LA UBICACION DE UNA FILA [USO-06]
+    # =================================================================
+    # Lo llaman TRES sitios: el boton de la barra de herramientas, la
+    # entrada "Abrir ubicación" del menu contextual y el doble clic sobre
+    # la fila. Un solo cierre y no tres copias, por lo mismo que [ARQ-01]:
+    # tres copias divergen, y divergir aqui significa que el doble clic
+    # abriria algo que el boton rechaza, o al reves. La comprobacion de
+    # seguridad se escribe una vez.
+    #
+    # Las tres situaciones en las que este boton se quedaba callado -sin
+    # fila elegida, con una ruta que ya no existe, y con un elemento que no
+    # tiene ruta de verdad- dicen cada una lo suyo, porque las tres se
+    # parecian demasiado a un boton roto.
+    $abrirUbicacion = {
+        param($Item)
+
+        if ($null -eq $Item) {
+            Show-Aviso -Mensaje 'Elige antes una fila de la lista: es su carpeta la que se abre.' -Tipo 'Information'
+            return
+        }
+
+        # Se pregunta por TieneRutaReal y no por "el metodo es Comando".
+        # Es la misma pregunta con mejor respuesta: la papelera tampoco
+        # tiene ruta y NO es un comando, asi que antes caia en el Test-Path
+        # de abajo y salia un "Ya no existe: Papelera de reciclaje" que no
+        # es verdad -existe, simplemente no es una carpeta-. Ver [USO-06].
+        if (-not $Item.TieneRutaReal) {
+            Show-Aviso -Tipo 'Information' -Mensaje (& $describirSinRuta $Item 'ubicación que abrir')
+            return
+        }
+
+        $ruta = $Item.Ruta
+        if (-not (Test-Path -LiteralPath $ruta)) {
+            Show-Aviso -Mensaje ("Ya no existe: {0}`n`nO se ha borrado o movido desde el análisis. Vuelve a analizar para tener la lista al día." -f $ruta) -Tipo 'Warning'
+            return
+        }
+
+        try {
+            if ((Get-Item -LiteralPath $ruta -Force).PSIsContainer) {
+                Start-Process -FilePath (Get-RutaExplorador) -ArgumentList "`"$ruta`""
+            } else {
+                Start-Process -FilePath (Get-RutaExplorador) -ArgumentList "/select,`"$ruta`""
+            }
+        } catch {
+            Show-Aviso -Mensaje ("No se ha podido abrir la ubicación:`n{0}" -f $_.Exception.Message) -Tipo 'Warning'
+        }
+    }
+
+    # Como se le explica al usuario que este elemento no tiene ruta.
+    #
+    # Lo necesitan las dos ordenes que solo tienen sentido sobre una ruta
+    # -abrir la ubicación y copiar la ruta-, y tienen que decir LO MISMO:
+    # si una lo llamara comando y la otra etiqueta, el usuario creeria que
+    # son dos casos distintos. El final de la frase lo pone quien llama,
+    # que es lo unico que cambia entre las dos.
+    $describirSinRuta = {
+        param($Item, [string] $QueNoHay)
+
+        $que = if (-not [string]::IsNullOrWhiteSpace($Item.Comando)) {
+            'es un comando del sistema ({0})' -f $Item.Comando
+        } else {
+            'es una etiqueta del programa, no una carpeta ni un archivo del disco'
+        }
+        return ('«{0}» {1}, así que no hay ninguna {2}.' -f $Item.Nombre, $que, $QueNoHay)
     }
 
     $actualizarResumenSeleccion = {
@@ -492,6 +677,18 @@
         # que el cartel ofreciera quitar un filtro que no ve. Ver [USO-09].
         $riesgo = Get-RiesgoDelFiltro -Indice $c.FiltroRiesgo.SelectedIndex
 
+        # [USO-13]. NO entra en Test-HayFiltroPuesto, y no es un descuido:
+        # esa funcion contesta "hay un filtro de BUSQUEDA puesto", y de esa
+        # respuesta depende el rotulo del boton del cartel de tabla vacia
+        # ("Quitar el filtro de texto"). Si la casilla contara como filtro,
+        # ese boton prometeria quitar algo que no quita. Aqui se suma
+        # aparte, que es lo unico que hace falta: que haya predicado.
+        #
+        # Si el control no estuviera en la ventana, esto da $false y la
+        # tabla se comporta como siempre. Leer una propiedad de $null no
+        # lanza en PowerShell.
+        $ocultarHechos = [bool]$c.ChkOcultarHechos.IsChecked
+
         # Sin criterios no se instala un predicado que diga que si a todo:
         # se QUITA el filtro. Un predicado permisivo obliga igualmente a
         # WPF a invocarlo una vez por fila -y es un scriptblock de
@@ -505,7 +702,7 @@
         # tabla vacia. Si aqui un cuadro con tres espacios contara como
         # vacio y alli como filtro puesto -o al reves-, el cartel ofreceria
         # quitar un filtro que no existe y el boton no cambiaria nada.
-        if (-not (Test-HayFiltroPuesto -TextoFiltro $texto -RiesgoFiltro $riesgo)) {
+        if (-not (Test-HayFiltroPuesto -TextoFiltro $texto -RiesgoFiltro $riesgo) -and -not $ocultarHechos) {
             if ($null -ne $estado.Vista.Filter) { $estado.Vista.Filter = $null }
             & $actualizarResumenSeleccion
             return
@@ -514,6 +711,19 @@
         $estado.Vista.Filter = [Predicate[object]] {
             param($objeto)
             $item = [Cachivache.ItemVista]$objeto
+            # [USO-13]: lo primero, y por Hecho.
+            #
+            # Hecho es la bandera que Window.Eliminacion.ps1 levanta SOLO
+            # cuando el elemento se borro de verdad; un fallo se queda con
+            # Hecho a $false y su texto en Estado. Preguntar por Hecho es
+            # por tanto lo mismo que preguntar "esto salio bien", y es la
+            # misma bandera de la que dependen el atenuado de la fila y el
+            # desmarcado tras la limpieza: no puede discrepar con ellos.
+            #
+            # Un fallo NUNCA se esconde. Es lo unico de la lista que
+            # todavia se puede arreglar y reintentar, y esconderlo seria
+            # dar por limpiado algo que sigue en el disco. Ver [USO-02].
+            if ($ocultarHechos -and $item.Hecho) { return $false }
             if ($riesgo -and $item.Riesgo -ne $riesgo) { return $false }
             if ([string]::IsNullOrWhiteSpace($texto)) { return $true }
 

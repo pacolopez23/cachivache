@@ -53,17 +53,30 @@ jobs:
             shell: powershell
           - powershell: '7'
             shell: pwsh
+
+    # El shell va AQUI y no en cada paso, y no es cuestion de gusto: la
+    # clave "shell:" de un paso NO admite expresiones. Es de los pocos
+    # sitios de un flujo donde el contexto "matrix" no esta disponible, asi
+    # que "shell: ${{ matrix.shell }}" en un paso no da un shell
+    # equivocado: invalida el archivo entero y el flujo NO LLEGA A
+    # EJECUTARSE. Asi estuvo desde que se escribio, y no se noto porque
+    # hasta que el proyecto no tuvo repositorio no habia donde ejecutarlo.
+    #
+    # jobs.<id>.defaults.run.shell si admite "matrix", y se aplica a todos
+    # los pasos del trabajo. Comprobado con actionlint, no a ojo.
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
+
     steps:
       - uses: actions/checkout@v4
 
       - name: Instalar Pester
-        shell: ${{ matrix.shell }}
         run: |
           Set-PSRepository PSGallery -InstallationPolicy Trusted
           Install-Module Pester -MinimumVersion 5.0 -Scope CurrentUser -Force -SkipPublisherCheck
 
       - name: Ejecutar las pruebas
-        shell: ${{ matrix.shell }}
         run: |
           Import-Module Pester -MinimumVersion 5.0
           $configuracion = New-PesterConfiguration
@@ -121,6 +134,163 @@ jobs:
               exit 1
           }
           Write-Host 'El repositorio sigue limpio despues del analisis.'
+
+  # ===================================================================
+  #  El banco de pruebas, ejecutado de verdad  ([VAL-03])
+  # ===================================================================
+  #
+  # Cachivache lleva tres afirmaciones que solo se ejercitan AL BORRAR DE
+  # VERDAD, y por eso llevaban desde que se escribieron sin que nadie las
+  # hubiera visto cumplirse: la papelera que no cabe ([COR-01]), las rutas
+  # de mas de 260 caracteres ([COR-02]) y OneDrive ([COR-03]). El banco de
+  # docs/BANCO-PRUEBAS.md existe para verlas, y pide una maquina virtual
+  # con instantanea que hay que montar a mano.
+  #
+  # Un agente de windows-latest ES una maquina virtual con instantanea: es
+  # efimera, se tira al terminar, y trae Windows de verdad, NTFS de verdad
+  # y una papelera de verdad. Asi que casi todo lo del banco que no exija
+  # mirar una ventana se puede ejecutar aqui, en cada push.
+  #
+  # QUE NO SE COMPRUEBA AQUI, Y POR QUE
+  #
+  #   Nada de WPF. Un agente no tiene sesion de escritorio interactiva, asi
+  #   que la ventana no abre. Eso deja fuera el desplazamiento con miles de
+  #   filas ([USO-01]), marcar en lote ([VEL-03]), el dialogo de
+  #   confirmacion, el foco y el Narrador ([A11Y-*]). Siguen siendo de la
+  #   maquina virtual, a mano.
+  #
+  #   [COR-03], OneDrive: hace falta una cuenta y archivos a peticion.
+  #
+  #   [COR-01], la papelera: se ha dejado fuera A PROPOSITO. La cuota se
+  #   toca por registro y el archivo de 200 MB si se monta, pero quien lee
+  #   la cuota es Get-EstadoPapelera a traves de Win32_Volume, que es una
+  #   clase CIM que exige elevacion. Si un dia el agente dejara de estar
+  #   elevado, la cuota pasaria a "desconocida", Test-CabeEnPapelera
+  #   responderia "cabe" -que es su contrato, y es el correcto- y la
+  #   comprobacion se invertiria SOLA y en silencio, hacia el lado que no
+  #   avisa. Un paso que se da la vuelta segun el dia es peor que no
+  #   tenerlo. Sigue siendo de la maquina virtual.
+  #
+  # El trabajo tiene que fallar SOLO cuando haya un fallo de verdad, asi
+  # que todas las comprobaciones son sobre lo que monta el banco o sobre
+  # respuestas de la guardia que no dependen del agente. Que un modulo no
+  # encuentre nada -aqui no hay Steam, ni Docker, ni navegadores usados- no
+  # falla. Que un cebo no aparezca, si.
+  banco:
+    name: Banco de pruebas (borrado real)
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    # Windows PowerShell 5.1 y no pwsh: es con lo que arranca
+    # Cachivache.exe, y es la version cuyo proveedor de archivos NO admite
+    # rutas largas. Comprobar [COR-02] en PowerShell 7 -donde funcionan
+    # solas- seria comprobarlo justo donde no hace falta.
+    defaults:
+      run:
+        shell: powershell
+
+    env:
+      # Los mismos para montar y para comprobar: si no coincidieran, el
+      # comprobador buscaria cebos que nadie ha montado.
+      CEBOS_DE_SOBRA: '300'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Montar el banco
+        run: |
+          .\tools\Banco-Pruebas.ps1 -ArchivosDeSobra ([int]$env:CEBOS_DE_SOBRA) -Confirm:$false
+
+      - name: Comprobar que el banco esta entero
+        run: |
+          .\tools\Banco-Comprobar.ps1 -Fase montaje -ArchivosDeSobra ([int]$env:CEBOS_DE_SOBRA)
+
+      - name: Analisis completo, sin borrar nada
+        run: |
+          .\Cachivache.ps1 -Consola -Perfil agresivo -Informe analisis.json
+
+      - name: Los cebos aparecen y no se propone nada del sistema
+        run: |
+          .\tools\Banco-Comprobar.ps1 -Fase analisis -Informe analisis.json `
+                                      -ArchivosDeSobra ([int]$env:CEBOS_DE_SOBRA)
+
+      - name: Medir y borrar una ruta larga de verdad, y los enlaces duros
+        run: |
+          .\tools\Banco-Comprobar.ps1 -Fase windows -ArchivosDeSobra ([int]$env:CEBOS_DE_SOBRA)
+
+      - name: Dos analisis seguidos en el mismo proceso
+        run: |
+          .\tools\Banco-Comprobar.ps1 -Fase dosanalisis
+
+      # A partir de aqui se borra de verdad. La simulacion va primero y es
+      # una red, no un tramite: si lo que viene marcado incluyera algo que
+      # no es del banco, el trabajo se para AQUI, con el disco intacto. Da
+      # igual lo que se rompa en un agente efimero, pero el guion que borra
+      # es el mismo que se ejecuta en el equipo de una persona.
+      - name: Simular la limpieza y comprobar que solo tocaria los cebos
+        run: |
+          .\Cachivache.ps1 -Consola -Modulos temporales -Ejecutar -Simular -Informe simulacion.json
+          .\tools\Banco-Comprobar.ps1 -Fase simulacion -Informe simulacion.json `
+                                      -ArchivosDeSobra ([int]$env:CEBOS_DE_SOBRA)
+
+      - name: Inventariar las carpetas del usuario antes de borrar
+        run: |
+          .\tools\Banco-Comprobar.ps1 -Fase inventario -Salida antes.txt
+
+      # Solo el modulo de temporales, y sin -Permanente: lo que se borra es
+      # lo que el analisis marco por su cuenta -riesgo bajo y sin avisos-,
+      # que en este disco son los cebos del banco. Va a la papelera, como
+      # en el equipo de cualquiera.
+      - name: Limpieza real por consola
+        run: |
+          .\Cachivache.ps1 -Consola -Modulos temporales -Ejecutar
+
+      - name: Inventariar despues
+        run: |
+          .\tools\Banco-Comprobar.ps1 -Fase inventario -Salida despues.txt
+
+      - name: Comprobar que solo han desaparecido los cebos
+        run: |
+          .\tools\Banco-Comprobar.ps1 -Fase limpieza -Antes antes.txt -Despues despues.txt `
+                                      -ArchivosDeSobra ([int]$env:CEBOS_DE_SOBRA)
+
+      - name: Quitar el banco
+        if: always()
+        run: |
+          .\tools\Banco-Pruebas.ps1 -Quitar -Confirm:$false
+
+      # Lo que hara que esto sirva de algo dentro de tres meses: cuando
+      # falle, el registro del trabajo tiene que ensenyar QUE se propuso y
+      # QUE se borro, no solo un codigo de salida.
+      #
+      # El registro y los informes del programa viven en %LOCALAPPDATA%, y
+      # se copian al arbol de trabajo antes de subirlos: la ruta de
+      # upload-artifact la resuelve GitHub, no PowerShell, y el contexto
+      # "env" de un flujo solo conoce las variables que declara el propio
+      # flujo, no las del sistema del agente. Con "${{ env.LOCALAPPDATA }}"
+      # se subiria una ruta vacia y el paso pasaria en verde sin guardar
+      # nada, que es la peor forma de fallar que tiene un rastro.
+      - name: Recoger el rastro
+        if: always()
+        run: |
+          New-Item -ItemType Directory -Path rastro -Force | Out-Null
+          foreach ($suelto in @('analisis.json', 'simulacion.json', 'antes.txt', 'despues.txt')) {
+              if (Test-Path -LiteralPath $suelto) { Copy-Item -LiteralPath $suelto -Destination rastro }
+          }
+          $datos = Join-Path $env:LOCALAPPDATA 'Cachivache'
+          if (Test-Path -LiteralPath $datos) {
+              Copy-Item -LiteralPath $datos -Destination (Join-Path 'rastro' 'Cachivache') -Recurse -Force
+          }
+          Get-ChildItem -Path rastro -Recurse -File |
+              ForEach-Object { '  {0,10:N0}  {1}' -f $_.Length, $_.FullName }
+
+      - name: Guardar los informes y el registro
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: banco-de-pruebas
+          path: rastro
+          if-no-files-found: warn
 
   # ===================================================================
   #  El XAML tiene que ser XML valido

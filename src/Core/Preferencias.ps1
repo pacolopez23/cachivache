@@ -89,6 +89,30 @@ function Import-Preferencias {
         # se guarda lo EXCLUIDO explicitamente: son decisiones del usuario
         # sobre rutas concretas, no una lista que pueda quedarse obsoleta
         # porque aparezca algo nuevo. Ver [CNF-01] en docs/HOJA-DE-RUTA.md.
+        #
+        # SE LLAMA "RutasExcluidas" Y YA NO GUARDA SOLO RUTAS. Desde [ARQ-03]
+        # aqui dentro hay tambien claves sinteticas -"modulo:<Id>|<Nombre>"-
+        # para lo que no tiene ruta de verdad: un comando, la papelera. El
+        # nombre se queda como esta, y NO es por pereza:
+        #
+        #   - Esta clave es el nombre de un campo de un archivo que ya existe
+        #     en los equipos de la gente. Cambiarlo hace que este mismo bucle
+        #     no encuentre la propiedad, caiga al valor por defecto @( ) y
+        #     deje al usuario sin NINGUNA de sus exclusiones, en silencio y
+        #     justo antes de una limpieza. Es exactamente la familia de fallo
+        #     que persigue esta auditoria: el programa haciendo algo distinto
+        #     de lo que el usuario cree.
+        #   - Se podria migrar -leer el nombre viejo, escribir el nuevo-,
+        #     pero esa rama de compatibilidad hay que mantenerla para
+        #     siempre, y lo unico que compra es un nombre mas bonito.
+        #   - El nombre no llega al usuario por ningun sitio: la tarjeta de
+        #     Ajustes se titula "Lo que no se toca nunca". Quien lee este
+        #     campo es quien abre preferencias.json, y ahi tiene delante las
+        #     claves de verdad.
+        #
+        # O sea: si vienes a renombrarlo, hace falta ademas la migracion y su
+        # prueba de "un archivo con el nombre antiguo conserva las
+        # exclusiones". Sin eso, no.
         RutasExcluidas    = @()
 
         # AQUI NO VA "Simular", Y ES A PROPOSITO.

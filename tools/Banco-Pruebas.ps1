@@ -29,9 +29,20 @@
     LAS DECISIONES ESTAN EN OTRO ARCHIVO
     ------------------------------------
     Banco-Decisiones.ps1 es calculo puro y va probado: donde esta el banco,
-    si esto parece una VM, y sobre todo si una ruta cae dentro del banco.
-    Aqui solo se ejecuta. Ese archivo se puede dot-sourcear sin consecuencias;
-    este no, porque este crea y borra archivos.
+    si esto parece una VM, si una ruta cae dentro del banco, y desde
+    [VAL-03] tambien EL CATALOGO DE CEBOS. Aqui solo se ejecuta. Ese archivo
+    se puede dot-sourcear sin consecuencias; este no, porque este crea y
+    borra archivos.
+
+    QUE NOMBRE PUEDE LLEVAR UN CEBO
+    -------------------------------
+    Uno que la guardia no confunda con trabajo del usuario. Parece un
+    detalle y era el fallo mas grave que tenia el banco: "copia-enorme.bak",
+    "copia-antigua.bak" y "documento-1.bak" empiezan por una palabra de
+    Test-ArchivoPersonal, asi que NINGUN modulo llegaba a proponerlos y los
+    cebos de [COR-01] y [COR-02] -las dos afirmaciones que el banco existe
+    para comprobar- eran invisibles. Los nombres estan ahora en el catalogo,
+    con una invariante que se lo pregunta a la guardia de verdad.
 
 .PARAMETER Quitar
     Borra el banco entero en vez de montarlo.
@@ -88,7 +99,9 @@ function Get-RaizBanco {
     $documentos = [Environment]::GetFolderPath([Environment+SpecialFolder]::MyDocuments)
     if ([string]::IsNullOrWhiteSpace($documentos)) { return $null }
 
-    return [IO.Path]::GetFullPath((Join-Path $documentos (Get-NombreRaizBanco)))
+    $compuesta = Get-RutaRaizBanco -Documentos $documentos
+    if ([string]::IsNullOrWhiteSpace($compuesta)) { return $null }
+    return [IO.Path]::GetFullPath($compuesta)
 }
 
 function Get-DescripcionEquipo {
@@ -127,6 +140,18 @@ function New-ArchivoDeCebo {
         escrito hace menos de treinta minutos, porque puede estar en uso
         ahora mismo. Un cebo recien creado no aparecería en la lista y
         pareceria que el modulo no funciona.
+
+        Dos formas de escribir, segun el tamanyo. Hasta 1 MB se repite el
+        texto de relleno, que es lo que hace falta para que dos cebos
+        salgan identicos byte a byte y el modulo de duplicados los empareje.
+        A partir de ahi se escribe por bloques: el cebo de la papelera son
+        200 MB, y componer 200 MB de texto en memoria para escribirlos de
+        una vez es la forma de quedarse sin memoria montando un banco.
+
+        El prefijo de ruta larga va SIEMPRE. Es inocuo para una ruta corta
+        -la API lo acepta igual- y es lo unico que permite crear el cebo de
+        [COR-02], que pasa de 260 caracteres y con el que New-Item y
+        Set-Content de PowerShell 5.1 fallan.
     #>
     [CmdletBinding(SupportsShouldProcess)]
     param(
@@ -137,127 +162,147 @@ function New-ArchivoDeCebo {
 
     if (-not $PSCmdlet.ShouldProcess($Ruta, 'Crear archivo de prueba')) { return }
 
-    $texto = $Relleno * [Math]::Max(1, [int](($KiloBytes * 1024) / [Math]::Max(1, $Relleno.Length)))
-    [IO.File]::WriteAllText($Ruta, $texto)
+    $largo = '\\?\' + $Ruta
+
+    if ($KiloBytes -le 1024) {
+        # Al menos un byte: un cebo de cero bytes no lo propone nadie.
+        $veces = [Math]::Max(1, [int](($KiloBytes * 1024) / [Math]::Max(1, $Relleno.Length)))
+        [IO.File]::WriteAllText($largo, ($Relleno * $veces))
+    } else {
+        $bloque = [byte[]]::new(1MB)
+        $flujo  = [IO.File]::Create($largo)
+        try {
+            foreach ($n in 1..[int]($KiloBytes / 1024)) { $flujo.Write($bloque, 0, $bloque.Length) }
+        } finally {
+            $flujo.Dispose()
+        }
+    }
 
     $antiguo = (Get-Date).AddDays(-400)
-    [IO.File]::SetLastWriteTime($Ruta, $antiguo)
-    [IO.File]::SetCreationTime($Ruta, $antiguo)
-    [IO.File]::SetLastAccessTime($Ruta, $antiguo)
+    [IO.File]::SetLastWriteTime($largo, $antiguo)
+    [IO.File]::SetCreationTime($largo, $antiguo)
+    [IO.File]::SetLastAccessTime($largo, $antiguo)
 }
 
 function New-BancoPruebas {
     <#
     .SYNOPSIS
-        Monta todos los cebos.
+        Monta todos los cebos del catalogo.
+
+    .DESCRIPTION
+        No hay ni una ruta ni un nombre escritos aqui: todo sale de
+        Get-CebosBanco, que es calculo puro y va probado. Antes estaban
+        escritos a mano en esta funcion, y por eso nadie podia preguntarle
+        al banco "que tenia que haber salido en el analisis" sin volver a
+        escribir la lista. Ver [VAL-03].
     #>
     [CmdletBinding(SupportsShouldProcess)]
-    param([Parameter(Mandatory)] [string] $Raiz)
+    param(
+        [Parameter(Mandatory)] [string] $Raiz,
+        [ValidateRange(0, 50000)]
+        [int] $DeSobra = 3000
+    )
 
     if (-not $PSCmdlet.ShouldProcess($Raiz, 'Montar el banco de pruebas')) { return }
 
     [void][IO.Directory]::CreateDirectory($Raiz)
     Write-Host "Banco en: $Raiz" -ForegroundColor Cyan
 
-    # --- 1. Temporales corrientes: el camino normal a la papelera --------
-    $normales = Join-Path $Raiz '01-temporales'
-    [void][IO.Directory]::CreateDirectory($normales)
-    foreach ($n in 1..8) {
-        New-ArchivoDeCebo -Ruta (Join-Path $normales ('documento-{0}.bak' -f $n)) -KiloBytes 64
-        New-ArchivoDeCebo -Ruta (Join-Path $normales ('version-{0}.old' -f $n)) -KiloBytes 32
-    }
-    Write-Host '  01-temporales: 16 archivos .bak y .old' -ForegroundColor DarkGray
+    foreach ($cebo in (Get-CebosBanco -ArchivosDeSobra $DeSobra)) {
+        if ([int]$cebo.Cuantos -le 0) { continue }
 
-    # --- 2. Ruta de mas de 260 caracteres [COR-02] -----------------------
-    #
-    # Se construye por tramos y con el prefijo \\?\ porque en PowerShell 5.1
-    # el proveedor de archivos NO admite rutas largas: New-Item falla. Es el
-    # mismo prefijo que usa el programa en Get-ResumenArbol.
-    $largo = Join-Path $Raiz '02-ruta-larga'
-    $acumulado = $largo
-    foreach ($n in 1..12) {
-        $acumulado = Join-Path $acumulado ('carpeta-anidada-con-nombre-largo-numero-{0:00}' -f $n)
-    }
-    [void][IO.Directory]::CreateDirectory('\\?\' + $acumulado)
-    $archivoLargo = Join-Path $acumulado 'copia-antigua.bak'
-    [IO.File]::WriteAllText('\\?\' + $archivoLargo, ('relleno' * 4096))
-    [IO.File]::SetLastWriteTime('\\?\' + $archivoLargo, (Get-Date).AddDays(-400))
-    Write-Host ('  02-ruta-larga: {0} caracteres' -f $archivoLargo.Length) -ForegroundColor DarkGray
+        for ($n = 1; $n -le [int]$cebo.Cuantos; $n++) {
+            $ruta = Get-RutaCebo -Cebo $cebo -Raiz $Raiz -Indice $n
 
-    # --- 3. Un archivo grande, para la cuota de la papelera [COR-01] -----
-    #
-    # 200 MB. Por si solo no desborda ninguna papelera: hay que BAJAR la
-    # cuota de la papelera de la VM a 100 MB a mano, y eso esta en el paso
-    # 4 de docs/BANCO-PRUEBAS.md. Se hace asi y no creando un archivo de
-    # varios gigas porque el fallo que se quiere ver es "no cabe", y "no
-    # cabe" se consigue igual moviendo el techo que el suelo.
-    $grande = Join-Path $Raiz '03-mas-grande-que-la-papelera'
-    [void][IO.Directory]::CreateDirectory($grande)
-    $rutaGrande = Join-Path $grande 'copia-enorme.bak'
-    $bloque = [byte[]]::new(1MB)
-    $flujo = [IO.File]::Create($rutaGrande)
-    try {
-        foreach ($n in 1..200) { $flujo.Write($bloque, 0, $bloque.Length) }
-    } finally {
-        $flujo.Dispose()
-    }
-    [IO.File]::SetLastWriteTime($rutaGrande, (Get-Date).AddDays(-400))
-    Write-Host '  03-mas-grande-que-la-papelera: 200 MB' -ForegroundColor DarkGray
+            if ($cebo.EsCarpeta) {
+                [void][IO.Directory]::CreateDirectory('\\?\' + $ruta)
+                continue
+            }
 
-    # --- 4. Enlaces duros [VIS-03] ---------------------------------------
-    #
-    # Dos entradas de directorio, un solo contenido. Medir la carpeta tiene
-    # que dar 20 MB, no 40. Un enlace duro NO necesita administrador; un
-    # enlace simbolico si, y por eso aqui se usan duros.
-    $duros = Join-Path $Raiz '04-enlaces-duros'
-    [void][IO.Directory]::CreateDirectory($duros)
-    $original = Join-Path $duros 'original.bak'
-    $flujo = [IO.File]::Create($original)
-    try {
-        foreach ($n in 1..20) { $flujo.Write($bloque, 0, $bloque.Length) }
-    } finally {
-        $flujo.Dispose()
-    }
-    [IO.File]::SetLastWriteTime($original, (Get-Date).AddDays(-400))
-    $enlace = Join-Path $duros 'mismo-contenido-otro-nombre.bak'
-    New-Item -ItemType HardLink -Path $enlace -Target $original -ErrorAction Stop | Out-Null
-    Write-Host '  04-enlaces-duros: 20 MB reales, dos nombres' -ForegroundColor DarkGray
+            # La carpeta se crea con el prefijo por el cebo de ruta larga:
+            # doce niveles anidados pasan de 260 caracteres y
+            # [IO.Directory]::CreateDirectory sin prefijo lanza.
+            $carpeta = $ruta.Substring(0, $ruta.LastIndexOf('\'))
+            [void][IO.Directory]::CreateDirectory('\\?\' + $carpeta)
 
-    # --- 5. Duplicados de verdad [55-Duplicados] -------------------------
-    #
-    # Mismo contenido, ficheros independientes: aqui SI se libera espacio al
-    # borrar uno, al reves que en el caso de arriba. Los dos juntos son la
-    # prueba de que el programa distingue.
-    $dobles = Join-Path $Raiz '05-duplicados'
-    [void][IO.Directory]::CreateDirectory($dobles)
-    foreach ($n in 1..2) {
-        New-ArchivoDeCebo -Ruta (Join-Path $dobles ('informe-copia-{0}.bak' -f $n)) `
-                          -KiloBytes 512 -Relleno 'contenido-identico-'
-    }
-    Write-Host '  05-duplicados: dos archivos identicos de 512 KB' -ForegroundColor DarkGray
+            if (-not [string]::IsNullOrWhiteSpace($cebo.EnlaceA)) {
+                # Dos entradas de directorio, un solo contenido: es el cebo
+                # de [VIS-03]. Un enlace duro NO necesita administrador; un
+                # enlace simbolico si, y por eso aqui se usan duros.
+                $destino = Join-Path $carpeta $cebo.EnlaceA
+                New-Item -ItemType HardLink -Path $ruta -Target $destino -ErrorAction Stop | Out-Null
+                continue
+            }
 
-    # --- 6. Carpetas vacias [40-CarpetasVacias] --------------------------
-    $vacias = Join-Path $Raiz '06-carpetas-vacias'
-    foreach ($n in 1..5) {
-        [void][IO.Directory]::CreateDirectory((Join-Path $vacias ('vacia-{0}' -f $n)))
-    }
-    Write-Host '  06-carpetas-vacias: 5' -ForegroundColor DarkGray
-
-    # --- 7. Relleno: miles de filas [USO-01] y [VEL-03] ------------------
-    if ($ArchivosDeSobra -gt 0) {
-        $muchos = Join-Path $Raiz '07-muchas-filas'
-        [void][IO.Directory]::CreateDirectory($muchos)
-        $antiguo = (Get-Date).AddDays(-400)
-        foreach ($n in 1..$ArchivosDeSobra) {
-            $r = Join-Path $muchos ('sobra-{0:00000}.tmp' -f $n)
-            [IO.File]::WriteAllText($r, 'x')
-            [IO.File]::SetLastWriteTime($r, $antiguo)
+            New-ArchivoDeCebo -Ruta $ruta -KiloBytes ([int]$cebo.KiloBytes) `
+                              -Relleno ([string]$cebo.Relleno)
         }
-        Write-Host ('  07-muchas-filas: {0} archivos .tmp' -f $ArchivosDeSobra) -ForegroundColor DarkGray
+
+        Write-Host ('  {0,-16} {1,6} en {2}   {3}' -f `
+                    $cebo.Id, $cebo.Cuantos, $cebo.Carpeta, $cebo.Para) -ForegroundColor DarkGray
     }
 
     Write-Host ''
     Write-Host 'Montado. Sigue docs/BANCO-PRUEBAS.md desde el paso 5.' -ForegroundColor Green
+}
+
+function ConvertFrom-PrefijoLargo {
+    <#
+    .SYNOPSIS
+        Quita el "\\?\" de una ruta. La misma regla que ConvertFrom-RutaLarga
+        del nucleo, escrita aqui porque el banco no carga el nucleo.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter(Mandatory)] [AllowEmptyString()] [string] $Ruta)
+
+    if ($Ruta.StartsWith('\\?\')) { return $Ruta.Substring(4) }
+    return $Ruta
+}
+
+function Get-ContenidoBanco {
+    <#
+    .SYNOPSIS
+        Todo lo que hay dentro del banco, de lo mas profundo a lo mas
+        superficial, incluida la ruta larga.
+
+    .DESCRIPTION
+        Se recorre con una pila propia y DirectoryInfo sobre el prefijo
+        "\\?\", igual que Get-ResumenArbol, y NO con Get-ChildItem -Recurse.
+        No es una preferencia de estilo: en Windows PowerShell 5.1
+        Get-ChildItem -Recurse se para al llegar a 260 caracteres y bajo
+        -ErrorAction SilentlyContinue no dice nada. O sea que el cebo de
+        [COR-02] -y las doce carpetas que lo cuelgan- NO aparecian en la
+        lista, -Quitar no los borraba, y despues fallaba al intentar borrar
+        una carpeta que creia vacia y no lo estaba. El banco no se podia
+        desmontar entero, que es justo el ingrediente que hacia falta para
+        ejecutarlo en cada push.
+
+        Devuelve rutas SIN el prefijo: el prefijo entra en las llamadas a
+        la API y no sale de ahi, que es la regla de [COR-02].
+    #>
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param([Parameter(Mandatory)] [string] $Raiz)
+
+    $encontrados = [Collections.Generic.List[string]]::new()
+    $pendientes  = [Collections.Generic.Stack[IO.DirectoryInfo]]::new()
+    $pendientes.Push([IO.DirectoryInfo]::new('\\?\' + $Raiz))
+
+    while ($pendientes.Count -gt 0) {
+        $actual = $pendientes.Pop()
+        foreach ($archivo in $actual.EnumerateFiles()) {
+            $encontrados.Add((ConvertFrom-PrefijoLargo -Ruta $archivo.FullName))
+        }
+        foreach ($sub in $actual.EnumerateDirectories()) {
+            $encontrados.Add((ConvertFrom-PrefijoLargo -Ruta $sub.FullName))
+            $pendientes.Push($sub)
+        }
+    }
+
+    # De mas larga a mas corta: asi una carpeta siempre se borra despues de
+    # su contenido y nunca hace falta un borrado recursivo.
+    return @($encontrados | Sort-Object -Property Length -Descending)
 }
 
 function Remove-BancoPruebas {
@@ -274,18 +319,22 @@ function Remove-BancoPruebas {
     # en vez de un Remove-Item -Recurse a secas. Parece paranoia y no lo es:
     # es la unica forma de que un error en el calculo de la raiz no se
     # convierta en un borrado recursivo de otra carpeta. Ver Test-DentroDeRaiz.
-    $hijos = @(Get-ChildItem -LiteralPath $Raiz -Recurse -Force -ErrorAction SilentlyContinue |
-               Sort-Object { $_.FullName.Length } -Descending)
-
-    foreach ($hijo in $hijos) {
-        if (-not (Test-DentroDeRaiz -Ruta $hijo.FullName -Raiz $Raiz)) {
-            throw ("Algo esta fuera del banco y no se toca: $($hijo.FullName)")
+    foreach ($hijo in (Get-ContenidoBanco -Raiz $Raiz)) {
+        if (-not (Test-DentroDeRaiz -Ruta $hijo -Raiz $Raiz)) {
+            throw ("Algo esta fuera del banco y no se toca: $hijo")
         }
-        [IO.File]::SetAttributes($hijo.FullName, [IO.FileAttributes]::Normal)
-        if ($hijo.PSIsContainer) {
-            [IO.Directory]::Delete('\\?\' + $hijo.FullName, $false)
+        $largo = '\\?\' + $hijo
+        if ([IO.Directory]::Exists($largo)) {
+            # Sin recursion: Get-ContenidoBanco devuelve de mas profundo a
+            # menos profundo, asi que cuando le toca a una carpeta ya no
+            # queda nada dentro. Un borrado recursivo aqui haria inutil la
+            # comprobacion ruta a ruta de arriba.
+            [IO.Directory]::Delete($largo, $false)
         } else {
-            [IO.File]::Delete('\\?\' + $hijo.FullName)
+            # Solo a los archivos: un cebo de solo lectura no se puede
+            # borrar, y quitarle los atributos a una carpeta no hace falta.
+            [IO.File]::SetAttributes($largo, [IO.FileAttributes]::Normal)
+            [IO.File]::Delete($largo)
         }
     }
 
@@ -327,4 +376,4 @@ if ($motivo) {
     return
 }
 
-New-BancoPruebas -Raiz $raiz
+New-BancoPruebas -Raiz $raiz -DeSobra $ArchivosDeSobra

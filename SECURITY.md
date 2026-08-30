@@ -71,7 +71,12 @@ Sirve como referencia rápida para auditar. Si observas alguna de estas cosas, e
 - Borrar archivos dentro de `WinSxS` o `System32`.
 - Borrar `Windows.old`, perfiles de usuario o puntos de restauración.
 - Seguir un enlace simbólico o un junction al borrar, **ni llegar a un archivo a través de uno**. La pertenencia a una carpeta autorizada no se decide comparando texto: `Test-CadenaSinEnlaces` sube de la ruta hasta la raíz autorizada comprobando los atributos reales de cada carpeta del camino. Sin eso, un `mklink /J` dentro de una zona escaneada —que no necesita permisos de administrador— metía todo lo que hay al otro lado dentro del territorio borrable.
-- Enviar nada por la red. **El programa no tiene ninguna comunicación de red.**
+- Enviar nada por la red. **El programa no envía ni un solo dato tuyo, y no tiene telemetría.**
+  Hace **una** petición de red, y solo si la pides: al pulsar *Buscar si hay una versión nueva* en
+  el panel *Acerca de*, se lee de `api.github.com` cuál es la última versión publicada. Es una
+  lectura, no manda nada, y no ocurre nunca si no pulsas ese botón — ni al arrancar, ni al abrir
+  ese panel, ni con un temporizador de fondo. Ver `[DIS-05]`; hay una invariante que exige que la
+  consulta se lance en un solo sitio y que no pueda dispararse sola.
 - Ejecutar código descargado, o cualquier programa que no sea uno de estos. Los programas externos que el código puede llegar a lanzar son exactamente:
 
   | Programa | Para qué | Cómo se resuelve |

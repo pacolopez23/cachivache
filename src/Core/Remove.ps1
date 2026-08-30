@@ -316,8 +316,17 @@ function Remove-RutaSegura {
     # Ante un arbol con enlaces dentro no se borra: se rechaza y que lo
     # decida quien pueda mirarlo. Perder código fuente por limpiar una
     # carpeta regenerable no tiene arreglo posible.
+    #
+    # Y se busca con Get-ElementosDelArbol, no con Get-ChildItem -Recurse.
+    # La comprobacion se paraba a los 260 caracteres sin decir nada, pero el
+    # borrado que viene despues NO se para -desde [COR-02] usa System.IO con
+    # prefijo-, asi que una union por debajo de esa profundidad no se veia y
+    # se borraba igual. Una guardia que mira menos que la accion que
+    # protege es peor que no tenerla, porque parece que protege.
+    # -IncluirEnlaces es imprescindible: por defecto el recorrido no los
+    # devuelve, y aqui son justamente lo que se busca. Ver [COR-08].
     if ($item.PSIsContainer) {
-        $enlaceDentro = @(Get-ChildItem -LiteralPath $Ruta -Recurse -Force -ErrorAction SilentlyContinue |
+        $enlaceDentro = @(Get-ElementosDelArbol -Ruta $Ruta -Que Todo -IncluirEnlaces |
                           Where-Object { ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 } |
                           Select-Object -First 1)
         if ($enlaceDentro.Count -gt 0) {
@@ -746,22 +755,42 @@ function Invoke-EliminacionCandidato {
     # comando de Docker NUNCA llegaba a ejecutarse. Coherente con el mismo
     # criterio que ya aplicaba ModuleRegistry.ps1 al filtrar candidatos
     # tras el análisis ($sinRuta). Ver [C-03] en docs/OPTIMIZACIONES.md.
+    # La exclusion del usuario se revalida AQUI, no solo al analizar. El
+    # borrado corre en otro runspace y puede pasar tiempo entre una cosa y
+    # otra: una exclusion que solo se aplicara en el analisis seria una
+    # promesa que el motor no tiene por que cumplir. Ver [CNF-01].
+    #
+    # Y va FUERA del "if Metodo -ne Comando", que es donde estaba. Dentro,
+    # un comando excluido por el usuario pasaba el analisis filtrado pero
+    # NO se revalidaba antes de ejecutarse: la unica clase de candidato que
+    # lanza un binario externo era justo la que se saltaba la comprobacion.
+    # No llegaba a ocurrir porque el filtro del analisis ya lo quitaba,
+    # pero la revalidacion existe precisamente para no depender de eso.
+    # Encontrado al hacer [ARQ-03].
+    #
+    # Por ClaveExclusion y no por Ruta: un comando no tiene ruta, y
+    # compararlo con una regla de prefijo de carpetas no significa nada.
+    if ($null -ne $Configuracion -and $Configuracion.PSObject.Properties['RutasExcluidas']) {
+        $claveCandidato = if ($Candidato.PSObject.Properties['ClaveExclusion']) {
+            $Candidato.ClaveExclusion
+        } else {
+            # Un candidato construido a mano puede no traerla. Se calcula
+            # con la MISMA funcion, asi que el veredicto es el mismo: no es
+            # una degradacion silenciosa, es el mismo camino por otra
+            # puerta.
+            Get-ClaveExclusion -Ruta $Candidato.Ruta -ModuloId $Candidato.ModuloId -Nombre $Candidato.Nombre
+        }
+
+        if (Test-ClaveExcluida -Clave $claveCandidato -Excluidas @($Configuracion.RutasExcluidas)) {
+            $Candidato.Error = 'Excluido por ti: esta en tu lista de "no tocar nunca".'
+            return 0.0
+        }
+    }
+
     if ($Candidato.Metodo -ne 'Comando') {
         if (-not (Test-Path -LiteralPath $Candidato.Ruta)) {
             $Candidato.Error = 'La ruta ya no existe.'
             return 0.0
-        }
-
-        # La exclusion del usuario se revalida AQUI, no solo al analizar.
-        # El borrado corre en otro runspace y puede pasar tiempo entre una
-        # cosa y otra: una exclusion que solo se aplicara en el analisis
-        # seria una promesa que el motor no tiene por que cumplir.
-        # Mismo criterio que la revalidacion de la guardia. Ver [CNF-01].
-        if ($null -ne $Configuracion -and $Configuracion.PSObject.Properties['RutasExcluidas']) {
-            if (Test-RutaExcluida -Ruta $Candidato.Ruta -Excluidas @($Configuracion.RutasExcluidas)) {
-                $Candidato.Error = 'Excluido por ti: esta carpeta esta en tu lista de "no tocar nunca".'
-                return 0.0
-            }
         }
 
         # --- Revalidación en vivo de la guardia -------------------------
@@ -812,7 +841,11 @@ function Invoke-EliminacionCandidato {
             # programa puede haber dejado algo dentro; sin esta comprobación,
             # el borrado recursivo se lo llevaria por delante. La guardia
             # válida la ruta, pero no sabe nada de si esta vacía.
-            $conArchivos = @(Get-ChildItem -LiteralPath $Candidato.Ruta -Recurse -Force -File -ErrorAction SilentlyContinue |
+            # Get-ElementosDelArbol y no Get-ChildItem -Recurse: si un
+            # archivo estuviera a mas de 260 caracteres, la comprobacion no
+            # lo veia, la carpeta parecia vacia y el borrado recursivo se lo
+            # llevaba por delante. Ver [COR-08].
+            $conArchivos = @(Get-ElementosDelArbol -Ruta $Candidato.Ruta |
                              Select-Object -First 1)
             if ($conArchivos.Count -gt 0) {
                 $Candidato.Error = 'Ya no está vacía: algo ha creado archivos dentro desde el análisis. No se ha tocado.'

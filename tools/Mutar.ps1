@@ -46,6 +46,11 @@ function Get-TextoMutado {
     param(
         [Parameter(Mandatory)] [AllowNull()] [AllowEmptyString()] [string] $Texto,
         [Parameter(Mandatory)] [AllowNull()] [AllowEmptyString()] [string] $Buscar,
+        # AllowEmptyString aqui NO es simetria con los otros dos: BORRAR una
+        # linea es una de las mutaciones mas utiles que hay -"quito esta
+        # comprobacion, .que prueba se entera?"-, y sin esto PowerShell la
+        # rechaza por ser cadena vacia. Costo dos mutaciones que no llegaron
+        # a ejecutarse.
         [Parameter(Mandatory)] [AllowNull()] [AllowEmptyString()] [string] $Poner
     )
 
@@ -88,7 +93,11 @@ function Invoke-Mutacion {
     param(
         [Parameter(Mandatory)] [string] $Ruta,
         [Parameter(Mandatory)] [string] $Buscar,
-        [Parameter(Mandatory)] [string] $Poner,
+        # Igual que en Get-TextoMutado: borrar es una mutacion valida.
+        # Arreglarlo solo alli no bastaba -la validacion de parametros de
+        # ESTA funcion rechazaba la llamada antes de llegar a la otra-, y
+        # las dos mutaciones siguieron sin ejecutarse hasta tocar las dos.
+        [Parameter(Mandatory)] [AllowEmptyString()] [string] $Poner,
         [Parameter(Mandatory)] [scriptblock] $Prueba
     )
 

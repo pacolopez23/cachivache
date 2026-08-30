@@ -276,11 +276,34 @@ Describe 'SEG-40: una carpeta inaccesible no se lleva por delante lo que cuelga 
         $ruta = Join-Path (Join-Path (Split-Path $PSScriptRoot -Parent) 'src') 'Core/FileSystem.ps1'
         $texto = Get-Content -LiteralPath $ruta -Raw
 
+        # El corte termina en Get-ElementosDelArbol y no en Measure-Ruta: el
+        # recorrido de [COR-08] se escribio JUSTO DEBAJO, asi que el corte
+        # de antes se lo tragaba y esta prueba pasaba a contar los try de
+        # dos funciones. Una prueba estructural que mide un trozo mas grande
+        # del que cree deja de comprobar lo que dice.
         $cuerpo = $texto.Substring($texto.IndexOf('function Get-ResumenArbol'),
-                                   $texto.IndexOf('function Measure-Ruta') - $texto.IndexOf('function Get-ResumenArbol'))
+                                   $texto.IndexOf('function Get-ElementosDelArbol') - $texto.IndexOf('function Get-ResumenArbol'))
 
         @([regex]::Matches($cuerpo, '(?m)^\s*try\s*\{')).Count |
             Should -Be 2 -Because 'un try por enumeracion: si comparten uno, perder los archivos pierde las subcarpetas'
+    }
+
+    It 'el recorrido compartido tambien lleva un try por enumeracion' {
+        # La misma propiedad en Get-ElementosDelArbol, que es el recorrido
+        # por el que pasan los ocho modulos desde [COR-08]. Alli el sintoma
+        # seria peor que una suma corta: una carpeta sin permiso al enumerar
+        # sus ARCHIVOS dejaria de proponer todo lo que cuelga de ella.
+        $ruta = Join-Path (Join-Path (Split-Path $PSScriptRoot -Parent) 'src') 'Core/FileSystem.ps1'
+        $texto = Get-Content -LiteralPath $ruta -Raw
+
+        $desde = $texto.IndexOf('function Get-ElementosDelArbol')
+        $hasta = $texto.IndexOf('function Measure-Ruta')
+        $desde | Should -BeGreaterThan 0
+        $hasta | Should -BeGreaterThan $desde
+
+        $cuerpo = $texto.Substring($desde, $hasta - $desde)
+        @([regex]::Matches($cuerpo, '(?m)^\s*try\s*\{')).Count |
+            Should -Be 3 -Because 'uno para abrir la raiz y uno por cada enumeracion, archivos y subcarpetas'
     }
 }
 
@@ -458,5 +481,340 @@ Describe 'VIS-03: los enlaces duros se cuentan una sola vez' {
 
         $codigo | Should -Not -Match '\$vistos\s*=\s*if\s*\('
         $codigo | Should -Match '\$vistos\s*=\s*\$null'
+    }
+}
+
+Describe 'COR-08: Get-ElementosDelArbol, el recorrido que usan los modulos' {
+
+    <#
+        [COR-02] arreglo MEDIR y BORRAR una ruta de mas de 260 caracteres.
+        Lo que no arreglo fue ENCONTRARLA: los modulos recorrian con
+        Get-ChildItem -Recurse, que en Windows PowerShell 5.1 se para ahi
+        mismo y bajo -ErrorAction SilentlyContinue no dice nada. El
+        programa media bien y borraba bien lo que llegaba a proponer, pero
+        no proponia lo que hay al fondo de un node_modules anidado.
+
+        Estas pruebas fijan las cuatro cosas que no se pueden romper,
+        porque romper cualquiera de ellas NO da un error: da un programa
+        que propone de menos -y se queda callado- o, peor, de mas.
+
+        AVISO SOBRE EL LIMITE DE 260: es de Windows. Aqui se pueden crear y
+        recorrer rutas mucho mas largas sin prefijo ninguno, asi que lo que
+        estas pruebas comprueban es que el recorrido AGUANTA un arbol
+        hondo de verdad y que la ruta que devuelve sale limpia. Que el
+        prefijo se ponga es una invariante de texto, y la prueba de verdad
+        la hace la CI del banco en un Windows real.
+    #>
+
+    BeforeEach {
+        $script:Base = Join-Path ([IO.Path]::GetTempPath()) ('cor08-' + [guid]::NewGuid())
+        New-Item -ItemType Directory -Path $script:Base -Force | Out-Null
+
+        # Un archivo arriba, otro en una subcarpeta, uno oculto y uno con
+        # otra extension, para poder probar el filtro sin inventar nada.
+        [IO.File]::WriteAllText((Join-Path $script:Base 'arriba.tmp'), 'aaa')
+        [IO.File]::WriteAllText((Join-Path $script:Base 'otro.lnk'), 'bb')
+        New-Item -ItemType Directory -Path (Join-Path $script:Base 'sub') -Force | Out-Null
+        [IO.File]::WriteAllText((Join-Path $script:Base 'sub/dentro.tmp'), 'cccc')
+        [IO.File]::WriteAllText((Join-Path $script:Base 'sub/.oculto'), 'ddddd')
+
+        # Una rama de verdad de mas de 260 caracteres, con carpetas reales
+        # y no con una cadena larga: es la unica forma de probar que el
+        # recorrido baja hasta el fondo.
+        $script:Hondo = $script:Base
+        1..12 | ForEach-Object {
+            $script:Hondo = Join-Path $script:Hondo ('carpeta-anidada-con-nombre-largo-numero-{0:00}' -f $_)
+        }
+        New-Item -ItemType Directory -Path $script:Hondo -Force | Out-Null
+        $script:ArchivoHondo = Join-Path $script:Hondo 'volcado-antiguo.dmp'
+        [IO.File]::WriteAllText($script:ArchivoHondo, 'x' * 28)
+    }
+
+    AfterEach {
+        Remove-Item -LiteralPath $script:Base -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    It 'el arbol de prueba es hondo de verdad: si no, esta prueba no comprueba nada' {
+        # La guarda. Sin ella, un Join-Path que se quedara corto convertiria
+        # todo lo de abajo en "recorrer una carpeta normal", que es
+        # justamente lo que ya funcionaba antes.
+        $script:ArchivoHondo.Length | Should -BeGreaterThan 260
+    }
+
+    It 'encuentra lo mismo que Get-ChildItem -Recurse -File -Force' {
+        $mio  = @(Get-ElementosDelArbol -Ruta $script:Base | ForEach-Object { $_.FullName }) | Sort-Object
+        $suyo = @(Get-ChildItem -LiteralPath $script:Base -Recurse -File -Force -ErrorAction SilentlyContinue |
+                  ForEach-Object { $_.FullName }) | Sort-Object
+
+        @($suyo).Count | Should -BeGreaterThan 3
+        ($mio -join '|') | Should -Be ($suyo -join '|')
+    }
+
+    It 'llega al archivo del fondo de la rama larga' {
+        @(Get-ElementosDelArbol -Ruta $script:Base | Where-Object { $_.FullName -eq $script:ArchivoHondo }).Count |
+            Should -Be 1
+    }
+
+    It 'ninguna ruta que sale lleva el prefijo de ruta larga' {
+        # La regla que no se puede romper: esta ruta acaba en el campo Ruta
+        # de un candidato y de ahi en la guardia. Con el prefijo, la guardia
+        # compararia "\\?\C:\Windows" contra su lista negra "C:\Windows" y
+        # NO coincidiria: un prefijo para encontrar mejor se convertiria en
+        # un agujero para borrar el sistema.
+        foreach ($elemento in @(Get-ElementosDelArbol -Ruta $script:Base -Que Todo)) {
+            $elemento.FullName    | Should -Not -Match '\\\\\?\\'
+            $elemento.DirectoryName | Should -Not -Match '\\\\\?\\'
+        }
+    }
+
+    It 've los archivos ocultos, que es lo que hacia -Force' {
+        # Sin esto no falla nada: media docena de modulos viven de archivos
+        # ocultos -Thumbs.db, desktop.ini, los contenedores de la papelera-
+        # y simplemente dejarian de encontrar cosas.
+        $sinForce = @(Get-ChildItem -LiteralPath (Join-Path $script:Base 'sub') -File -ErrorAction SilentlyContinue).Count
+        $conForce = @(Get-ChildItem -LiteralPath (Join-Path $script:Base 'sub') -File -Force -ErrorAction SilentlyContinue).Count
+        if ($sinForce -eq $conForce) {
+            Set-ItResult -Skipped -Because 'aqui no hay archivos ocultos que distingan una cosa de la otra'
+            return
+        }
+        @(Get-ElementosDelArbol -Ruta $script:Base | Where-Object { $_.Name -eq '.oculto' }).Count | Should -Be 1
+    }
+
+    It 'trae las propiedades con las que deciden los modulos' {
+        $archivo = @(Get-ElementosDelArbol -Ruta $script:Base | Where-Object { $_.Name -eq 'arriba.tmp' })[0]
+
+        # Una a una, porque cada una la usa algun modulo: si alguna se
+        # cayera, ese modulo empezaria a comparar contra $null y a decidir
+        # que no, sin un solo error.
+        $archivo.FullName      | Should -Be (Join-Path $script:Base 'arriba.tmp')
+        $archivo.Name          | Should -Be 'arriba.tmp'
+        $archivo.BaseName      | Should -Be 'arriba'
+        $archivo.Extension     | Should -Be '.tmp'
+        $archivo.Length        | Should -Be 3
+        $archivo.DirectoryName | Should -Be $script:Base
+        $archivo.EsCarpeta     | Should -BeFalse
+        $archivo.LastWriteTime | Should -BeOfType [datetime]
+        $archivo.LastAccessTime| Should -BeOfType [datetime]
+        $archivo.CreationTime  | Should -BeOfType [datetime]
+        [int]$archivo.Attributes | Should -BeGreaterThan 0
+    }
+
+    It 'el filtro lo resuelve la API y no cambia por donde se desciende' {
+        $conFiltro = @(Get-ElementosDelArbol -Ruta $script:Base -Filtro '*.tmp' | ForEach-Object { $_.Name })
+        $conFiltro | Should -Contain 'arriba.tmp'
+        $conFiltro | Should -Contain 'dentro.tmp'
+        $conFiltro | Should -Not -Contain 'otro.lnk'
+
+        # Y el filtro NO poda: el .dmp del fondo esta detras de doce
+        # carpetas que no casan con ningun patron de archivo.
+        @(Get-ElementosDelArbol -Ruta $script:Base -Filtro '*.dmp').Count | Should -Be 1
+    }
+
+    It 'la barra final de la carpeta de partida no ensucia lo que sale' {
+        # Con ella, la primera ruta compuesta saldria con dos separadores
+        # seguidos y dejaria de ser igual, COMO TEXTO, a la que devuelve
+        # Windows. Y estas rutas se comparan como texto en la guardia, en
+        # las exclusiones y en el comprobador del banco.
+        $conBarra = @(Get-ElementosDelArbol -Ruta ($script:Base + [IO.Path]::DirectorySeparatorChar) |
+                      ForEach-Object { $_.FullName }) | Sort-Object
+        $sinBarra = @(Get-ElementosDelArbol -Ruta $script:Base | ForEach-Object { $_.FullName }) | Sort-Object
+        ($conBarra -join '|') | Should -Be ($sinBarra -join '|')
+    }
+
+    It 'lo que no existe, lo vacio y lo que ni siquiera es una ruta no lanzan' -ForEach @(
+        @{ Caso = 'no existe';     Ruta = '/zzz-no-existe-zzz/tampoco' }
+        @{ Caso = 'cadena vacia';  Ruta = '' }
+        @{ Caso = 'solo espacios'; Ruta = '   ' }
+        # El metodo Comando usa la orden como Ruta.
+        @{ Caso = 'una etiqueta';  Ruta = 'docker system prune' }
+    ) {
+        { $null = @(Get-ElementosDelArbol -Ruta $Ruta) } | Should -Not -Throw
+        @(Get-ElementosDelArbol -Ruta $Ruta).Count | Should -Be 0
+    }
+
+    It 'con Ruta a $null no lanza' {
+        # [AllowNull()] en un Mandatory que puede recibir nulo. Ha faltado
+        # tres veces en este proyecto y las tres lo cazo esta prueba.
+        { $null = @(Get-ElementosDelArbol -Ruta $null) } | Should -Not -Throw
+    }
+
+    It 'Que Carpetas devuelve carpetas y no archivos' {
+        $carpetas = @(Get-ElementosDelArbol -Ruta $script:Base -Que Carpetas)
+        @($carpetas | Where-Object { -not $_.EsCarpeta }).Count | Should -Be 0
+        @($carpetas | Where-Object { $_.Name -eq 'sub' }).Count | Should -Be 1
+        # Las doce de la rama honda tambien.
+        @($carpetas).Count | Should -BeGreaterThan 12
+    }
+
+    It 'Que Todo devuelve las dos cosas' {
+        $todo = @(Get-ElementosDelArbol -Ruta $script:Base -Que Todo)
+        @($todo | Where-Object { $_.EsCarpeta }).Count       | Should -BeGreaterThan 0
+        @($todo | Where-Object { -not $_.EsCarpeta }).Count  | Should -BeGreaterThan 0
+    }
+
+    It 'NoDescender poda la rama entera, no solo la carpeta' {
+        $poda = { param($C) return ($C.Name -eq 'carpeta-anidada-con-nombre-largo-numero-01') }
+        $rutas = @(Get-ElementosDelArbol -Ruta $script:Base -NoDescender $poda | ForEach-Object { $_.FullName })
+
+        $rutas | Should -Not -Contain $script:ArchivoHondo
+        $rutas | Should -Contain (Join-Path $script:Base 'arriba.tmp')
+    }
+
+    It 'Cancelado para el recorrido' {
+        $veces = @{ N = 0 }
+        # Se cancela a la segunda carpeta: lo que importa es que PARE, no
+        # cuanto devuelve antes de parar.
+        $cancela = { $veces.N++; return ($veces.N -gt 2) }
+        $antes = @(Get-ElementosDelArbol -Ruta $script:Base).Count
+        $antes | Should -BeGreaterThan 3
+        @(Get-ElementosDelArbol -Ruta $script:Base -Cancelado $cancela).Count | Should -BeLessThan $antes
+    }
+}
+
+Describe 'COR-08: los enlaces no se siguen, ni al recorrer ni al proponer' {
+
+    BeforeAll {
+        $script:BaseEnl = Join-Path ([IO.Path]::GetTempPath()) ('cor08e-' + [guid]::NewGuid())
+        $script:Destino = Join-Path $script:BaseEnl 'destino'
+        New-Item -ItemType Directory -Path $script:Destino -Force | Out-Null
+        [IO.File]::WriteAllText((Join-Path $script:Destino 'tesoro.tmp'), 'x' * 10)
+
+        $script:HayEnlace = $false
+        try {
+            New-Item -ItemType SymbolicLink -Path (Join-Path $script:BaseEnl 'atajo') `
+                     -Target $script:Destino -ErrorAction Stop | Out-Null
+            $script:HayEnlace = $true
+        } catch {
+            Write-Verbose "Sin enlaces simbolicos en este sistema: $($_.Exception.Message)"
+        }
+    }
+
+    AfterAll {
+        Remove-Item -LiteralPath $script:BaseEnl -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    It 'un punto de reanalisis no se sigue: el contenido sale una sola vez' {
+        if (-not $script:HayEnlace) { Set-ItResult -Skipped -Because 'el sistema no admite enlaces simbolicos'; return }
+        # Si se siguiera, tesoro.tmp saldria dos veces -por su carpeta y por
+        # el atajo- y se propondria dos veces para borrar el mismo archivo.
+        @(Get-ElementosDelArbol -Ruta $script:BaseEnl | Where-Object { $_.Name -eq 'tesoro.tmp' }).Count |
+            Should -Be 1
+    }
+
+    It 'por defecto el enlace ni siquiera se devuelve' {
+        if (-not $script:HayEnlace) { Set-ItResult -Skipped -Because 'el sistema no admite enlaces simbolicos'; return }
+        @(Get-ElementosDelArbol -Ruta $script:BaseEnl -Que Carpetas | Where-Object { $_.Name -eq 'atajo' }).Count |
+            Should -Be 0
+    }
+
+    It 'con -IncluirEnlaces se devuelve, pero sigue sin entrarse' {
+        if (-not $script:HayEnlace) { Set-ItResult -Skipped -Because 'el sistema no admite enlaces simbolicos'; return }
+        # Lo necesita Remove-RutaSegura, que busca precisamente enlaces
+        # dentro de una carpeta antes de borrarla recursivamente.
+        @(Get-ElementosDelArbol -Ruta $script:BaseEnl -Que Carpetas -IncluirEnlaces |
+          Where-Object { $_.Name -eq 'atajo' }).Count | Should -Be 1
+        @(Get-ElementosDelArbol -Ruta $script:BaseEnl -Que Todo -IncluirEnlaces |
+          Where-Object { $_.Name -eq 'tesoro.tmp' }).Count | Should -Be 1
+    }
+}
+
+Describe 'COR-08: una carpeta sin permiso no puede abortar el recorrido' {
+
+    BeforeAll {
+        $script:BasePerm = Join-Path ([IO.Path]::GetTempPath()) ('cor08p-' + [guid]::NewGuid())
+        $script:Cerrada  = Join-Path $script:BasePerm 'cerrada'
+        New-Item -ItemType Directory -Path $script:Cerrada -Force | Out-Null
+        [IO.File]::WriteAllText((Join-Path $script:Cerrada 'dentro.tmp'), 'x')
+        [IO.File]::WriteAllText((Join-Path $script:BasePerm 'hermano.tmp'), 'yy')
+
+        # chmod no existe en Windows y ahi esto no cierra nada: por eso
+        # abajo hay una guarda que se salta la prueba si la carpeta sigue
+        # leyendose. Sin la guarda, en Windows pasaria sin comprobar nada.
+        $script:Cerro = $false
+        try {
+            & chmod 000 $script:Cerrada 2>$null
+            $script:Cerro = -not (Test-Path -LiteralPath (Join-Path $script:Cerrada 'dentro.tmp') `
+                                            -ErrorAction SilentlyContinue)
+        } catch {
+            Write-Verbose "No se ha podido cerrar la carpeta: $($_.Exception.Message)"
+        }
+    }
+
+    AfterAll {
+        & chmod 755 $script:Cerrada 2>$null
+        Remove-Item -LiteralPath $script:BasePerm -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    It 'se pierde esa carpeta y no el recorrido entero' {
+        if (-not $script:Cerro) { Set-ItResult -Skipped -Because 'aqui no se puede cerrar una carpeta'; return }
+
+        { $script:Salida = @(Get-ElementosDelArbol -Ruta $script:BasePerm) } | Should -Not -Throw
+        $rutas = @($script:Salida | ForEach-Object { $_.Name })
+
+        $rutas | Should -Contain 'hermano.tmp' -Because 'lo que si se puede leer se sigue devolviendo'
+        $rutas | Should -Not -Contain 'dentro.tmp'
+    }
+
+    It 'con ErrorActionPreference en Stop -que es lo que pone el modo consola- sigue sin abortar' {
+        if (-not $script:Cerro) { Set-ItResult -Skipped -Because 'aqui no se puede cerrar una carpeta'; return }
+
+        # Es la prueba del comentario de Get-ResumenArbol, y aqui vale
+        # igual: Cachivache.ps1 pone ErrorActionPreference a 'Stop' en modo
+        # consola, asi que si el catch de una carpeta sin permisos se
+        # cambiara por un Write-Error -o desapareciera-, una sola carpeta
+        # ilegible tumbaria el analisis entero.
+        #
+        # NO se comprueba con -ErrorVariable: PowerShell apunta en $Error
+        # las excepciones de metodo aunque las cace un try, asi que esa
+        # cuenta sale distinta de cero incluso estando todo bien. Lo que
+        # importa no es que $Error quede limpio, es que no se aborte.
+        $previo = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = 'Stop'
+            { $script:Duro = @(Get-ElementosDelArbol -Ruta $script:BasePerm) } | Should -Not -Throw
+        } finally {
+            $ErrorActionPreference = $previo
+        }
+        @($script:Duro | ForEach-Object { $_.Name }) | Should -Contain 'hermano.tmp'
+    }
+}
+
+Describe 'COR-08: Measure-RutaLarga, la mitad que faltaba de la medicion' {
+
+    <#
+        Al arreglar el recorrido, los modulos empezaron a encontrar cosas
+        cuya RUTA ya es larga de por si. Get-Item no las resuelve en
+        PowerShell 5.1, Measure-Ruta devolvia cero y el candidato caia por
+        debajo del minimo: encontrarlo mejor solo servia para tirarlo un
+        paso despues, otra vez en silencio.
+
+        El camino de System.IO con prefijo NO se puede ejecutar aqui: el
+        limite es de Windows y ConvertTo-RutaLarga deja las rutas de este
+        sistema como estan, a proposito. Lo que si se puede fijar es que la
+        funcion no se meta donde no la llaman ni lance con nada raro.
+    #>
+
+    It 'una ruta que no es larga devuelve cero sin mirar el disco' {
+        Measure-RutaLarga -Ruta '/tmp' | Should -Be 0.0
+    }
+
+    It 'con nulo, vacio y una etiqueta no lanza' -ForEach @(
+        @{ Caso = 'nulo';     Ruta = $null }
+        @{ Caso = 'vacio';    Ruta = '' }
+        @{ Caso = 'etiqueta'; Ruta = 'docker system prune' }
+    ) {
+        { Measure-RutaLarga -Ruta $Ruta } | Should -Not -Throw
+        Measure-RutaLarga -Ruta $Ruta | Should -Be 0.0
+    }
+
+    It 'Measure-Ruta solo cae en ella cuando Get-Item no ha resuelto nada' {
+        # Comprobacion estructural, porque el camino de verdad solo existe
+        # en Windows: lo que se fija es que la llamada esta EN la rama del
+        # $null y no antes, que es lo que garantiza que no cambia ni un
+        # caso de los que ya funcionaban.
+        $texto = Get-Content -Raw -LiteralPath (
+            Join-Path (Join-Path (Split-Path $PSScriptRoot -Parent) 'src/Core') 'FileSystem.ps1')
+        $codigo = @(($texto -split "`n") | Where-Object { $_ -notmatch '^\s*#' }) -join "`n"
+        $codigo | Should -Match '\$null -eq \$item\s*\)\s*\{ return \(Measure-RutaLarga -Ruta \$Ruta\) \}'
     }
 }

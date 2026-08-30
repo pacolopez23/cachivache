@@ -33,6 +33,7 @@ $OrdenNucleoCachivache = @(
     'Format.ps1'          # formato de tamaños, tiempos y rutas para mostrar
     'EstadoVacio.ps1'     # que decir cuando la tabla no ensenya ni una fila
     'FileSystem.ps1'      # medición, unidades, carpetas conocidas
+    'Exclusiones.ps1'     # como se ensenya la lista de "no tocar": lee la clave que compone FileSystem
     'Guard.ps1'           # guardia de seguridad
     'Candidate.ps1'       # contrato de candidato y de módulo
     'Comandos.ps1'        # que programas externos se pueden lanzar, y de donde
@@ -46,6 +47,7 @@ $OrdenNucleoCachivache = @(
     'Preferencias.ps1'    # preferencias del usuario (persisten entre sesiones)
     'Log.ps1'             # registro de actividad (.log)
     'Historial.ps1'       # historial de ejecuciones (.json)
+    'Comparacion.ps1'     # comparar con el analisis anterior: lee Historial, formatea con Format
     'Inspeccion.ps1'      # que hay dentro de una carpeta, para poder decidir
     'Indice.ps1'          # indice de espacio en disco (una sola pasada)
     'Mapa.ps1'            # disposicion del mapa de arbol (calculo puro)

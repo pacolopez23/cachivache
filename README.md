@@ -218,6 +218,8 @@ Y tres decisiones de diseño que importan tanto como los filtros:
 
 **Lo que este programa no hace, y no va a hacer:** no escribe en el registro de Windows, no desinstala programas, no toca WinSxS a mano, no borra `Windows.old`, no elimina perfiles de usuario ni puntos de restauración. Cuando algo de eso conviene, lo dice y explica cómo hacerlo desde Windows.
 
+**Conexiones de red: una sola, y la abres tú.** El programa no se conecta a internet por su cuenta —ni al arrancar, ni al abrir un panel, ni en segundo plano— y no envía telemetría de ninguna clase. La única excepción es el botón *Buscar si hay una versión nueva* de la pestaña **Acerca de**: al pulsarlo, y solo entonces, se le pregunta a `api.github.com` cuál es la última versión publicada. Es una petición de lectura y no lleva dentro ningún dato tuyo, aunque, como en cualquier petición HTTP, el servidor ve tu dirección IP. Si no pulsas el botón, no ocurre nunca; si falla, el panel lo dice y no pasa nada más. Todo esto vive en una única función de [`src/Core/Version.ps1`](src/Core/Version.ps1), y hay una prueba que impide que aparezca una segunda puerta de salida en cualquier otro sitio del programa.
+
 Las [pruebas de la guardia](tests/Guard.Tests.ps1) son la especificación ejecutable de todo esto: cada una describe una ruta que el programa debe bloquear, o una que debe seguir alcanzando para no quedarse inútil.
 
 ---

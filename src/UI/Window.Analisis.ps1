@@ -363,6 +363,23 @@ Initialize-Guardia -Configuracion $cfg
         # otro sitio donde el programa dice haber hecho lo que no hizo.
         $revisadosIds = @($estado.Cola | Select-Object -First $revisados | ForEach-Object { $_.Id })
 
+        # La comparacion con el analisis anterior, pegada al resumen.
+        # [CNF-06].
+        #
+        # ANTES del Add-EntradaHistorial, y no despues: en cuanto se anota
+        # esta ejecucion, "el analisis anterior" pasa a ser ESTE, y el
+        # programa se compararia consigo mismo -siempre cero de diferencia,
+        # siempre en verde, y siempre mintiendo-.
+        #
+        # Se suma un Sufijo y no se escribe un if: cuando no hay con que
+        # comparar, Get-ComparacionAnalisis devuelve cadena vacia y aqui no
+        # queda ni un espacio colgando. Quien decide que se dice -y si se
+        # puede decir algo- es esa funcion, que va probada.
+        $c.TxtResumenAnalisis.Text += (Get-ComparacionAnalisis `
+                                          -Historial (Get-Historial -CarpetaDatos $estado.Configuracion.CarpetaDatos) `
+                                          -Perfil $estado.Configuracion.Perfil `
+                                          -Modulos $revisadosIds).Sufijo
+
         Add-EntradaHistorial -Tipo 'analisis' -Elementos $estado.Items.Count -Bytes $bytesBorrables `
                              -Perfil $estado.Configuracion.Perfil `
                              -Modulos $revisadosIds `
@@ -473,6 +490,14 @@ Initialize-Guardia -Configuracion $cfg
                 # distintas. Ver [CNF-05].
                 $item.MotivoMarcado = Get-MotivoPremarcado -Riesgo $candidato.Riesgo `
                                         -Aviso $candidato.Aviso -Metodo $candidato.Metodo
+                # La clave de exclusion se COPIA, no se recalcula. La
+                # decide Get-ClaveExclusion al nacer el candidato, y de
+                # ella dependen dos cosas de la fila: a que se anyade
+                # "Excluir siempre esto" y si "Copiar ruta" tiene algo que
+                # copiar. Calcularla otra vez aqui seria un segundo sitio
+                # decidiendo lo mismo, que es como se acaba excluyendo una
+                # cosa y comparando otra. Ver [USO-06] y [ARQ-03].
+                $item.ClaveExclusion = $candidato.ClaveExclusion
 
                 $item.add_PropertyChanged($manejadorSeleccionGlobal)
                 $estado.Items.Add($item)

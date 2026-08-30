@@ -2,7 +2,7 @@
 
 **Fecha:** 29 de agosto de 2026
 **Punto de partida:** 21 módulos, 643 pruebas en verde, analizador limpio, `docs/PLAN-ACCION.md` cerrado.
-**Estado al 29 de agosto de 2026:** 1206 pruebas, analizador limpio, 38 puntos cerrados y **ejecutado en Windows 11 con PowerShell 5.1**.
+**Estado al 29 de agosto de 2026:** 1612 pruebas, analizador limpio, 47 puntos cerrados y **ejecutado en Windows 11 con PowerShell 5.1**.
 **Objetivo de este documento:** decidir qué convierte a Cachivache en la mejor opción de su categoría,
 y en qué orden hacerlo.
 
@@ -138,6 +138,53 @@ sin privilegios. Es la única forma de convertir "creo que es seguro" en "lo he 
 
 ---
 
+### `VAL-03` · El banco, ejecutado en cada push · Alta
+
+> ✅ **RESUELTO.** Un trabajo nuevo en `ci.yml` monta el banco en un agente `windows-latest` y
+> ejecuta una limpieza **real** en cada push. Un agente es una máquina virtual efímera con Windows
+> de verdad, NTFS de verdad y papelera de verdad: casi todo lo del banco que no exija mirar una
+> ventana se puede hacer ahí.
+>
+> **Y lo primero que encontró fue que el banco no podía funcionar.** Tres de los cebos se llamaban
+> `copia-enorme.bak`, `copia-antigua.bak` y `documento-N.bak`, y empiezan por palabras de la lista de
+> `Test-ArchivoPersonal`: **la guardia los protegía como trabajo del usuario y no se proponían
+> nunca**. Los pasos 5.4 y 5.5 del banco —`COR-01` y `COR-02`, justo los dos que ese documento existe
+> para ver— eran incomprobables. No fallaba nada: el cebo simplemente no salía, y se habría
+> descubierto en la VM buscando un archivo que no aparece. Renombrados.
+>
+> **Segundo hallazgo del mismo tipo:** `-Quitar` no podía desmontar el banco. Usaba
+> `Get-ChildItem -Recurse`, que se para a los 260 caracteres, así que las doce carpetas del cebo de
+> ruta larga no se veían, no se borraban, y después reventaba al borrar una carpeta que creía vacía.
+>
+> **Se automatiza:** que los cebos aparezcan; que no se proponga nada del sistema (dos vías: ninguna
+> ruta en el perfil de otro usuario, y la guardia consultada una a una sobre lo propuesto); `VIS-03`
+> con y sin `-ContarEnlacesDuros`, para que no pueda acertar por casualidad; `COR-02` sobre una ruta
+> de ~600 caracteres real —medir, negarse a mandarla a la papelera con el motivo correcto, y borrarla
+> con `-Permanente`—; dos análisis seguidos comparando módulo a módulo; y una limpieza real por
+> consola precedida de `-Simular` como red, que para el trabajo con el disco intacto si lo marcado
+> incluyera algo de fuera del banco.
+>
+> **`I18N-03` sale gratis**, y es lo mejor del punto: los agentes de GitHub están **en inglés**. Las
+> listas bilingües de la guardia degradan en silencio fuera del español y nadie las había ejecutado
+> nunca en otro idioma. Ahora se comprueban con los nombres reales de las carpetas del agente, y
+> además que el módulo del almacén de componentes no caiga en *«No se ha podido leer la estimación de
+> DISM»*, que es la mitad inglesa del parseo que tampoco había ejecutado nadie.
+>
+> **`COR-01` se queda fuera, a propósito.** Quien lee la cuota de la papelera pasa por una clase CIM
+> que exige elevación. Si un día el agente dejara de estar elevado, la capacidad pasaría a
+> «desconocida», `Test-CabeEnPapelera` respondería «cabe» —que es su contrato y es lo correcto— y la
+> comprobación **se invertiría sola, en silencio y hacia el lado que no avisa**. Un paso que se da la
+> vuelta según el día es peor que no tenerlo.
+>
+> **Y una mutación se cazó a sí misma:** las dos invariantes nuevas se escribieron con `-ForEach`, y
+> Pester construye esa lista en la fase de **descubrimiento**, antes de cualquier `BeforeAll`. La
+> función que la alimentaba todavía no existía, la lista salía vacía y Pester generaba **cero casos**:
+> 44 pruebas en verde con dos invariantes que no ejecutaban ni una línea.
+>
+> **Sin verificar:** el trabajo entero está sin ejecutar hasta el primer push. El YAML va validado con
+> `actionlint` y la parte que decide con 75 pruebas y 15 mutaciones, pero ninguna comprobación de
+> Windows se ha ejecutado nunca. Es la misma deuda que este punto venía a cerrar, un piso más arriba.
+
 ## Parte III — Correcciones abiertas
 
 ### `COR-01` · La papelera borra permanentemente y el programa lo llama papelera · **Crítica**
@@ -207,6 +254,77 @@ La lista de métodos válidos vive en **cuatro sitios**: el comentario de cabece
 Es el fallo silencioso más peligroso que queda en el contrato. **Arreglo: un test que compare las
 cuatro listas por AST. Diez líneas.** Debería hacerse antes que cualquier otra cosa de esta lista.
 
+### `COR-08` · El recorrido de los módulos se para en los 260 caracteres · **Alta**
+
+> ✅ **RESUELTO.** `Get-ElementosDelArbol` en `src/Core/FileSystem.ps1` —pila propia,
+> `EnumerateFiles`/`EnumerateDirectories`, prefijo `\\?\` puesto **una vez en la raíz**— y los ocho
+> módulos migrados. La invariante prohíbe `Get-ChildItem -Recurse` en **todo `src/`** y en
+> `Cachivache.ps1`, sin una sola excepción.
+>
+> **La ruta que sale se COMPONE, no se lee de `FullName`.** Un `FileInfo` nacido de una enumeración
+> con prefijo lo lleva metido dentro y no hay forma de quitárselo, así que el recorrido devuelve
+> objetos propios y arma cada ruta con la del padre —limpia— más el nombre de la entrada. El prefijo
+> **nunca llega a estar** en la cadena que sale, en vez de quitarse después: es la respuesta al
+> *"veredicto correcto por el motivo equivocado"* que ya costó una sesión en `COR-02`.
+>
+> **Y encontró tres sitios más, dos de ellos peores que el original:**
+>
+> - **`Remove-RutaSegura`** buscaba enlaces dentro de una carpeta antes de borrarla recursivamente…
+>   con `Get-ChildItem -Recurse`, que se para a los 260. Pero el borrado que viene después **no se
+>   para**, porque `COR-02` lo migró a `System.IO` con prefijo. **Una guardia que mira menos que la
+>   acción que protege es peor que no tenerla.**
+> - **`Registry.ps1`**, los accesos del menú Inicio, y este falla al revés: es la lista de *"cosas
+>   instaladas"* que consulta la guardia. Un `.lnk` que no se lea no hace proponer de menos — hace
+>   que una carpeta legítima **parezca desconocida y se proponga para borrar**.
+> - El *"¿sigue vacía?"* del método `CarpetaVacia`: un archivo a más de 260 no se veía, la carpeta
+>   parecía vacía y el borrado recursivo se lo llevaba.
+>
+> **`Measure-RutaLarga`, de propina y por necesidad.** Al arreglar el recorrido, los módulos empezaron
+> a encontrar cosas cuya raíz ya es larga; `Measure-Ruta` devolvía 0 —`Get-Item` lanza y el error se
+> traga—, el candidato caía bajo el mínimo y desaparecía. Encontrarlo mejor solo servía para tirarlo
+> un paso después, otra vez en silencio.
+>
+> **El cebo del banco pasa a comprobarse en duro**, y de paso salió que `EnAnalisis` y `EnLimpieza`
+> nunca fueron lo mismo: la limpieza real va a la papelera, y una ruta larga **no puede ir a la
+> papelera** —`Get-MotivoNoSeBorra` se niega, y con razón—. Volcar los dos conceptos en un campo
+> habría puesto en rojo un paso que está bien.
+>
+> **Lo que NO arregla, y es conservador:** `Get-HuellaRapida` y `Get-FileHash` siguen sin admitir
+> rutas largas, así que duplicados **encuentra** los archivos hondos pero los descarta al calcular la
+> huella. Propone de menos, no de más. Igual con `Get-DestinoAccesoDirecto` y `Get-IdentidadArchivo`.
+>
+> **Riesgo a vigilar:** medido en PS7 sobre Linux, el recorrido nuevo sale ~35% más lento que
+> `Get-ChildItem`; en PowerShell 5.1, donde el proveedor es mucho más caro, se espera empate o mejora.
+> **Discriminador barato:** cronometrar un análisis con perfil exhaustivo antes y después.
+>
+> Catorce mutaciones. Dos se rechazaron por fallar **por el motivo equivocado** —una dejaba el archivo
+> sin analizar—, y una prueba de `SEG-40` resultó estar midiendo un trozo más grande del que creía:
+> cortaba el texto entre dos funciones y, al aparecer una tercera en medio, contaba los `try` de dos.
+>
+> **Sin verificar:** aquí no hay MAX_PATH, así que las rutas largas funcionan solas y **quitar el
+> prefijo no haría fallar ni una prueba de comportamiento**. Lo sostienen una invariante de texto y la
+> CI del banco. La prueba de fuego es el primer push.
+
+
+Encontrado al automatizar el banco (`VAL-03`), y es media verdad de `COR-02` que faltaba.
+
+`COR-02` arregló **medir** —prefijo `\\?\` en `Get-ResumenArbol`, que heredan sus ocho llamantes— y
+**borrar** —`System.IO` con el mismo prefijo—. Lo que **no** arregló es **encontrar**: los módulos
+recorren con `Get-ChildItem -Recurse`, que en PowerShell 5.1 se para a los 260 caracteres, y bajo el
+`-ErrorAction SilentlyContinue` que usan casi todos **no dice nada**.
+
+O sea que el fallo original sigue vivo un paso antes: el programa **mide bien y borra bien lo que
+llega a proponer**, pero *no propone* lo que hay al fondo de una ruta larga. Un `node_modules`
+anidado o una caché de Gradle desbordan el límite con facilidad, y ahí el programa mide de menos y
+borra de menos, igual que antes — solo que ahora por otro motivo.
+
+**No es teórico:** el cebo de `02-ruta-larga` del banco existe justamente para verlo, y la CI de
+`VAL-03` lo mide en cada ejecución y avisa si algún día empieza a aparecer.
+
+**Arreglo:** que el recorrido de los módulos use el mismo prefijo que ya usa la medición, o migrar
+esos recorridos a `System.IO` como se hizo con el borrado. **Tamaño: medio**, y toca los veintiún
+módulos o el sitio por el que todos pasan.
+
 ### `COR-05` · El mapeo candidato → fila de la interfaz es manual · Media
 
 > ✅ **RESUELTO.** `tests/Contrato.Tests.ps1`. **No hay ningún fallo vivo:** los 8 campos del
@@ -253,6 +371,44 @@ exclusiones nace invisible en la interfaz**. Test por AST, pequeño.
 Esta es la parte que convierte a Cachivache en algo que la gente elige.
 
 ### `CNF-01` · Lista de exclusiones del usuario · **Alta — la función que más falta**
+
+> ➕ **La tarjeta de Ajustes que este banner daba por hecha NO existía, y ahora sí.** El banner decía
+> «preferencia, filtro en el embudo, revalidación en el motor y `-Excluir` en consola» y describía
+> arriba una tarjeta *«Carpetas que nunca se tocan»* con añadir y quitar. Lo primero se hizo; la
+> tarjeta, no. Y cuando `USO-06` añadió *Excluir siempre esto* al menú contextual, quedó una **puerta
+> de un solo sentido**: se podían añadir exclusiones desde la ventana pero no quitarlas, y el propio
+> diálogo tenía que avisar de que aquello solo se deshacía editando `preferencias.json` a mano.
+>
+> Ya está: *Lo que no se toca nunca*, en Ajustes, con la lista y un botón *Quitar* por fila.
+>
+> **Se llama así y no *Carpetas que nunca se tocan*, a propósito:** desde `ARQ-03` la lista guarda
+> también cosas que no son carpetas, y una tarjeta titulada *Carpetas* con *Caché de Docker* dentro
+> sería el programa etiquetando mal sus propios datos.
+>
+> **Cómo se enseña cada clave lo decide `Get-ExclusionVista`, que es cálculo puro y va probado.** Una
+> clave sintética no se enseña cruda —`modulo:dockerwsl|Caché de Docker` no significa nada para quien
+> la lea—, pero **la clave real vuelve idéntica carácter por carácter** y es la que viaja al botón:
+> hay una invariante que recorre el circuito entero sin texto de por medio (componer → presentar →
+> comparar), y otra que comprueba que quitar *por el título* no encontraría nada.
+>
+> **La preferencia sigue llamándose `RutasExcluidas` aunque ya no solo guarde rutas**, y queda
+> escrito por qué: es la clave de un archivo que ya está en los equipos de la gente. Renombrarla haría
+> que `Import-Preferencias` no encontrara la propiedad, cayera al vacío por defecto y dejara al
+> usuario **sin ninguna de sus exclusiones, en silencio y justo antes de una limpieza**.
+>
+> **Quitar no pide confirmación y añadir sí**, y la asimetría sigue la dirección del daño: añadir es
+> una promesa de «nunca más» y lo que deja de proponerse **no se ve**, así que una exclusión puesta
+> por error es invisible justo después de ponerla; quitar devuelve el elemento a estar *propuesto*, y
+> entre proponer y borrar siguen estando la casilla, el diálogo y la guardia. Una confirmación que
+> sale siempre se aprende a despachar sin leerla, y entonces deja de proteger donde importa.
+>
+> De paso, **dos textos que hoy pasaron a ser mentira** están corregidos: el diálogo de *Excluir
+> siempre esto* ya no promete que solo se deshace a mano, y *Restablecer ajustes* dice ahora que no
+> toca las exclusiones (no las tocaba, pero no estaba protegido: ahora hay invariante).
+>
+> Quince mutaciones, todas cazadas. **Sin verificar hasta que se ejecute en Windows**, como todo lo
+> que es XAML.
+
 
 > ✅ **RESUELTO.** Preferencia, filtro en el embudo, revalidación en el motor y `-Excluir` en consola.
 >
@@ -355,6 +511,30 @@ que marcar tú."* Es lo que convierte una lista en una decisión informada.
 
 ### `CNF-06` · Comparar con el análisis anterior · Media
 
+> 🟡 **HECHO el mínimo viable que pedía este punto**: el resumen dice ahora *"(hace 4 días eran 890
+> elementos y 3,20 GB)"*. **El botón *Comparar* que colorea lo nuevo y lo desaparecido sigue abierto.**
+>
+> **Solo sirven de referencia las entradas de tipo `analisis`.** Los `Elementos` de una limpieza son
+> los que se **borraron** y sus bytes el espacio **liberado**: compararlos con lo que *encuentra* un
+> análisis es presentar dos magnitudes distintas como la misma.
+>
+> **Un análisis incompleto se compara, pero diciéndolo.** Esconderlo tiene su propia mentira —un
+> hueco donde debería ir la comparación se lee como que el programa no sabe hacerla— y darlo por
+> bueno es justo lo que cerró `CNF-04`. Igual con otro perfil u otros módulos: se enseña el dato y se
+> dice que no es equiparable. Y **lo que no consta no se da por igual ni se acusa de distinto**:
+> inventarse una diferencia es la misma familia de mentira que dar por buena una igualdad.
+>
+> **Se compara con la anterior, no con "la mejor" ni con "la última completa"**: elegir cuál se
+> enseña es elegir el número que queda mejor. Y se toma la última de la lista, no la de fecha mayor —
+> la fecha es texto que puede faltar o venir corrupto, y ordenar por ella haría que un reloj
+> desajustado cambiara con qué te comparas.
+>
+> **Va ANTES de anotar la ejecución en el historial**, o el programa se compararía consigo mismo:
+> siempre cero de diferencia, siempre en verde, siempre mintiendo.
+>
+> *El análisis de abajo se conserva porque explica el porqué, que no caduca.*
+
+
 Hay historial e informes JSON, pero ninguna vista de diferencias. Mínimo viable: añadir al resumen
 *"(hace 4 días eran 890 elementos, 3,2 GB)"*. Completo: botón *"Comparar"* que coloree lo nuevo y
 lo desaparecido.
@@ -418,6 +598,35 @@ la fila seleccionada: número de archivos, fecha del más reciente, y los diez m
 Calculado bajo demanda.
 
 ### `USO-06` · Menú contextual y doble clic · Media
+
+> ✅ **RESUELTO.** Doble clic abre la ubicación; menú contextual con *Abrir ubicación · Copiar ruta ·
+> Excluir siempre esto · Desmarcar el grupo*. Los tres caminos —botón, menú y doble clic— llaman al
+> **mismo cierre**, con invariante que lo exige.
+>
+> **`ClaveExclusion` llega a `ItemVista` copiada del candidato, no recalculada**, y hay una prueba
+> que prohíbe que `Get-ClaveExclusion` aparezca en toda la interfaz. Dos sitios calculando la misma
+> clave es como se llega a excluir una cosa y comparar otra.
+>
+> **Copiar la ruta de algo que no tiene ruta real NO copia nada, y lo dice.** El portapapeles no
+> cuenta de dónde salió lo que lleva dentro: dejar ahí `docker system prune` significa que el
+> usuario lo descubre al pegarlo, en otro programa, más tarde y sin ninguna pista. Es la familia de
+> mentira que esta auditoría lleva cerrando, solo que invisible.
+>
+> **Excluir siempre esto pregunta antes, enseña la clave que va a guardar, y avisa de que hoy solo
+> se deshace a mano**, porque la tarjeta de Ajustes que `CNF-01` describía **nunca se llegó a
+> hacer**: se pueden añadir exclusiones desde la ventana pero no quitarlas. Eso merece punto propio.
+> Después desmarca al momento lo que la exclusión cubre — si no, la fila seguiría marcada, la
+> limpieza intentaría borrarla y el motor la rechazaría en rojo: el programa discutiendo consigo
+> mismo.
+>
+> **El menú solo puede desmarcar un grupo, nunca marcarlo**: marcar una categoría entera desde ahí
+> sería marcar a ciegas cosas que no se están viendo.
+>
+> Trece mutaciones. Una no hizo fallar nada a la primera —una expresión con `.*?` que se comía medio
+> archivo— y quedó acotada.
+>
+> *El análisis de abajo se conserva porque explica el porqué, que no caduca.*
+
 
 Abrir la ubicación existe y está bien resuelto, pero exige seleccionar y subir a la barra. No hay
 forma de copiar una ruta. → Doble clic abre la ubicación; menú contextual con *Abrir ubicación ·
@@ -504,11 +713,45 @@ no hay dónde expresar esa distinción.
 
 ### `USO-12` · Exponer en la ventana lo que ya existe en la CLI · Media
 
+> ✅ **RESUELTO.** Casilla *Anonimizar rutas* junto a exportar, y *Copiar diagnóstico* en *Acerca de*.
+> Los dos llaman a **la misma función** que la consola, no a una copia, y hay invariantes que lo
+> exigen: la anonimización se define una sola vez, `src/UI` no puede llamarla directamente, y la
+> cabecera del diagnóstico aparece exactamente una vez en todo `src/`.
+>
+> Es la lección de `CNF-02` aplicada: *una capacidad que solo existe en la consola es una capacidad
+> que la mayoría de los usuarios no tiene*, porque el camino normal es doble clic en el `.exe`, que
+> arranca sin ninguna consola donde escribir.
+>
+> **Queda señalado, no hecho:** la casilla vive en Resultados y gobierna también los tres botones de
+> *Informes*, porque comparten cierre. Es correcto pero no es obvio mirando esa pantalla. La
+> alternativa —una segunda casilla— son dos controles para un ajuste, o sea dos sitios que pueden
+> divergir.
+>
+> *El análisis de abajo se conserva porque explica el porqué, que no caduca.*
+
+
 `-InformeAnonimo` y `-Diagnostico` solo están en consola. El informe que genera la ventana lleva el
 nombre de usuario en cada ruta, y es justo el que uno adjunta a una incidencia. → Casilla
 *"Anonimizar rutas"* junto a los botones de exportar, y *"Copiar diagnóstico"* en Acerca de.
 
 ### `USO-13` · Ocultar lo ya eliminado · Baja
+
+> ✅ **RESUELTO. Casilla, no automático.** Esconder el resultado de la limpieza justo cuando el
+> usuario acaba de pulsar el botón y va a mirar qué ha pasado es hacer el trabajo y no decirlo:
+> `USO-15` otra vez. Nace desmarcada y esconder es decisión suya, reversible con un clic.
+>
+> **Se oculta por `Hecho`, que es la bandera que solo se levanta cuando algo se borró de verdad**,
+> así que **un fallo no se puede esconder** — lo que dejó escrito `USO-02`. Hay prueba de que el
+> predicado no menciona el estado, y otra sobre la clase.
+>
+> **Y de paso se cerró el hueco que abría en `USO-09`:** `Get-EstadoVacio` no sabía nada de la
+> casilla, así que si vaciaba la tabla el cartel decía *"ninguno se está viendo"* sin decir por qué —
+> y con un filtro puesto además, **culpaba al filtro**. Ahora la casilla se pregunta **antes** que el
+> filtro, por dos motivos: el filtro se ve y la casilla no, y el botón de quitar filtros no destapa
+> lo eliminado, así que culpar al filtro haría que el usuario pulsara y no cambiara nada.
+>
+> *El análisis de abajo se conserva porque explica el porqué, que no caduca.*
+
 
 Tras limpiar 800 elementos, la lista sigue teniendo 800 filas fantasma al 45% de opacidad.
 
@@ -741,11 +984,82 @@ pruebas.
 
 ### `ARQ-02` · Convertir los filtros en una lista de reglas · Media
 
+> ✅ **RESUELTO, y eran CUATRO filtros, no tres.** El `$null -ne $_` que iba escondido dentro del
+> `Where-Object` de la guardia era un cuarto filtro sin nombre — justo lo que este punto venía a
+> eliminar. Ahora cada regla tiene nombre, coste y predicado, y el embudo las recorre.
+>
+> **El orden importa para el coste, no para el resultado, y se han separado a propósito.** Los
+> predicados son puros e independientes, así que lo que sobrevive es la intersección: hay prueba de
+> que al derecho, al revés y por separado dan lo mismo. Pero la guardia es la única que toca el
+> disco y **estaba la primera**, o sea el orden peor: se le preguntaba al disco por candidatos que
+> la lista de unidades iba a tirar igual. Ahora van de barata a cara, con dos pruebas — los costes
+> no decrecen, y a un candidato de una unidad no elegida **no se le llega a preguntar al disco**.
+>
+> **Una trampa que costó seis pruebas:** la primera versión usaba `.GetNewClosure()`, que es lo que
+> parece pedir el problema. Un cierre se ejecuta en el ámbito de un módulo dinámico donde **no se
+> ven las funciones del núcleo** —se cargan dot-sourceando `Bootstrap.ps1` en el ámbito del
+> llamante, no son globales—, así que la regla no filtraba de menos: reventaba. Queda escrito para
+> que nadie lo reintente.
+>
+> **Y un aviso sobre nuestras propias invariantes:** `Contrato.Tests.ps1` fija el TEXTO
+> `Test-ClaveExcluida -Clave $_.ClaveExclusion`, y eso acabó **eligiendo la firma** de la función
+> nueva, porque la más aburrida habría hecho caer esa prueba. Una invariante que fija texto en vez
+> de comportamiento condiciona el diseño de quien venga después. Conviene reescribirla algún día.
+>
+> Siete mutaciones, todas cazadas — una de ellas destapó que la prueba era **hueca**: pasarle
+> `@($null)` a un parámetro sin tipo colapsa a `$null`, la lista llegaba vacía y el filtro no se
+> ejecutaba ni una vez.
+>
+> *El análisis de abajo se conserva porque explica el porqué, que no caduca.*
+
+
 `Invoke-ModuloLimpieza` ya es el embudo único y aplica dos filtros —guardia y unidades—, pero
 **cableados a mano**. Con las exclusiones serán tres. Una lista de reglas hace que la cuarta sea
 gratis.
 
 ### `ARQ-03` · Campos que le faltan al contrato · Pequeña
+
+> ✅ **RESUELTO, y de los cuatro campos que pedía solo se ha añadido uno.** Los otros tres estaban
+> mal planteados, y explicarlo vale más que escribirlos:
+>
+> - **`ClaveExclusion` — hecho.** Era el único hueco real, y lo dejó escrito `CNF-01` al cerrarse:
+>   *"la clave de exclusión no puede ser la ruta a secas"*. Para un comando o para la papelera,
+>   `Ruta` es una **etiqueta**, y compararla contra la lista de exclusiones la trataba como carpeta:
+>   en minúsculas, sin barra final y con una regla de prefijo que da por hecha una jerarquía que ahí
+>   no existe. Ahora hay dos formas de clave que se distinguen a la vista — la ruta cuando la hay, y
+>   `modulo:<Id>|<Nombre>` cuando no, con una barra vertical que Windows no admite en una ruta, así
+>   que una exclusión de carpeta no puede alcanzarla jamás. **Para todo lo que hoy funciona no cambia
+>   ni un byte**, que en el camino del borrado era el requisito número uno.
+> - **`Deshacible` — NO, y a propósito.** `CNF-03` ya decide recuperable/irreversible **por método**,
+>   con un invariante dentro de `COR-04` que impide que un método nuevo se quede sin clasificar. Un
+>   campo sería una segunda copia de esa decisión, calculada en otro momento. Es el fallo que este
+>   proyecto lleva cerrando desde `ARQ-01`.
+> - **`EsCarpeta` — NO, y el análisis de abajo se equivoca.** Dice que "se redescubre en cada capa"
+>   como si fuera un defecto. `Remove-RutaSegura` lo consulta del disco **justo antes de borrar**, y
+>   eso es lo correcto: un booleano calculado durante el análisis puede ser mentira minutos después,
+>   y sería mentira precisamente sobre qué se va a borrar y cómo.
+> - **`Origen` estructurado — queda fuera.** Lo que describe el análisis es en realidad el problema
+>   de `Categoria`: texto libre con 29 valores donde *"Steam"*, *"Juegos que Steam ya no reconoce"* y
+>   *"Plataformas de juego"* son tres categorías del mismo dominio. Eso no es un campo que falte, es
+>   un rediseño de la agrupación, y merece su propio punto en vez de colarse aquí.
+>
+> **Y salió un hueco vivo que no estaba en el plan.** La revalidación de la exclusión en el motor
+> estaba **dentro** de `if ($Candidato.Metodo -ne 'Comando')`, así que la única clase de candidato
+> que ejecuta un binario externo era justo la que se saltaba la comprobación. No llegaba a ocurrir
+> porque el filtro del análisis ya lo quitaba — pero la revalidación existe precisamente para no
+> depender de eso, y lo dice su propio comentario. Ya está fuera.
+>
+> **Un fallo mío que cazó una prueba de `CNF-01` que ya existía:** hice que "ser una ruta"
+> significara `C:\` o `\\`, y la suite se ejecuta en **Linux**. Una ruta de verdad se tomaba por
+> etiqueta y la exclusión dejaba de aplicarse: el archivo se borraba. Una regla que solo es correcta
+> en el sistema donde no se prueba es una regla sin probar.
+>
+> Cinco mutaciones, todas cazadas — y dos de ellas no llegaron a ejecutarse a la primera porque
+> `tools/Mutar.ps1` rechazaba `-Poner ''`, siendo *borrar* una de las mutaciones más útiles que hay.
+> Corregido en las dos funciones del arnés, con su prueba.
+>
+> *El análisis de abajo se conserva porque explica el porqué, que no caduca — salvo la línea de
+> `EsCarpeta`, que arriba queda rebatida.*
 
 `Deshacible`, `ClaveExclusion` estable, `EsCarpeta` explícito —hoy se redescubre en cada capa— y
 un `Origen` estructurado. Hoy se agrupa por `Categoria`, que es **texto libre con 29 valores
@@ -902,6 +1216,30 @@ módulos que Cachivache ya cubre: npm, Gradle, cargo, conda, Playwright.
 
 ### `DIS-05` · Aviso de versión nueva · Pequeña
 
+> ✅ **RESUELTO, y con una decisión de privacidad que hay que poder defender.**
+>
+> **Opt-in por pulsación: la consulta no se lanza sola.** Ni al arrancar, ni al abrir *Acerca de*, ni
+> con un temporizador. `SECURITY.md` prometía que *el programa no tiene ninguna comunicación de red*;
+> consultar al abrir un panel rompe esa promesa de forma que el usuario no puede evitar —abre
+> *Acerca de* para leer la licencia y ya ha hablado con un tercero—. Con el botón, la promesa nueva
+> sigue siendo fuerte y **comprobable**, y hay invariante: la consulta se lanza en un solo sitio y no
+> puede dispararse sola. `SECURITY.md` está corregido.
+>
+> **Comparar versiones es donde está la miga y es una función pura probada:** "2.10.0" es mayor que
+> "2.9.0" aunque alfabéticamente no lo sea, el proyecto admite etiquetas de dos y de tres partes, y
+> una etiqueta que no se entiende **no puede producir un aviso** — un aviso falso manda al usuario a
+> descargar algo que no existe. Lo que se pinta en pantalla son los números entendidos, nunca el
+> texto tal cual llegó de la red.
+>
+> **La consulta corre en un runspace aparte**, como el análisis: síncrona congelaría la ventana hasta
+> seis segundos con Windows pintándola en blanco.
+>
+> **Ocho mutaciones, y una enseñó algo:** quitar el `[int]` del bucle **no falló nada**, porque el
+> `[int[]]` del retorno lo neutraliza. La conversión que sostiene la comparación es la del retorno.
+>
+> *El análisis de abajo se conserva porque explica el porqué, que no caduca.*
+
+
 `Version.ps1` **ya tiene la versión y la URL del repositorio**: las dos piezas están. Falta
 consultar la última publicación y avisar en Acerca de. Actualizar los archivos en su sitio es
 delicado porque el `.zip` se descomprime donde el usuario quiera; **avisar y abrir la página es la
@@ -925,6 +1263,27 @@ extraer sus textos rompería la propiedad más valiosa del proyecto —*un módu
 autocontenido*— salvo que cada uno lleve su propio archivo de idioma al lado.
 
 ### `I18N-02` · ⚠ Aviso crítico para quien haga la traducción
+
+> ✅ **CONVERTIDO EN INVARIANTE.** Este punto no era una tarea sino un aviso, y un aviso escrito en
+> un documento no protege nada: `tests/Guardia.Idioma.Tests.ps1` lo convierte en algo que falla.
+>
+> Exige **dos cosas, y ninguna sola vale**. Estructura: las siete listas de la guardia son texto
+> literal sin una sola llamada ni variable dentro —eso prohíbe tanto un `Import-LocalizedData` como
+> la versión sutil, *"la lista sigue aquí pero armada a partir de un `$textos.Carpetas`"*—, `Guard.ps1`
+> no lee archivos ni mira la cultura, y **ningún otro archivo de `src/` puede reasignarlas**.
+> Contenido: se pregunta a las **funciones públicas**, no a los arrays, y se exige el **par
+> completo** —`Documentos` *y* `Documents`, `respaldo` *y* `backup`—, porque traducir es sustituir y
+> sustituir deja siempre una mitad por el camino.
+>
+> Solo la estructura habría sido una prueba tranquilizadora e inútil: la lista puede seguir siendo
+> un array literal y tener dentro las palabras ya traducidas.
+>
+> **Lo que este punto pide y NO es verificable:** *"cualquier extracción de textos debe excluirlas
+> explícitamente"*. Esa herramienta no existe todavía. Cuando exista, la lista de nombres protegidos
+> ya está escrita en un solo sitio para alimentarla.
+>
+> *El análisis de abajo se conserva porque explica el porqué, que no caduca.*
+
 
 `Test-CarpetaEspejo`, `Test-ArchivoPersonal` y la lista de nombres sensibles comparan contra
 **listas de palabras en castellano e inglés**. Eso **no es texto de interfaz: es lógica de
@@ -1132,6 +1491,7 @@ devuelve 100 MB, no 200.
 | `VIS-02` vista de archivos | ✅ Hecho en consola. Falta el panel de WPF |
 | `A11Y-01` nombres de automatización | ✅ Hecho. Trece controles sin rótulo propio ya se anuncian; los que tienen rótulo visible enlazado toman el **mismo enlace**, no una copia. Invariante de tres reglas —presencia, no vacío, y que el enlace apunte a una propiedad que exista— verificada mutando en cuatro sitios. **Pendiente de oírlo con un lector de pantalla real:** aquí no hay WPF, así que lo comprobado es el texto del XAML, no lo que dice el Narrador |
 | `A11Y-06` el foco al cambiar de panel | ✅ Hecho. `mostrarPanel` enfoca el panel mostrado, que se anuncia con su título visible; destino de foco pero no parada de tabulación. Y de paso, invariante que compara las **cuatro** listas de paneles que hasta ahora podían divergir en silencio, al estilo de `COR-04`. **Pendiente de oírlo:** el `Focus()` en sí no se puede ejecutar aquí |
+| `ARQ-03` campos del contrato | ✅ Hecho, y de los cuatro campos que pedia **solo uno era un hueco real**: `ClaveExclusion`. Los otros tres estaban mal planteados y queda escrito por que — uno de ellos porque el analisis original se equivocaba. De paso salio un hueco vivo: la revalidacion de la exclusion en el motor estaba dentro del `if` de `Comando`, o sea que el unico candidato que ejecuta un binario externo era el que se la saltaba |
 | `DIS-03` winget · `DIS-04` Scoop | ✅ Hechos, en una pieza. Los manifiestos se **generan** en la publicación: declaran cuatro datos que caducan a la vez y en silencio, y el cuarto —la carpeta de dentro del `.zip`— casi se escapa. Hallazgo: en YAML, `2.1` es el número 2.1, no la cadena, así que una etiqueta de dos partes producía un manifiesto que winget rechaza. **Sin enviar a `winget-pkgs`**, así que `winget install` aún no lo encuentra |
 | `COR-05` mapeo candidato–vista | ✅ Hecho. **No hay fallo vivo**, pero el hueco era real y está comprobado: mutando el contrato con un campo nuevo, la invariante que ya existía pasa sus 160 pruebas sin inmutarse, porque solo cubría la intersección. Las exclusiones llevan motivo escrito una a una. De paso: el mapeo no estaba donde este documento decía |
 | `USO-09` estados vacíos | ✅ Hecho. La decisión en `Get-EstadoVacio`, cálculo puro; en el XAML ni un `DataTrigger`, y hay invariante que lo prohíbe. El botón quita **los dos** filtros y el rótulo dice cuántos. Salieron dos casos que no estaban en el plan y hacían falta. **Pendiente de verlo en tu Windows** |

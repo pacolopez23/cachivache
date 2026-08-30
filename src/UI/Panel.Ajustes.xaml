@@ -77,6 +77,94 @@
                                     </StackPanel>
                                 </Border>
 
+                                <!--
+                                    LO QUE NO SE TOCA NUNCA. La tarjeta que [CNF-01]
+                                    daba por hecha en su banner y nunca se llego a
+                                    hacer. Desde [USO-06] se podian anyadir
+                                    exclusiones desde el menu contextual de la tabla,
+                                    pero no quitarlas: la unica marcha atras era
+                                    editar preferencias.json a mano.
+
+                                    NO SE LLAMA "Carpetas que nunca se tocan", que es
+                                    como la nombraba aquel banner, porque desde
+                                    [ARQ-03] la lista guarda tambien claves
+                                    sinteticas de cosas que no son carpetas -un
+                                    comando del sistema, la papelera-. Una tarjeta
+                                    titulada "Carpetas" con "Cache de Docker" dentro
+                                    seria el programa etiquetando mal sus propios
+                                    datos.
+
+                                    AQUI NO DECIDE NADA EL XAML. El rotulo de arriba
+                                    y los dos textos de cada fila salen de
+                                    Get-ExclusionVista y Get-TextoListaExclusiones,
+                                    en src/Core/Exclusiones.ps1, que son calculo puro
+                                    y estan probados. Ni un DataTrigger, ni un Style
+                                    con disparadores, ni un convertidor: en [USO-04]
+                                    un disparador se aplico y su valor por defecto
+                                    no, en Windows, y no se pudo averiguar por que.
+                                    Sin WPF con el que comprobarlo, un mecanismo de
+                                    XAML que no se puede verificar no tiene sitio
+                                    aqui. Hay una prueba que lo prohibe sobre este
+                                    bloque.
+
+                                    El boton "Quitar" vive dentro de la plantilla,
+                                    asi que no tiene ambito de nombres propio y
+                                    FindName no lo encuentra: el Click se engancha en
+                                    la lista y se mira quien lo disparo, igual que
+                                    los botones de la cabecera de grupo de [USO-04].
+                                    Lleva en el Tag la CLAVE EXACTA, no el titulo:
+                                    quitar por el titulo no encontraria nada que
+                                    quitar en cuanto la clave fuera sintetica.
+
+                                    El rotulo del resumen se ve SIEMPRE, tambien con
+                                    la lista vacia, y entonces dice donde esta la
+                                    orden que la llena. Es la leccion de [USO-09]: un
+                                    hueco en blanco se lee como un programa roto.
+                                -->
+                                <Border Style="{StaticResource Tarjeta}" Margin="0,16,0,0">
+                                    <StackPanel>
+                                        <TextBlock Text="Lo que no se toca nunca" FontWeight="SemiBold" FontSize="15"/>
+                                        <TextBlock x:Name="TxtResumenExclusiones" Style="{StaticResource Subtitulo}"
+                                                   Margin="0,8,0,0" TextWrapping="Wrap"
+                                                   Text="Todavía no has excluido nada."/>
+                                        <ItemsControl x:Name="ListaExclusiones" Margin="0,14,0,0">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <!--
+                                                        Fondo elevado y radio 6, que es el de las
+                                                        filas. Con el estilo Tarjeta la fila
+                                                        quedaria del mismo color que la tarjeta que
+                                                        la contiene y solo la separaria una linea.
+                                                    -->
+                                                    <Border Background="{DynamicResource FondoElevado}"
+                                                            BorderBrush="{DynamicResource Borde}" BorderThickness="1"
+                                                            CornerRadius="6" Padding="13" Margin="0,0,0,7">
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                                                <TextBlock Text="{Binding Titulo}" FontWeight="SemiBold"
+                                                                           TextWrapping="Wrap"/>
+                                                                <TextBlock Text="{Binding Detalle}" FontSize="12" Margin="0,4,0,0"
+                                                                           TextWrapping="Wrap"
+                                                                           Foreground="{DynamicResource TextoTenue}"/>
+                                                            </StackPanel>
+                                                            <Button x:Name="BtnQuitarExclusion" Grid.Column="1"
+                                                                    Style="{StaticResource BotonSecundario}"
+                                                                    Margin="12,0,0,0" VerticalAlignment="Center"
+                                                                    Content="Quitar" Tag="{Binding Clave}"
+                                                                    AutomationProperties.Name="{Binding Titulo}"
+                                                                    ToolTip="Deja de excluirlo. No borra nada: vuelve a proponerse en los próximos análisis."/>
+                                                        </Grid>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </Border>
+
                                 <Border Style="{StaticResource Tarjeta}" Margin="0,16,0,0">
                                     <StackPanel>
                                         <TextBlock Text="Como se elimina" FontWeight="SemiBold" FontSize="15"/>

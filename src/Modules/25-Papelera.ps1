@@ -31,7 +31,12 @@ $BuscarPapelera = {
         if (-not (Test-Path -LiteralPath $ruta)) { continue }
 
         $bytes = 0.0
-        Get-ChildItem -LiteralPath $ruta -Recurse -Force -File -ErrorAction SilentlyContinue |
+        # Get-ElementosDelArbol y no Get-ChildItem -Recurse: ver [COR-08].
+        # Aqui pesa doble, porque lo que hay dentro de $Recycle.Bin son las
+        # rutas ORIGINALES de lo que el usuario borro, con su profundidad
+        # entera: si algo venia de un node_modules anidado, la copia de la
+        # papelera es igual de larga.
+        Get-ElementosDelArbol -Ruta $ruta |
             ForEach-Object {
                 # Los archivos $I son metadatos del propio contenedor.
                 if ($_.Name -notlike '$I*') { $bytes += [double]$_.Length }

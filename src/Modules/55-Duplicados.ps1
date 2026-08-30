@@ -47,7 +47,8 @@ $BuscarDuplicados = {
 
     foreach ($zona in $zonas) {
         if (Test-Cancelacion $Sync) { break }
-        Get-ChildItem -LiteralPath $zona -Recurse -File -Force -ErrorAction SilentlyContinue |
+        # Get-ElementosDelArbol y no Get-ChildItem -Recurse: ver [COR-08].
+        Get-ElementosDelArbol -Ruta $zona |
         Where-Object {
             # El filtro de nube va ANTES que nada: comparar duplicados
             # significa leer el contenido -Get-HuellaRapida y Get-FileHash-,

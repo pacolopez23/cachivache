@@ -40,7 +40,11 @@
     $c.NavResultados.Add_Checked({ & $mostrarPanel 'PanelResultados' })
     $c.NavRegistro.Add_Checked({   & $mostrarPanel 'PanelRegistro' })
     $c.NavInformes.Add_Checked({   & $refrescarHistorial; & $mostrarPanel 'PanelInformes' })
-    $c.NavAjustes.Add_Checked({    & $mostrarPanel 'PanelAjustes' })
+    # Ajustes rehace la lista de exclusiones al abrirse, igual que Informes
+    # rehace el historial: la lista puede haber cambiado desde la ultima vez
+    # -al excluir algo desde la tabla, o por fuera editando preferencias.json-
+    # y una tarjeta que ensenya lo de hace media hora es peor que no tenerla.
+    $c.NavAjustes.Add_Checked({    & $refrescarExclusiones; & $mostrarPanel 'PanelAjustes' })
     $c.NavAcerca.Add_Checked({     & $mostrarPanel 'PanelAcerca' })
 
     # ---- Teclado ----
@@ -358,33 +362,46 @@
         Show-Aviso -Titulo ('Contenido de {0}' -f $item.Nombre) -Mensaje $texto -Tipo 'Information'
     })
 
-    $c.BtnAbrirCarpeta.Add_Click({
+    # El cuerpo de esto vive en $abrirUbicacion (Window.Ayudantes.ps1), y no
+    # aqui, porque lo comparten tres entradas: este boton, la del menu
+    # contextual y el doble clic. Ver [USO-06].
+    $c.BtnAbrirCarpeta.Add_Click({ & $abrirUbicacion $c.TablaResultados.SelectedItem })
+
+    # ---- Doble clic sobre una fila ([USO-06]) ----
+    #
+    # Abrir la ubicación es lo que espera cualquiera al hacer doble clic en
+    # una lista de archivos, y hasta ahora obligaba a subir a la barra de
+    # herramientas. No abre el archivo: lo ensenya en su carpeta. Abrirlo
+    # seria ejecutar algo que el programa ha propuesto BORRAR, y esa no es
+    # una sorpresa que deba dar un doble clic.
+    #
+    # Sin fila no hace nada y se calla: el doble clic tambien cae sobre la
+    # cabecera -donde ya ordena la columna- y sobre el hueco de debajo de la
+    # ultima fila, y un aviso ahi seria un cuadro de dialogo por accidente.
+    # Es la diferencia con el boton, que si tiene que explicarse cuando se
+    # pulsa sin haber elegido nada.
+    $c.TablaResultados.Add_MouseDoubleClick({
         $item = $c.TablaResultados.SelectedItem
-        if ($null -eq $item) {
-            Show-Aviso -Mensaje 'Elige antes una fila de la lista: es su carpeta la que se abre.' -Tipo 'Information'
-            return
-        }
-        if ($item.Metodo -eq 'Comando') {
-            Show-Aviso -Mensaje ("Este elemento no es un archivo ni una carpeta: es un comando del sistema ({0}), así que no hay ninguna ubicación que abrir." -f $item.Comando) -Tipo 'Information'
-            return
-        }
-
-        $ruta = $item.Ruta
-        if ([string]::IsNullOrWhiteSpace($ruta) -or -not (Test-Path -LiteralPath $ruta)) {
-            Show-Aviso -Mensaje ("Ya no existe: {0}`n`nO se ha borrado o movido desde el análisis. Vuelve a analizar para tener la lista al dia." -f $ruta) -Tipo 'Warning'
-            return
-        }
-
-        try {
-            if ((Get-Item -LiteralPath $ruta -Force).PSIsContainer) {
-                Start-Process -FilePath (Get-RutaExplorador) -ArgumentList "`"$ruta`""
-            } else {
-                Start-Process -FilePath (Get-RutaExplorador) -ArgumentList "/select,`"$ruta`""
-            }
-        } catch {
-            Show-Aviso -Mensaje ("No se ha podido abrir la ubicación:`n{0}" -f $_.Exception.Message) -Tipo 'Warning'
-        }
+        if ($null -eq $item) { return }
+        & $abrirUbicacion $item
     })
+
+    # ---- Ocultar lo ya eliminado ([USO-13]) ----
+    #
+    # Add_Checked y Add_Unchecked, no Add_Click: es la misma trampa que
+    # documenta la casilla de borrado permanente mas abajo. Click solo se
+    # levanta cuando pulsa el usuario, asi que si algun dia el codigo mueve
+    # esta casilla, la tabla se quedaria filtrada de una forma y la casilla
+    # diciendo otra.
+    $sincronizarOcultarHechos = { & $aplicarFiltro }
+    $c.ChkOcultarHechos.Add_Checked($sincronizarOcultarHechos)
+    $c.ChkOcultarHechos.Add_Unchecked($sincronizarOcultarHechos)
+
+    # El boton del cartel no reaplica el filtro por su cuenta: solo desmarca
+    # la casilla, y el Add_Unchecked de arriba hace el resto. Si hiciera las
+    # dos cosas habria dos caminos para destapar lo eliminado, y el dia que
+    # cambie uno el otro se queda con el comportamiento viejo. Ver [USO-13].
+    $c.BtnMostrarHechos.Add_Click({ $c.ChkOcultarHechos.IsChecked = $false })
 
     # ---- Eliminar ----
     $c.BtnEliminar.Add_Click({
@@ -505,15 +522,31 @@
         # escrito en el disco. Es la misma familia de mentira que el resto
         # de la auditoria: el programa contando algo distinto de lo que
         # paso. Ver [COR-06] en docs/HOJA-DE-RUTA.md.
+        # La casilla de Resultados, que es la MISMA capacidad que
+        # -InformeAnonimo en la consola: las dos acaban en el parametro
+        # -Anonimo de las tres funciones de Report.ps1. La ventana no
+        # anonimiza por su cuenta, y hay una invariante que lo prohibe:
+        # dos anonimizadores distintos es lo mismo que dos bucles de
+        # borrado distintos, y ya sabemos como acabo aquello. Ver [USO-12],
+        # [CNF-02] y [ARQ-01].
+        $anonimo = [bool]$c.ChkAnonimizar.IsChecked
+
         $ruta = $null
         try {
             $ruta = New-NombreInforme -Tipo 'analisis' -Extension $Formato -CarpetaDatos $estado.Configuracion.CarpetaDatos
             switch ($Formato) {
-                'html' { Export-InformeHtml -Candidatos $estado.Candidatos -Ruta $ruta -Configuracion $estado.Configuracion -Modulos $estado.Modulos -Confirm:$false }
-                'csv'  { Export-InformeCsv  -Candidatos $estado.Candidatos -Ruta $ruta -Confirm:$false }
-                'json' { Export-InformeJson -Candidatos $estado.Candidatos -Ruta $ruta -Configuracion $estado.Configuracion -Confirm:$false }
+                'html' { Export-InformeHtml -Candidatos $estado.Candidatos -Ruta $ruta -Configuracion $estado.Configuracion -Modulos $estado.Modulos -Anonimo:$anonimo -Confirm:$false }
+                'csv'  { Export-InformeCsv  -Candidatos $estado.Candidatos -Ruta $ruta -Anonimo:$anonimo -Confirm:$false }
+                'json' { Export-InformeJson -Candidatos $estado.Candidatos -Ruta $ruta -Configuracion $estado.Configuracion -Anonimo:$anonimo -Confirm:$false }
             }
-            & $escribir ('Informe guardado: {0}' -f $ruta)
+            # Se DICE que se ha anonimizado. Un informe anonimo y otro sin
+            # anonimizar se llaman igual y se ven casi igual, asi que sin
+            # esta linea la unica forma de saber cual es cual es abrirlo y
+            # buscar tu propio nombre de usuario dentro. Es la leccion de
+            # [USO-15]: hacer el trabajo y no decirlo es indistinguible de
+            # no hacerlo.
+            $comoSeGuardo = if ($anonimo) { ' (con las rutas anonimizadas)' } else { '' }
+            & $escribir (('Informe guardado: {0}{1}' -f $ruta, $comoSeGuardo))
         } catch {
             # Al registro, con pila: es lo que se adjunta en una incidencia.
             # A la pantalla, con archivo y linea pero sin pila, que en un
@@ -564,24 +597,239 @@
             elseif ($boton.Name -eq 'BtnQuitarGrupo')  { $marcar = $false }
             else { return }
 
-            # La misma bandera que usa el marcado global: sin ella, cambiar
-            # doscientas casillas dispara doscientos recalculos completos
-            # del resumen del pie, cada uno recorriendo la lista entera.
-            # Es el fallo que dejaba la ventana en "No responde".
+            & $marcarCategoria $categoria $marcar
+        })
+
+    # Marcar o desmarcar una categoria entera. Lo llaman los dos botones de
+    # la cabecera de grupo y la orden "Desmarcar el grupo" del menu
+    # contextual ([USO-06]); un solo cierre, por lo mismo que [ARQ-01].
+    #
+    # Se define DESPUES del manejador de arriba, que ya lo usa, y no pasa
+    # nada: ese manejador no se evalua hasta que alguien pulsa un boton, con
+    # el archivo entero cargado desde hace rato. Es lo mismo que hacen los
+    # cuatro trozos de la ventana entre si, y esta explicado en Window.ps1.
+    $marcarCategoria = {
+        param([string] $Categoria, [bool] $Marcar)
+
+        # La misma bandera que usa el marcado global: sin ella, cambiar
+        # doscientas casillas dispara doscientos recalculos completos del
+        # resumen del pie, cada uno recorriendo la lista entera. Es el
+        # fallo que dejaba la ventana en "No responde".
+        $estado.SuprimirResumen = $true
+        try {
+            foreach ($item in $estado.Items) {
+                if ($item.Categoria -ne $Categoria) { continue }
+                # Marcar respeta lo que NO se puede borrar; quitar vale
+                # para todo, porque desmarcar nunca hace danyo.
+                if ($Marcar -and -not $item.Borrable) { continue }
+                $item.Seleccionado = $Marcar
+            }
+        } finally {
+            $estado.SuprimirResumen = $false
+        }
+        & $actualizarResumenSeleccion
+    }
+
+    # =================================================================
+    #  MENU CONTEXTUAL DE LA TABLA [USO-06]
+    # =================================================================
+    # Las cuatro ordenes trabajan sobre la fila SELECCIONADA, la misma que
+    # usan los botones de la barra de herramientas. El menu cuelga de la
+    # tabla entera, asi que tambien se abre sobre la cabecera y sobre el
+    # hueco de debajo de la ultima fila, donde no hay ninguna elegida: las
+    # cuatro lo comprueban y lo dicen, en vez de no hacer nada.
+    #
+    # Y se comprueba que el XAML los trajo. FindName devuelve $null sin
+    # quejarse cuando el nombre no esta, y $null.Add_Click() SI lanza: se
+    # perderia la ventana entera por un menu contextual. Se anota y se
+    # sigue, igual que con los controles del cartel de tabla vacia
+    # ([USO-09]): quedarse sin menu es malo, no abrir el programa es peor.
+    $faltanMenuFila = @(@('MenuAbrirUbicacion', 'MenuCopiarRuta',
+                          'MenuExcluirSiempre', 'MenuDesmarcarGrupo') |
+                        Where-Object { $null -eq $c[$_] })
+    if ($faltanMenuFila.Count -gt 0) {
+        Write-Registro -Sync $estado.Sync -Nivel 'ERROR' -Mensaje (
+            'No se han encontrado estas entradas del menú contextual de la tabla, y no van a responder: {0}' -f
+            ($faltanMenuFila -join ', '))
+    } else {
+
+        $c.MenuAbrirUbicacion.Add_Click({ & $abrirUbicacion $c.TablaResultados.SelectedItem })
+
+        # ---- Copiar ruta ----
+        #
+        # SIN RUTA DE VERDAD NO SE COPIA NADA, y esa es la decision.
+        #
+        # Copiar la etiqueta -"Papelera de reciclaje", "docker system
+        # prune"- dejaria en el portapapeles algo que parece una ruta y no
+        # lo es. El portapapeles no dice de donde salio lo que lleva
+        # dentro: el usuario se entera al pegarlo, en otro programa, sin
+        # ninguna pista de por que no funciona. Y el comando, que es lo
+        # unico util que habria ahi, ya se ve entero en la propia fila
+        # porque SECURITY.md lo exige.
+        #
+        # Callarse tampoco vale: se dice que no hay ruta y por que. Un
+        # menu que se pulsa y no hace nada es indistinguible de uno roto,
+        # que es [USO-15] otra vez.
+        $c.MenuCopiarRuta.Add_Click({
+            $item = $c.TablaResultados.SelectedItem
+            if ($null -eq $item) {
+                Show-Aviso -Mensaje 'Elige antes una fila de la lista: es su ruta la que se copia.' -Tipo 'Information'
+                return
+            }
+
+            if (-not $item.TieneRutaReal) {
+                Show-Aviso -Tipo 'Information' -Mensaje (
+                    (& $describirSinRuta $item 'ruta que copiar') +
+                    [Environment]::NewLine + [Environment]::NewLine +
+                    'No se ha copiado nada: dejar ahí una etiqueta que parece una ruta solo se descubre al pegarla, en otro sitio y sin ninguna pista de qué ha pasado.')
+                return
+            }
+
+            try {
+                [Windows.Clipboard]::SetText($item.Ruta)
+                # Sin cuadro de dialogo al copiar bien: copiar es una
+                # accion frecuente y de riesgo cero, y quien la pide va a
+                # pegar acto seguido, que es donde lo comprueba. Al
+                # registro si, que es lo que se adjunta a una incidencia.
+                & $escribir ('Ruta copiada al portapapeles: {0}' -f $item.Ruta)
+            } catch {
+                Show-Aviso -Mensaje 'Otro programa está bloqueando el portapapeles. Vuelve a intentarlo.' -Tipo 'Warning'
+            }
+        })
+
+        # ---- Excluir siempre esto ----
+        #
+        # Se guarda $item.ClaveExclusion TAL CUAL. NO se recompone aqui la
+        # clave a partir de la ruta: la decide Get-ClaveExclusion al nacer
+        # el candidato y viaja pegada a la fila desde [ARQ-03]. Dos sitios
+        # calculando la misma clave es como se llega a excluir una cosa y
+        # comparar otra, y el sitio donde se compara es el motor de
+        # borrado.
+        #
+        # Se PREGUNTA antes, y se sigue preguntando ahora que la tarjeta de
+        # Ajustes ya existe y esto se puede deshacer. El motivo ya no es que
+        # sea una puerta de un solo sentido -no lo es-, sino que lo que se
+        # promete es "nunca mas": a partir de aqui el elemento desaparece de
+        # todos los analisis, y lo que deja de proponerse no se ve, asi que
+        # una exclusion puesta por error es invisible justo despues de
+        # ponerla. Ademas el menu actua sobre la fila SELECCIONADA, y
+        # nombrarla en la pregunta es lo que convierte un posible "se abrio
+        # el menu sobre otra fila" en algo que el usuario ve antes de que
+        # pase.
+        #
+        # Quitar, en cambio, NO pregunta: devuelve el elemento a estar
+        # propuesto, que es de donde salio, y el error se ve al momento. La
+        # explicacion larga esta junto a $quitarExclusion.
+        $c.MenuExcluirSiempre.Add_Click({
+            $item = $c.TablaResultados.SelectedItem
+            if ($null -eq $item) {
+                Show-Aviso -Mensaje 'Elige antes una fila de la lista: es ese elemento el que se excluye.' -Tipo 'Information'
+                return
+            }
+
+            $clave = [string]$item.ClaveExclusion
+            if ([string]::IsNullOrWhiteSpace($clave)) {
+                Show-Aviso -Tipo 'Warning' -Mensaje (
+                    'Esta fila no trae la clave con la que se guardan las exclusiones, así que excluirla no serviría de nada: no habría nada con lo que comparar. Vuelve a analizar y prueba otra vez.')
+                return
+            }
+
+            # La MISMA funcion que usan el embudo del analisis y el motor
+            # de borrado. Si aqui se comprobara de otra forma, el programa
+            # podria decir "ya estaba excluido" sobre algo que luego borra.
+            $excluidas = @($estado.Preferencias.RutasExcluidas)
+            if (Test-ClaveExcluida -Clave $clave -Excluidas $excluidas) {
+                Show-Aviso -Tipo 'Information' -Mensaje (
+                    '«{0}» ya está cubierto por tu lista de cosas que no se tocan nunca. No hace falta volver a excluirlo.' -f $item.Nombre)
+                return
+            }
+
+            # Parentesis alrededor de toda la concatenacion antes del -f:
+            # el -f se enlaza mas fuerte que el +, y sin ellos solo se
+            # formatea el ultimo trozo y los {0} de los demas llegan
+            # literales a la pantalla. Ha mordido cuatro veces.
+            $pregunta = ('Vas a excluir «{0}» para siempre.' + [Environment]::NewLine + [Environment]::NewLine +
+                         'Se guarda esta clave: {1}' + [Environment]::NewLine + [Environment]::NewLine +
+                         'Si es una carpeta, queda fuera también todo lo que haya dentro. No volverá a proponerse en ningún análisis, y el motor de borrado lo rechazará aunque llegue a estar marcado.' +
+                         [Environment]::NewLine + [Environment]::NewLine +
+                         'Podrás quitarlo cuando quieras en Ajustes, en la tarjeta «Lo que no se toca nunca».' +
+                         [Environment]::NewLine + [Environment]::NewLine +
+                         '¿Lo excluyes?') -f $item.Nombre, $clave
+
+            if ([Windows.MessageBox]::Show($pregunta, 'Excluir siempre', 'YesNo', 'Question') -ne 'Yes') { return }
+
+            # A las preferencias, que es donde vive la lista desde
+            # [CNF-01], y a la configuracion, que es la copia que miran el
+            # embudo del analisis y el motor de borrado. Las dos, porque
+            # solo se sincronizan al refrescar los discos y eso no vuelve a
+            # ocurrir hasta que se cambia de tema o se restablece: sin la
+            # segunda linea, la exclusion no valdria para la limpieza que
+            # el usuario esta a punto de lanzar.
+            $estado.Preferencias.RutasExcluidas = @(@($excluidas) + $clave |
+                                                    Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+                                                    Select-Object -Unique)
+            $estado.Configuracion.RutasExcluidas = @($estado.Preferencias.RutasExcluidas)
+
+            # Se guarda al momento y no al cerrar la ventana. Lo que esto
+            # promete es "nunca mas", y un cierre anormal que se llevara la
+            # exclusion por delante seria justo la promesa incumplida que
+            # [CNF-01] vino a arreglar. Es lo que ya hace "Restablecer".
+            & $guardarPreferencias
+
+            # Y la tarjeta de Ajustes se rehace ya. Tambien se rehace al
+            # abrir ese panel, asi que esto es de mas por hoy; se pone igual
+            # porque la tarjeta acaba de prometer en el dialogo que el
+            # elemento se puede quitar desde alli, y esa promesa no puede
+            # depender de que el unico camino hasta el panel siga pasando por
+            # el boton de navegacion.
+            & $refrescarExclusiones
+
+            # Y se desmarca al momento lo que la exclusion cubre, con la
+            # MISMA funcion que decide en el motor. Sin esto, la fila
+            # seguiria marcada y la siguiente limpieza intentaria borrarla
+            # para que el motor la rechazara con un error en rojo: el
+            # programa discutiendo consigo mismo delante del usuario.
+            $ahora = @($estado.Preferencias.RutasExcluidas)
+            $desmarcados = 0
             $estado.SuprimirResumen = $true
             try {
-                foreach ($item in $estado.Items) {
-                    if ($item.Categoria -ne $categoria) { continue }
-                    # Marcar respeta lo que NO se puede borrar; quitar vale
-                    # para todo, porque desmarcar nunca hace danyo.
-                    if ($marcar -and -not $item.Borrable) { continue }
-                    $item.Seleccionado = $marcar
+                foreach ($fila in $estado.Items) {
+                    if (-not $fila.Seleccionado) { continue }
+                    if (-not (Test-ClaveExcluida -Clave $fila.ClaveExclusion -Excluidas $ahora)) { continue }
+                    $fila.Seleccionado = $false
+                    $desmarcados++
                 }
             } finally {
                 $estado.SuprimirResumen = $false
             }
             & $actualizarResumenSeleccion
+
+            $cola = if ($desmarcados -eq 0) {
+                'En la lista de ahora no quedaba nada marcado que la exclusión cubra.'
+            } elseif ($desmarcados -eq 1) {
+                'Se ha desmarcado 1 elemento que la exclusión cubre.'
+            } else {
+                'Se han desmarcado {0} elementos que la exclusión cubre.' -f $desmarcados
+            }
+
+            & $escribir ('Excluido para siempre: {0}. {1}' -f $clave, $cola)
+            Show-Aviso -Tipo 'Information' -Mensaje (
+                ('«{0}» ya no se propondrá en ningún análisis.' +
+                 [Environment]::NewLine + [Environment]::NewLine + '{1}') -f $item.Nombre, $cola)
         })
+
+        # ---- Desmarcar el grupo ----
+        # Mismo cierre que el boton "Quitar" de la cabecera de grupo: aqui
+        # solo se dice sobre que categoria, que es la de la fila elegida.
+        $c.MenuDesmarcarGrupo.Add_Click({
+            $item = $c.TablaResultados.SelectedItem
+            if ($null -eq $item) {
+                Show-Aviso -Mensaje 'Elige antes una fila de la lista: se desmarca la categoría a la que pertenece.' -Tipo 'Information'
+                return
+            }
+            & $marcarCategoria $item.Categoria $false
+        })
+    }
 
     # ---- Abrir la papelera ([CNF-03]) ----
     #
@@ -746,6 +994,34 @@
     $c.ChkPermanente.Add_Checked($sincronizarPermanente)
     $c.ChkPermanente.Add_Unchecked($sincronizarPermanente)
 
+    # ---- Quitar una exclusion ([CNF-01]) ----
+    #
+    # El boton "Quitar" vive DENTRO de la plantilla de cada fila, asi que no
+    # tiene nombre en el ambito de la ventana y $ventana.FindName no lo
+    # encuentra: las filas las crea y las destruye la lista cada vez que se
+    # rehace. Por eso el evento se engancha en la LISTA y se mira quien lo
+    # disparo, exactamente igual que los dos botones de la cabecera de grupo
+    # de la tabla ([USO-04]).
+    $c.ListaExclusiones.AddHandler(
+        [Windows.Controls.Primitives.ButtonBase]::ClickEvent,
+        [Windows.RoutedEventHandler]{
+            param($remitente, $argumentos)
+
+            $boton = $argumentos.OriginalSource -as [Windows.Controls.Button]
+            if ($null -eq $boton) { return }
+
+            # Por NOMBRE, no por el texto del boton. Mirar el Content ataria
+            # el comportamiento al rotulo: cambiar "Quitar" por "Quitar de la
+            # lista" dejaria de quitar sin dar ningun error.
+            if ($boton.Name -ne 'BtnQuitarExclusion') { return }
+
+            # La CLAVE, que viaja en el Tag, y no el titulo que se lee en la
+            # fila: para un comando o para la papelera el titulo es el nombre
+            # legible y la clave es la cadena sintetica de [ARQ-03]. Quitar
+            # por el titulo no encontraria nada que quitar.
+            & $quitarExclusion ([string]$boton.Tag)
+        })
+
     $c.BtnAbrirDatos.Add_Click({
         try { Start-Process -FilePath (Get-RutaExplorador) -ArgumentList "`"$($estado.Configuracion.CarpetaDatos)`"" }
         catch { Show-Aviso -Mensaje "No se ha podido abrir la carpeta de datos:`n$($_.Exception.Message)" -Tipo 'Warning' }
@@ -757,9 +1033,15 @@
             return
         }
 
+        # Se nombra lo que NO se toca, y desde [CNF-01] eso incluye la lista
+        # de exclusiones: ahora se ve en una tarjeta de este mismo panel, dos
+        # dedos por encima de este boton, asi que quien lo pulse tiene motivo
+        # para temer que se la lleve por delante. Un "restablecer" que borra
+        # en silencio decisiones de "no toques esto nunca" seria la perdida
+        # muda que este proyecto lleva cerrando.
         $respuesta = [Windows.MessageBox]::Show(
             ('Se van a restablecer los umbrales, el perfil, los módulos marcados y la ' +
-             'selección de discos. El tema y el historial no se tocan.' + [Environment]::NewLine +
+             'selección de discos. El tema, el historial y lo que hayas excluido no se tocan.' + [Environment]::NewLine +
              [Environment]::NewLine + 'Continuar?'),
             'Restablecer ajustes', 'YesNo', 'Question')
         if ($respuesta -ne 'Yes') { return }
@@ -815,6 +1097,151 @@
     $c.BtnRepositorio.Add_Click({
         try { Start-Process $script:RepositorioUrl }
         catch { Show-Aviso -Mensaje "No se ha podido abrir el navegador. La direccion es: $script:RepositorioUrl" }
+    })
+
+    # ---- Acerca de: hay una version nueva ([DIS-05]) ----
+    #
+    # La consulta se hace en un RUNSPACE APARTE, no aqui. Una llamada de red
+    # sincrona en el manejador del boton congela la ventana entera mientras
+    # dura: el usuario no puede ni moverla ni cerrarla, y Windows acaba
+    # pintandola en blanco con "no responde" en el titulo. Con una red que
+    # acepta la conexion y luego no contesta, eso son los seis segundos del
+    # tiempo de espera con la ventana muerta.
+    #
+    # El runspace carga UNICAMENTE Version.ps1, no el nucleo entero: es lo
+    # que necesita Get-UltimaVersionPublicada y es un archivo que no toca
+    # disco ni guardia.
+    $codigoVersion = @'
+$ErrorActionPreference = 'Stop'
+. $archivoVersion
+Get-UltimaVersionPublicada -TiempoEspera 6
+'@
+
+    # Lo que se ve en el panel. La decision de QUE decir no esta aqui:
+    # esta en Get-AvisoActualizacion, que es pura y esta probada. Aqui solo
+    # se pintan sus dos salidas. Ver [DIS-05].
+    $pintarAvisoVersion = {
+        param([AllowNull()] [string] $Publicada)
+
+        $aviso = Get-AvisoActualizacion -Instalada $script:VersionCachivache -Publicada $Publicada
+        $c.TxtActualizacion.Text = $aviso.Texto
+        $c.BtnIrAVersionNueva.Visibility = if ($aviso.Hay) { 'Visible' } else { 'Collapsed' }
+        $c.BtnBuscarActualizacion.IsEnabled = $true
+    }
+
+    # Suelta el trabajo pase lo que pase. Se llama desde el sondeo y desde
+    # el cierre de la ventana: si se cierra en mitad de una consulta, el
+    # hilo de fondo seguiria vivo esperando a la red y el proceso tardaria
+    # en morir despues de que la ventana ya no este.
+    $soltarComprobacionVersion = {
+        if ($estado.TemporizadorVersion) { $estado.TemporizadorVersion.Stop() }
+
+        $trabajo = $estado.TrabajoVersion
+        # Se pone a $null ANTES de soltar nada: si Dispose lanza, el estado
+        # ya dice que no hay consulta en marcha y el boton vuelve a servir.
+        $estado.TrabajoVersion = $null
+        if (-not $trabajo) { return }
+
+        try { $trabajo.Ps.Stop() }        catch { Write-Verbose "Al parar la consulta de versión: $($_.Exception.Message)" }
+        try { $trabajo.Ps.Dispose() }     catch { Write-Verbose "Al soltar la consulta de versión: $($_.Exception.Message)" }
+        try { $trabajo.Runspace.Dispose() } catch { Write-Verbose "Al soltar el runspace de versión: $($_.Exception.Message)" }
+    }
+
+    # El sondeo, igual que el del analisis: un DispatcherTimer que mira si
+    # ya ha terminado. Es la unica forma de volver al hilo de la interfaz
+    # sin bloquearlo.
+    $revisarComprobacionVersion = {
+        $trabajo = $estado.TrabajoVersion
+        if (-not $trabajo) {
+            if ($estado.TemporizadorVersion) { $estado.TemporizadorVersion.Stop() }
+            return
+        }
+        if (-not $trabajo.Handle.IsCompleted) { return }
+
+        # Cadena vacia si algo ha ido mal, que es lo que
+        # Get-AvisoActualizacion entiende como "no se ha podido saber".
+        $publicada = ''
+        try {
+            $salida = $trabajo.Ps.EndInvoke($trabajo.Handle)
+            if ($salida -and $salida.Count -gt 0) { $publicada = [string]$salida[$salida.Count - 1] }
+        } catch {
+            Write-Verbose "La consulta de versión no ha devuelto nada: $($_.Exception.Message)"
+        }
+
+        & $soltarComprobacionVersion
+        & $pintarAvisoVersion $publicada
+    }
+
+    $estado.TemporizadorVersion = New-Object Windows.Threading.DispatcherTimer
+    $estado.TemporizadorVersion.Interval = [TimeSpan]::FromMilliseconds(200)
+    $estado.TemporizadorVersion.Add_Tick($revisarComprobacionVersion)
+
+    $c.BtnBuscarActualizacion.Add_Click({
+        # Dos pulsaciones seguidas abririan dos runspaces y el segundo
+        # pisaria al primero en $estado, dejando el primero sin soltar.
+        if ($estado.TrabajoVersion) { return }
+
+        $c.BtnBuscarActualizacion.IsEnabled = $false
+        $c.BtnIrAVersionNueva.Visibility = 'Collapsed'
+        $c.TxtActualizacion.Text = 'Comprobando en GitHub cuál es la última versión publicada...'
+
+        try {
+            $runspace = [runspacefactory]::CreateRunspace()
+            $runspace.Open()
+            $runspace.SessionStateProxy.SetVariable('archivoVersion',
+                (Join-Path (Join-Path (Join-Path $estado.Raiz 'src') 'Core') 'Version.ps1'))
+
+            $consulta = [powershell]::Create()
+            $consulta.Runspace = $runspace
+            [void]$consulta.AddScript($codigoVersion)
+
+            $estado.TrabajoVersion = @{
+                Ps       = $consulta
+                Runspace = $runspace
+                Handle   = $consulta.BeginInvoke()
+            }
+            $estado.TemporizadorVersion.Start()
+        } catch {
+            # Ni siquiera se ha podido lanzar la consulta. Para el usuario
+            # es exactamente lo mismo que si hubiera fallado la red, y se le
+            # dice lo mismo: sin cuadro de error.
+            Write-Verbose "No se ha podido lanzar la consulta de versión: $($_.Exception.Message)"
+            $estado.TrabajoVersion = $null
+            & $pintarAvisoVersion ''
+        }
+    })
+
+    $c.BtnIrAVersionNueva.Add_Click({
+        # Se abre la pagina y ya. El programa no se actualiza a si mismo:
+        # el .zip se descomprime donde el usuario quiera. Ver [DIS-05].
+        $url = Get-UrlUltimaVersion
+        try { Start-Process $url }
+        catch { Show-Aviso -Mensaje "No se ha podido abrir el navegador. La dirección es: $url" }
+    })
+
+    # ---- Acerca de: copiar el diagnostico ([USO-12]) ----
+    #
+    # LA MISMA funcion que .\Cachivache.ps1 -Diagnostico, no una version
+    # para la ventana. Si aqui se armara el texto a mano, los dos caminos
+    # divergirian a la primera vez que se anyada un dato al diagnostico, y
+    # entonces una incidencia traeria mas informacion que otra segun por
+    # donde se hubiera copiado. Hay una invariante que lo prohibe.
+    $c.BtnCopiarDiagnostico.Add_Click({
+        try {
+            $diagnostico = Get-InformeDiagnostico -Admin $estado.Configuracion.Admin `
+                                                  -CarpetaDatos $estado.Configuracion.CarpetaDatos
+            [Windows.Clipboard]::SetText($diagnostico)
+            & $escribir 'Diagnóstico copiado al portapapeles.'
+            # Se confirma. Copiar al portapapeles no se ve, y desde este
+            # panel no se ve tampoco el registro: sin esto, pulsar el boton
+            # y que no ocurra nada es indistinguible de que este roto. Ver
+            # [USO-15].
+            Show-Aviso -Tipo 'Information' -Titulo 'Diagnóstico copiado' -Mensaje (
+                'El diagnóstico está en el portapapeles. Pégalo en la incidencia con Control+V.')
+        } catch {
+            Show-Aviso -Tipo 'Warning' -Mensaje (
+                "No se ha podido copiar el diagnóstico:`n{0}" -f (Get-DetalleExcepcion -ErrorRecord $_))
+        }
     })
 
     # ---- Perfiles ----
@@ -890,6 +1317,11 @@
         # tick después del cierre iria a tocar controles de una ventana que
         # ya no existe.
         if ($estado.TemporizadorFiltro) { $estado.TemporizadorFiltro.Stop() }
+        # Y la consulta de version, por el mismo motivo y por uno mas: si se
+        # cierra la ventana con una consulta en marcha, el hilo de fondo
+        # sigue esperando a la red y el proceso tarda en morir despues de
+        # que la ventana ya no este en pantalla. Ver [DIS-05].
+        & $soltarComprobacionVersion
         # Última pasada por si el runspace encolo algo entre el último tick
         # del temporizador (que ya se ha parado) y este cierre. Se llama a
         # Invoke-VaciarColaRegistro y no a $volcarRegistro porque lo que

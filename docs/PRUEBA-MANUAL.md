@@ -47,6 +47,101 @@ Si sale **5.1**, tu ejecución vale doble: las pruebas automáticas corren en Po
 
 ---
 
+## Bloque 0 bis · La tanda del 30 de agosto — **diecisiete puntos sin ver**
+
+Esta es la lista de esta subida. Todo lo de aquí es **XAML o cableado de ventana**, o sea lo único
+que ninguna prueba de este proyecto puede ejecutar. Está ordenado por lo de siempre: si falla el
+primero, los de debajo dan igual.
+
+**Antes de nada, el discriminador de versión.** Si estas tres cosas no están, estás ejecutando la
+versión vieja y el resto de la lista no significa nada:
+
+- En **Resultados**, junto al desplegable de riesgo, una casilla **«Ocultar lo ya eliminado»**.
+- En **Ajustes**, una tarjeta **«Lo que no se toca nunca»**.
+- En **Acerca de**, un botón **«Buscar si hay una versión nueva»**.
+
+### 0b.1 · Que la ventana abra y la tabla pinte sus grupos
+
+Es lo único que, si falla, invalida todo lo demás. El contenido de una plantilla de WPF se analiza
+**tarde**, al aplicarse: el XAML puede cargar, la ventana abrir, y reventar al aparecer la primera
+cabecera de grupo. Ya pasó en `USO-14`.
+
+- [ ] La ventana abre y un análisis pinta la tabla agrupada por categoría.
+
+### 0b.2 · El menú contextual y el doble clic — `USO-06`
+
+- [ ] **Clic derecho sobre una fila: ¿queda esa fila seleccionada antes de aparecer el menú?** Es lo
+      único que no se pudo comprobar y de lo que dependen las cuatro órdenes, que actúan sobre la fila
+      *seleccionada*. Si el clic derecho no selecciona, el menú actuaría sobre la fila anterior.
+- [ ] El menú **se lee**: letra clara sobre fondo oscuro. Si sale un menú blanco de Windows, el color
+      no se ha heredado.
+- [ ] **Copiar ruta** sobre una fila normal: pega en la barra del Explorador y llega.
+- [ ] **Copiar ruta sobre algo sin ruta real** (la Papelera, o Docker si sale): tiene que salir un
+      aviso y **no** cambiar el portapapeles. Comprueba pegando: debe seguir lo de antes.
+- [ ] **Doble clic** en una fila abre su carpeta. Sobre la cabecera de columna sigue ordenando.
+
+### 0b.3 · Excluir y desexcluir — `USO-06` + `CNF-01`
+
+Es la vuelta completa, y la que más partes nuevas junta.
+
+- [ ] *Excluir siempre esto* sobre algo inofensivo → el diálogo dice **«Podrás quitarlo cuando quieras
+      en Ajustes»**. Si dice *«editando preferencias.json»*, es la versión vieja.
+- [ ] Acepta: la fila **se desmarca al momento**.
+- [ ] **Ajustes → Lo que no se toca nunca**: la exclusión está, con la ruta entera.
+- [ ] Pulsa **Quitar**: desaparece **sin preguntar**, y el registro dice *«Ya no está excluido…»*.
+- [ ] Repite con algo que **no** sea una carpeta (Docker, la Papelera): la fila tiene que leerse
+      *«Caché de Docker»*, **nunca** `modulo:dockerwsl|Caché de Docker`. Y **Quitar** tiene que
+      quitarla: si esa fila no se va, la clave no está llegando al botón.
+- [ ] Cierra y reabre el programa: lo excluido sigue excluido.
+
+### 0b.4 · Estados vacíos y ocultar lo eliminado — `USO-09` + `USO-13`
+
+- [ ] Resultados **sin analizar**: un recuadro con borde en medio de la tabla, no un rectángulo en
+      blanco.
+- [ ] Con la lista llena, escribe `zzzzz` en el filtro: sale el texto con el **número real** de
+      elementos y el botón **Quitar el filtro de texto**. Pon además el desplegable en *Solo riesgo
+      alto*: el botón pasa a decir **Quitar los dos filtros**.
+- [ ] Pulsa el botón: vuelve la tabla entera, el desplegable a *Todos los riesgos*, y el cursor al
+      cuadro de filtro.
+- [ ] Limpia varias cosas, marca **Ocultar lo ya eliminado**: desaparecen las verdes y **lo que falló
+      sigue viéndose en rojo**. Esa es la mitad que importa.
+
+### 0b.5 · Teclado y lector de pantalla — `A11Y-01`, `A11Y-04`, `A11Y-06`
+
+- [ ] `Ctrl+2` y `Ctrl+5` cambian de panel.
+- [ ] Escribe `chrome` en el filtro: **las letras llegan al cuadro**. Si el campo se queda vacío, el
+      despachador de atajos se está comiendo las teclas.
+- [ ] `Ctrl+A` **dentro** del filtro selecciona el texto; **fuera**, marca la tabla.
+- [ ] `F5` con un análisis corriendo no hace nada; `Esc` lo cancela.
+- [ ] Tab desde la barra lateral: **ninguna parada nueva ni vacía**.
+- [ ] Con el **Narrador** (`Ctrl+Win+Enter`; `Ctrl` lo calla): los botones de la barra de título dicen
+      su nombre, cambiar de panel anuncia el panel, y la casilla de una fila dice **el nombre del
+      elemento**.
+
+### 0b.6 · Acerca de: versión y diagnóstico — `DIS-05` + `USO-12`
+
+- [ ] Pulsa **Buscar si hay una versión nueva** y, mientras piensa, **arrastra la ventana**. Tiene que
+      moverse. Si se congela, el runspace de la consulta no está haciendo su trabajo.
+- [ ] Terminará diciendo *«No se ha podido comprobar»* — **es lo esperado** hasta que publiques una
+      versión con etiqueta.
+- [ ] **Copiar diagnóstico** → pega en el Bloc de notas y compáralo con `.\Cachivache.ps1 -Diagnostico`.
+      Tienen que ser el mismo texto.
+- [ ] Marca **Anonimizar rutas**, guarda un informe HTML y busca tu nombre de usuario dentro: no debe
+      estar. Repite con CSV y JSON desde *Informes* — la casilla vale también para ellos.
+
+### 0b.7 · Lo que se ve solo mirando
+
+- [ ] **El resumen del análisis compara con el anterior** (`CNF-06`): al terminar el segundo análisis
+      debe decir algo como *«(hace 4 días eran 890 elementos y 3,20 GB)»*. En el primero no dice nada,
+      que es lo correcto.
+- [ ] **El ancho de la barra de Resultados**: la casilla nueva suma unos 170 px a la fila de filtros,
+      que ya iba justa. A 1020 px de ancho, ¿se solapan los filtros con los botones de la derecha?
+- [ ] **`COR-08`, y esto es medible:** cronometra un análisis con perfil **Exhaustivo** y compáralo con
+      lo que tardaba antes. El recorrido cambió de motor y en PowerShell 5.1 se espera empate o mejora,
+      pero no se ha podido medir en Windows. Si se nota lento, dilo: el arreglo es de una sola función.
+
+---
+
 ## Bloque 1 · Lo que ha cambiado esta semana
 
 Aquí está el riesgo real. Son cambios de rendimiento, y un cambio de rendimiento mal hecho **no da error: da un resultado distinto en silencio.**
