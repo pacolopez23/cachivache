@@ -2,18 +2,26 @@
 
 `[VAL-02]`
 
-Cachivache tiene **1612 pruebas en verde y tres afirmaciones que nadie ha visto cumplirse**. No es
-una contradicción: las tres solo ocurren **al borrar de verdad**, y un borrado de verdad no se
-ensaya sobre las carpetas de uno.
+Cachivache tenía **tres afirmaciones que nadie había visto cumplirse**. No era una contradicción:
+las tres solo ocurren **al borrar de verdad**, y un borrado de verdad no se ensaya sobre las
+carpetas de uno.
+
+**El 1 de septiembre de 2026, la integración continua ejecutó este banco entero por primera vez.**
 
 | Afirmación | Estado |
 |---|---|
-| `COR-01` · si algo no cabe en la papelera, **no se borra** y se dice | Escrito, probado en frío, **nunca ejecutado** |
-| `COR-02` · una ruta de más de 260 caracteres se mide y se borra bien | Escrito, probado en frío, **nunca ejecutado** |
-| `COR-03` · un archivo de OneDrive bajo demanda no se descarga sin querer | Escrito, probado en frío, **nunca ejecutado** |
+| `COR-01` · si algo no cabe en la papelera, **no se borra** y se dice | Escrito, probado en frío, **nunca ejecutado**. Fuera de la CI a propósito: leer la cuota exige elevación, y un paso que se invierte solo según el día es peor que no tenerlo |
+| `COR-02` · una ruta de más de 260 caracteres se mide y se borra bien | ✅ **Ejecutado de verdad, y en cada push.** Sobre NTFS real, con PowerShell 5.1, que es la versión cuyo proveedor de archivos se para en los 260 |
+| `COR-03` · un archivo de OneDrive bajo demanda no se descarga sin querer | Escrito, probado en frío, **nunca ejecutado**. Hace falta una cuenta con archivos a petición |
 
-Este documento convierte esas tres en *"lo he visto"*. Lleva un rato la primera vez; después son
-veinte minutos por tanda.
+Y de paso, esa primera pasada real destapó **un fallo vivo que ninguna otra cosa podía ver**: el
+modo consola **moría en el momento de borrar**, porque el aviso de avance iba en un
+`.GetNewClosure()` y desde ahí no se ve ni una función del núcleo. Llevaba roto desde `ARQ-01`. La
+comprobación de arranque no lo pisaba —ejecuta el modo consola **sin `-Ejecutar`**— y las pruebas
+lo habían rodeado creyendo que era cosa de Pester.
+
+Este documento convierte las dos que quedan en *"lo he visto"*. Lleva un rato la primera vez;
+después son veinte minutos por tanda.
 
 > **Buena parte de esto ya no hace falta hacerlo a mano.** Desde `VAL-03`, la integración continua
 > monta este mismo banco en un agente de Windows y ejecuta una limpieza **real** en cada push:

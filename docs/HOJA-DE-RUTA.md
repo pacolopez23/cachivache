@@ -2,7 +2,7 @@
 
 **Fecha:** 29 de agosto de 2026
 **Punto de partida:** 21 módulos, 643 pruebas en verde, analizador limpio, `docs/PLAN-ACCION.md` cerrado.
-**Estado al 31 de agosto de 2026:** 1704 pruebas, analizador limpio, **60,7 % de cobertura**, 48 puntos cerrados y **ejecutado en Windows 11 con PowerShell 5.1**.
+**Estado al 1 de septiembre de 2026:** 1705 pruebas, analizador limpio, **60,7 % de cobertura**, 48 puntos cerrados, **ejecutado en Windows 11 con PowerShell 5.1** y —por primera vez— **los seis trabajos de la integración continua en verde**, incluido el banco con borrado real.
 **Objetivo de este documento:** decidir qué convierte a Cachivache en la mejor opción de su categoría,
 y en qué orden hacerlo.
 
