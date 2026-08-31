@@ -196,6 +196,32 @@ que se hace una vez a un hábito después de cada tanda de cambios.
   se haya ejecutado no dice que haga lo correcto. Los dos fallos de más abajo vivían en líneas
   perfectamente cubiertas.
 
+### El modo consola no podía borrar nada, y llevaba así desde `[ARQ-01]`
+
+`Cachivache.ps1 -Consola -Ejecutar` **moría en el momento de borrar**, con
+*"El término `Invoke-VaciarColaRegistro` no se reconoce"*. El análisis funcionaba, el informe se
+guardaba, y al llegar al primer elemento se caía.
+
+La causa: el aviso de avance del borrado se pasaba con `.GetNewClosure()`, que además de copiar las
+variables ejecuta el bloque en un **módulo dinámico**, donde las funciones se resuelven contra ese
+módulo y contra **global**. `Cachivache.ps1` carga el núcleo en ámbito de **script**, así que desde
+ahí dentro no se veía ni una función del programa.
+
+**Por qué no lo vio nadie**, que es la parte que importa:
+
+- La comprobación de arranque de la CI ejecuta el modo consola **sin `-Ejecutar`**, así que nunca
+  pisaba esa línea.
+- Las pruebas del modo consola sí la pisaban, y al escribirlas **se tropezaron con este mismo
+  error**. Se dio por hecho que era una rareza de Pester y se rodeó cargando el núcleo como módulo,
+  que hace globales las funciones y hace desaparecer el síntoma. Se rodeó el síntoma de un fallo de
+  verdad.
+
+Lo destapó el banco de pruebas de la integración continua, que es el único sitio donde se ejecuta
+una limpieza real. Las pruebas cargan ahora **igual que `Cachivache.ps1`**, y volver a poner el
+cierre hace fallar tres de ellas con el mensaje exacto. La lección está en la regla 4 de
+`docs/RELEVO.md`: **si el arnés de pruebas necesita un apaño que el programa no tiene, el apaño es
+el síntoma.**
+
 ### La suite nunca había estado verde en Windows, y nadie lo sabía
 
 Tres ejecuciones de la integración continua, tres rojos. El proyecto se había validado siempre

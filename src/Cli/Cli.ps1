@@ -32,6 +32,60 @@ function Write-Cabecera {
     Write-Linea ('  ' + ('-' * $Texto.Length)) 'tenue'
 }
 
+# ---------------------------------------------------------------------
+#  El aviso de avance del borrado
+# ---------------------------------------------------------------------
+#
+# ESTE BLOQUE ESTABA DENTRO DE Invoke-CachivacheCli CON .GetNewClosure(), Y
+# ASI EL MODO CONSOLA NO PODIA BORRAR NADA. Merece leerse entero, porque el
+# fallo es de los que no se ven mirando el codigo.
+#
+# .GetNewClosure() copia las variables del ambito actual, que es justo lo
+# que parece hacer falta aqui. Lo que ademas hace, y no se anuncia, es
+# ejecutar el bloque dentro de un MODULO DINAMICO nuevo: la resolucion de
+# funciones pasa a ir contra ese modulo y contra el ambito GLOBAL, y no
+# contra el sitio donde se escribio.
+#
+# Cachivache.ps1 dot-sourcea Bootstrap.ps1 en su ambito de SCRIPT, no en
+# global. Asi que desde dentro del cierre no se veia ni una funcion del
+# nucleo, y la primera -Invoke-VaciarColaRegistro- reventaba:
+#
+#     Invoke-LoteEliminacion : The term 'Invoke-VaciarColaRegistro' is not
+#     recognized as the name of a cmdlet, function, script file...
+#
+# O sea: "Cachivache.ps1 -Consola -Ejecutar" moria EN EL MOMENTO DE BORRAR.
+# El analisis funcionaba, el informe se guardaba, y al llegar al primer
+# elemento se caia. Llevaba asi desde que se escribio [ARQ-01].
+#
+# POR QUE NO LO VIO NADIE, que es la parte importante:
+#
+#   - La comprobacion de arranque de la integracion continua ejecuta el
+#     modo consola SIN -Ejecutar, asi que nunca pisaba esta linea.
+#   - Las pruebas del modo consola SI lo pisaban... y al escribirlas se
+#     tropezaron con este mismo error. Se dio por hecho que era una rareza
+#     de Pester y se rodeo cargando el nucleo como modulo, que hace
+#     globales las funciones y tapa el fallo. Se rodeo el sintoma de un
+#     fallo de verdad. Ahora las pruebas cargan como carga el programa.
+#
+# EL ARREGLO. Sin GetNewClosure el bloque conserva el ambito donde se
+# escribio, y desde ahi si se ven las funciones del nucleo. Lo que se
+# pierde es la captura de variables, y por eso las dos que necesita van en
+# $script:, puestas por Invoke-CachivacheCli antes de empezar el lote.
+$script:CliSilencioso = $false
+$script:CliSync       = $null
+
+$script:MostrarAvanceBorrado = {
+    param($candidato, $avance)
+    [void](Invoke-VaciarColaRegistro -Sync $script:CliSync)
+    if (-not $script:CliSilencioso) {
+        $marca  = if ($candidato.Error) { '!' } else { '+' }
+        $estilo = if ($candidato.Error) { 'aviso' } else { 'normal' }
+        Write-Linea ('  {0} {1,-52} {2,10}' -f $marca,
+                     (Get-RutaElidida $candidato.Nombre 52),
+                     (Format-Tamano $candidato.BytesLiberados)) $estilo
+    }
+}
+
 function Invoke-CachivacheCli {
     <#
     .SYNOPSIS
@@ -231,6 +285,11 @@ function Invoke-CachivacheCli {
     }
 
     if (-not $Silencioso) { Write-Cabecera 'Eliminacion' }
+
+    # Lo que el cierre de avance necesita y ya no puede capturar solo.
+    $script:CliSilencioso = [bool]$Silencioso
+    $script:CliSync       = $sync
+
     [void](Initialize-MotorBorrado)
     $libreAntes = Get-EspacioLibre $Configuracion.Unidad
     $liberado = 0.0
@@ -245,17 +304,7 @@ function Invoke-CachivacheCli {
     $resultadoLote = Invoke-LoteEliminacion -Candidatos $marcados `
                         -Permanente:$Configuracion.Permanente -Simular:$Simular `
                         -Configuracion $Configuracion -Sync $sync -Confirm:$false `
-                        -AlProgresar {
-                            param($candidato, $avance)
-                            [void](Invoke-VaciarColaRegistro -Sync $sync)
-                            if (-not $Silencioso) {
-                                $marca  = if ($candidato.Error) { '!' } else { '+' }
-                                $estilo = if ($candidato.Error) { 'aviso' } else { 'normal' }
-                                Write-Linea ('  {0} {1,-52} {2,10}' -f $marca,
-                                             (Get-RutaElidida $candidato.Nombre 52),
-                                             (Format-Tamano $candidato.BytesLiberados)) $estilo
-                            }
-                        }.GetNewClosure()
+                        -AlProgresar $script:MostrarAvanceBorrado
 
     $liberado = $resultadoLote.Liberado
     $hechos   = $resultadoLote.Hechos

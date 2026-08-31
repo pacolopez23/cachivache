@@ -22,32 +22,27 @@
 BeforeAll {
     $script:Raiz = Split-Path $PSScriptRoot -Parent
 
-    # POR QUE UN MODULO Y NO UN DOT-SOURCE, que es lo que hacen los demas
-    # archivos de pruebas.
+    # SE CARGA COMO LO CARGA EL PROGRAMA, Y ESO NO ES UN DETALLE.
     #
-    # Cli.ps1 le pasa a Invoke-LoteEliminacion un cierre con
-    # .GetNewClosure(), y ese cierre llama a Invoke-VaciarColaRegistro,
-    # Write-Linea y Format-Tamano. Un cierre se ejecuta en el ambito de un
-    # modulo dinamico, donde las funciones se resuelven contra el ambito
-    # GLOBAL. En el programa de verdad eso funciona porque Cachivache.ps1
-    # carga todo el nucleo en global; dot-sourceado dentro de un BeforeAll
-    # de Pester, en cambio, las funciones quedan en el ambito del archivo
-    # de pruebas y el cierre no las ve: "El termino
-    # Invoke-VaciarColaRegistro no se reconoce", en mitad de un borrado.
+    # Aqui hubo un modulo. Al escribir estas pruebas, la que borra de verdad
+    # fallaba con "El termino Invoke-VaciarColaRegistro no se reconoce", y se
+    # dio por hecho que era una rareza de Pester: se rodeo importando el
+    # nucleo como MODULO, que hace globales las funciones y hace desaparecer
+    # el error.
     #
-    # Importar el nucleo y la consola como un modulo reproduce lo que hace
-    # el programa: las funciones quedan visibles globalmente y el cierre
-    # las encuentra. Es decir, se prueba el mismo mecanismo que corre en
-    # produccion, que es la regla de siempre.
-    $rutas = @(
-        (Join-Path (Join-Path (Join-Path $script:Raiz 'src') 'Core') 'Bootstrap.ps1')
-        (Join-Path (Join-Path (Join-Path $script:Raiz 'src') 'Cli')  'Cli.ps1')
-        (Join-Path (Join-Path (Join-Path $script:Raiz 'src') 'Cli')  'Espacio.ps1')
-    )
-    $texto = (($rutas | ForEach-Object { ". '$_'" }) -join "`n") + "`nExport-ModuleMember -Function *-*"
-    $script:ModuloPruebas = New-Module -Name 'CachivacheParaPruebas' `
-                                       -ScriptBlock ([scriptblock]::Create($texto)) |
-                            Import-Module -PassThru -Force
+    # Era un fallo del programa. La integracion continua lo demostro dias
+    # despues, con el modo consola muriendo AL BORRAR en una limpieza real:
+    # el cierre de avance llevaba .GetNewClosure(), y desde un cierre no se
+    # ven las funciones del nucleo porque Cachivache.ps1 lo dot-sourcea en
+    # ambito de script y no en global.
+    #
+    # La leccion, que vale para cualquier prueba de este proyecto: cuando el
+    # arnes de pruebas necesita un apanyo que el programa no tiene, el apanyo
+    # NO es la solucion, es el sintoma. Se dot-sourcea igual que
+    # Cachivache.ps1 para que lo que falle aqui sea lo que falla alli.
+    . (Join-Path (Join-Path (Join-Path $script:Raiz 'src') 'Core') 'Bootstrap.ps1')
+    . (Join-Path (Join-Path (Join-Path $script:Raiz 'src') 'Cli')  'Cli.ps1')
+    . (Join-Path (Join-Path (Join-Path $script:Raiz 'src') 'Cli')  'Espacio.ps1')
 
     # Carpeta de datos propia: el historial, el registro y los informes
     # van aqui y no a la carpeta de verdad del usuario que ejecute esto.

@@ -15,8 +15,9 @@ importa tanto como que funcione.
 - Se ejecuta con `Cachivache.exe`, que lanza `powershell.exe` (5.1) sin consola visible.
 - Las pruebas se ejecutan con PowerShell 7 + Pester.
 
-**Estado hoy: 1704 pruebas en verde, analizador limpio, 60,7 % de cobertura, 48 puntos de la hoja
-de ruta cerrados.**
+**Estado hoy: 1705 pruebas en verde, analizador limpio, 60,7 % de cobertura, 48 puntos de la hoja
+de ruta cerrados. La suite pasa también en Windows, en PowerShell 5.1 y en 7** — algo que no había
+pasado nunca hasta el 1 de septiembre de 2026.
 
 ---
 
@@ -43,12 +44,19 @@ de ruta cerrados.**
    construida en el cuerpo de un `Describe` se evalúa en el DESCUBRIMIENTO de Pester y llega
    **vacía** a los `It`. La suite se queda en verde diciendo lo contrario de la verdad, y solo se
    ve mutando. Regla: **si un `It` lo lee, se construye en un `BeforeAll`.** Ha mordido tres veces.
-4. **Los comentarios explican el PORQUÉ, no el qué.** El repositorio está lleno de comentarios que
+4. **Si el arnés de pruebas necesita un apaño que el programa no tiene, el apaño es el síntoma.**
+   Al escribir las pruebas del modo consola, la que borra de verdad falló con *"el término
+   `Invoke-VaciarColaRegistro` no se reconoce"*. Se dio por hecho que era una rareza de Pester y se
+   rodeó cargando el núcleo como módulo, que hace globales las funciones y hace desaparecer el
+   error. **Era un fallo del programa**, y siguió vivo hasta que una limpieza real en la CI murió
+   con ese mismo mensaje. Carga, invoca y resuelve **igual que `Cachivache.ps1`**; cuando no puedas,
+   para y pregunta por qué el programa no lo necesita.
+5. **Los comentarios explican el PORQUÉ, no el qué.** El repositorio está lleno de comentarios que
    cuentan qué fallaba antes y por qué la solución es esa. Mantén ese nivel: es media nota del
    portfolio. Comentarios en ASCII sin tildes; el texto que lee el usuario, con tildes y eñes.
-5. **Todo archivo `.ps1` y `.xaml` va en UTF-8 CON BOM.** Hay una prueba que lo comprueba.
-6. **Se borra el código muerto.** No se deja "por si acaso".
-7. **Documentar al cerrar cada punto**: banner `> ✅ **RESUELTO.**` en `docs/HOJA-DE-RUTA.md`
+6. **Todo archivo `.ps1` y `.xaml` va en UTF-8 CON BOM.** Hay una prueba que lo comprueba.
+7. **Se borra el código muerto.** No se deja "por si acaso".
+8. **Documentar al cerrar cada punto**: banner `> ✅ **RESUELTO.**` en `docs/HOJA-DE-RUTA.md`
    (conservando el análisis original debajo, porque explica el porqué) y entrada en `CHANGELOG.md`.
 
 ---
@@ -156,6 +164,11 @@ esta lista es la frontera más cara del proyecto. Las cinco salieron de una sola
 - **`Remove-Item` sobre un enlace simbólico A UNA CARPETA lanza `NullReferenceException` en 5.1**, y
   `-ErrorAction SilentlyContinue` no lo tapa porque es una excepción del proveedor. Usa
   `[IO.Directory]::Delete($ruta, $false)`, que además nunca sigue el enlace.
+- **`.GetNewClosure()` te deja sin las funciones del núcleo.** Copia las variables, sí, pero además
+  ejecuta el bloque en un **módulo dinámico**, y ahí la resolución de funciones va contra ese módulo
+  y contra **global**. `Cachivache.ps1` dot-sourcea `Bootstrap.ps1` en ámbito de **script**, así que
+  desde un cierre no se ve ni una función del programa. Tuvo al modo consola **muriendo al borrar**
+  desde `ARQ-01`. Si el bloque necesita valores, ponlos en `$script:` y no uses el cierre.
 - **Un `$_` que atraviesa un `&` no es un mecanismo, es una apuesta.** Un scriptblock invocado con
   `&` corre en un ámbito nuevo y con la afinidad de sesión de donde se creó, así que si la variable
   automática llega depende de la versión. Pasa lo que necesite el bloque **como parámetro**.
