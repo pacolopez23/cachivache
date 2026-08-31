@@ -93,3 +93,12 @@ $RECYCLE.BIN/
 *.bak
 *.old
 ~$*
+
+# Informes de tools/Probar.ps1. Son la salida de una pasada de pruebas:
+# se regeneran solos y no describen el proyecto, describen una ejecucion.
+pruebas/
+
+# Guion de comodidad para subir desde este equipo. No es del proyecto: es
+# un atajo personal, y ademas lleva dentro el apanyo del candado que deja
+# el entorno del agente al leer el estado del repositorio.
+subir.bat

@@ -63,6 +63,130 @@
         & $volcarRegistro
     }
 
+    # =================================================================
+    #  [USO-10] La tabla no vuelve arriba cada vez que se reengancha
+    # =================================================================
+    # QUE DECIDE CADA UNO. Aquí no se decide nada: los tres cierres son
+    # el brazo ejecutor. Que desplazamiento se aplica y si la selección se
+    # restaura lo dice Get-PlanRestauracionTabla, en Posicion.ps1, que es
+    # cálculo puro y va probado. Aquí solo se lee de WPF, se pregunta, y
+    # se escribe en WPF.
+    #
+    # Nada de esto puede tumbar un análisis. Se ejecuta una vez por módulo
+    # y lo único que hay en juego es dónde queda la barra de
+    # desplazamiento; un fallo se anota y se sigue. Se anota de verdad,
+    # con nivel AVISO en el registro, y no con un catch mudo: este
+    # proyecto ya perdió el historial entero de las limpiezas
+    # interrumpidas por un catch que se tragaba la excepción sin dejar
+    # rastro (ver [CNF-04] y la nota de Add-EntradaHistorial).
+    $desplazadorDeTabla = {
+        # El ScrollViewer que desplaza el DataGrid vive DENTRO de su
+        # plantilla, así que no se puede pedir por nombre desde fuera: se
+        # baja por el árbol visual hasta encontrarlo. Se busca por TIPO y
+        # no por el nombre "DG_ScrollViewer" que le pone la plantilla por
+        # defecto de WPF, porque ese nombre es un detalle de esa plantilla
+        # concreta y basta con que alguien redefina el ControlTemplate en
+        # Styles.xaml para que deje de existir, en silencio.
+        if ($null -ne $estado.DesplazadorTabla) { return $estado.DesplazadorTabla }
+
+        # ::new() y no New-Object, que es la regla de [COR-07]: una
+        # coleccion generica creada con New-Object da un objeto que @( ) no
+        # sabe enumerar. Aquí no se enumera con @( ), pero la invariante no
+        # distingue casos y hace bien: la excepción de hoy es la costumbre
+        # de mañana. La cazó ella, no yo.
+        $pila = [System.Collections.Generic.Stack[System.Windows.DependencyObject]]::new()
+        $pila.Push($c.TablaResultados)
+        while ($pila.Count -gt 0) {
+            $nodo = $pila.Pop()
+            if ($nodo -is [System.Windows.Controls.ScrollViewer]) {
+                $estado.DesplazadorTabla = $nodo
+                return $nodo
+            }
+            $cuantos = [System.Windows.Media.VisualTreeHelper]::GetChildrenCount($nodo)
+            for ($i = 0; $i -lt $cuantos; $i++) {
+                $pila.Push([System.Windows.Media.VisualTreeHelper]::GetChild($nodo, $i))
+            }
+        }
+        return $null
+    }
+
+    # Se llama JUSTO ANTES de poner ItemsSource a $null. Devuelve siempre
+    # un objeto, nunca $null: quien restaura no tiene que preguntar.
+    $guardarPosicionTabla = {
+        $desplazamiento = 0.0
+        try {
+            $sv = & $desplazadorDeTabla
+            if ($null -ne $sv) { $desplazamiento = [double] $sv.VerticalOffset }
+        } catch {
+            Write-Registro -Sync $estado.Sync -Nivel 'AVISO' -Mensaje (
+                'No se ha podido guardar la posición de la tabla: {0}' -f $_.Exception.Message)
+        }
+        return [pscustomobject]@{
+            Desplazamiento = $desplazamiento
+            Seleccion      = $c.TablaResultados.SelectedItem
+        }
+    }
+
+    # Y este JUSTO DESPUES de volver a enganchar la colección.
+    $restaurarPosicionTabla = {
+        param($Guardado)
+
+        if ($null -eq $Guardado) { return }
+
+        try {
+            $sv = & $desplazadorDeTabla
+
+            # La medida hay que forzarla. Al reenganchar, WPF todavía no ha
+            # vuelto a medir: ScrollableHeight sigue valiendo lo de la
+            # lista ANTERIOR, y ScrollToVerticalOffset recorta contra ese
+            # máximo viejo. Con un módulo que añade dos mil filas, eso deja
+            # la tabla en el final de antes en vez de donde estaba el
+            # usuario, que es un salto distinto pero salto igual.
+            if ($null -ne $sv) { $c.TablaResultados.UpdateLayout() }
+
+            $maximo = 0.0
+            if ($null -ne $sv) { $maximo = [double] $sv.ScrollableHeight }
+
+            $habia   = $null -ne $Guardado.Seleccion
+            $visible = $false
+            if ($habia) {
+                # Si hay filtro puesto, se le pregunta A EL, invocando el
+                # mismo predicado que decide qué filas se ven. Preguntarlo
+                # de otra forma sería un segundo sitio decidiendo lo mismo.
+                #
+                # Con el predicado y no con Vista.Contains: Contains
+                # recorre la vista entera para averiguar exactamente esto,
+                # o sea otra pasada por quince mil filas por cada módulo
+                # que termina, frente a una sola invocación.
+                $filtro = $null
+                if ($null -ne $estado.Vista) { $filtro = $estado.Vista.Filter }
+                if ($null -eq $filtro) { $visible = $true }
+                else { $visible = [bool] $filtro.Invoke($Guardado.Seleccion) }
+            }
+
+            $plan = Get-PlanRestauracionTabla -Guardado ([double] $Guardado.Desplazamiento) `
+                                              -Maximo $maximo `
+                                              -HabiaSeleccion:$habia -SeleccionVisible:$visible
+            if (-not $plan.HayQueHacerAlgo) { return }
+
+            if ($plan.RestaurarSeleccion) {
+                # Selección sí, ScrollIntoView NO, y no es un olvido:
+                # llevar la tabla hasta la fila marcada se pelearía con el
+                # desplazamiento que se restaura tres líneas más abajo, y
+                # ganaría el último que escribiera. El sitio del usuario es
+                # donde está mirando, no donde dejó la marca. Hay una
+                # invariante que prohíbe que aparezca aquí.
+                $c.TablaResultados.SelectedItem = $Guardado.Seleccion
+            }
+            if ($plan.Desplazamiento -gt 0 -and $null -ne $sv) {
+                $sv.ScrollToVerticalOffset($plan.Desplazamiento)
+            }
+        } catch {
+            Write-Registro -Sync $estado.Sync -Nivel 'AVISO' -Mensaje (
+                'No se ha podido restaurar la posición de la tabla: {0}' -f $_.Exception.Message)
+        }
+    }
+
     # Manejador único para las casillas de las unidades. Se define aquí, en
     # el ámbito de la función, y NO se le aplica GetNewClosure, por el mismo
     # motivo que al de las filas de resultados: esa llamada capturaria solo
@@ -854,9 +978,17 @@
             # Se reasigna la COLECCION, igual que en los otros tres sitios
             # que tocan esta propiedad: WPF resuelve su vista por defecto,
             # que es esta misma instancia con su filtro y su agrupado.
+            #
+            # Y el mismo par que en el análisis: reenganchar pierde el
+            # sitio donde estaba el usuario. Cambiar de tema con la tabla
+            # llena es un caso menos frecuente que el análisis, pero es
+            # exactamente el mismo salto, así que se arregla con la misma
+            # pieza y no con una copia. Ver [USO-10].
+            $posicionTabla = & $guardarPosicionTabla
             $c.TablaResultados.ItemsSource = $null
             $c.TablaResultados.ItemsSource = $estado.Items
             $estado.Vista.Refresh()
+            & $restaurarPosicionTabla $posicionTabla
         }
 
         # El icono alterna entre luna (tema oscuro) y sol (tema claro).

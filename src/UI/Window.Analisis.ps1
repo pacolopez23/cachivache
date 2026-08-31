@@ -460,6 +460,15 @@ Initialize-Guardia -Configuracion $cfg
         # legal. La vista sobrevive: GetDefaultView devuelve siempre la
         # misma instancia para la misma coleccion, así que la agrupacion
         # por categoría y el filtro activo siguen puestos al reenganchar.
+        #
+        # [USO-10]: lo que sí perdía el reenganche era el sitio donde
+        # estaba mirando el usuario. WPF regenera la lista entera, así que
+        # el desplazamiento vuelve arriba y la selección se queda a nada.
+        # Con quince mil filas y un análisis de dos minutos, cada módulo
+        # que terminaba te devolvía al principio. Se guarda antes y se
+        # restaura después; qué se restaura lo decide
+        # Get-PlanRestauracionTabla, en Posicion.ps1.
+        $posicionTabla = & $guardarPosicionTabla
         $c.TablaResultados.ItemsSource = $null
         try {
 
@@ -505,6 +514,7 @@ Initialize-Guardia -Configuracion $cfg
 
         } finally {
             $c.TablaResultados.ItemsSource = $estado.Items
+            & $restaurarPosicionTabla $posicionTabla
         }
 
         & $escribir ("  {0}: {1} elementos, {2}." -f $nombreModulo, $candidatos.Count, (Format-Tamano $suma))

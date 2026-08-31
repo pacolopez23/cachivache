@@ -227,5 +227,8 @@ function Export-InformeEspacio {
     [void]$sb.AppendLine('<p class="tenue">Este informe no propone ni borra nada: solo mide.</p>')
     [void]$sb.AppendLine('</div></body></html>')
 
-    Set-Content -LiteralPath $Ruta -Value $sb.ToString() -Encoding UTF8
+    # -ErrorAction Stop: ver la nota larga en Export-InformeHtml. Sin esto,
+    # no poder escribir el archivo es un error no terminante y quien llama
+    # anuncia un informe que no existe.
+    Set-Content -LiteralPath $Ruta -Value $sb.ToString() -Encoding UTF8 -ErrorAction Stop
 }

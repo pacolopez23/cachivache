@@ -173,7 +173,46 @@ que se hace una vez a un hábito después de cada tanda de cambios.
   de la guardia son lógica de seguridad, no texto de interfaz: si alguien se las lleva a un archivo
   de idioma, rompe la guardia en silencio. `[I18N-02]`
 
+### Una sola pasada lo prueba todo, y dice qué no está probado
+
+- **`tools\Probar.ps1`**: un comando ejecuta la suite, el analizador y el suelo de cobertura, y deja
+  el informe en `pruebas\ultima-pasada.txt` con una copia fechada al lado. Antes eso era un bloque
+  de PowerShell que había que **pegar a mano** desde el relevo, y un ritual copiado a mano se rompe
+  en silencio: basta olvidar la segunda mitad para que el analizador deje de mirarse durante
+  semanas. La integración continua ahora llama al mismo guion en vez de a una copia suya.
+- **El modo consola pasó del 0 % al 87 % de cobertura.** `src/Cli` son 330 líneas de PowerShell
+  corriente —el camino que la documentación recomienda para la primera ejecución sin riesgo, y el
+  que usaría una tarea programada— que se podían haber ejecutado desde una prueba desde el primer
+  día, y nadie lo hizo nunca. En total, del 55,7 % al 60,7 %.
+- **Un suelo de cobertura por carpeta**, en `tools\Cobertura.ps1`, que solo puede subir. Un único
+  número total se sube escribiendo pruebas fáciles de lo que ya estaba bien mientras lo difícil se
+  pudre.
+- **`tests\datos\deuda-de-pruebas.txt`**: las funciones de `src\` que ninguna prueba nombra. La
+  lista solo puede encoger — la suite falla si aparece una función sin probar que no esté ahí, **y
+  también si un nombre de ahí ya está probado o ya no existe**. Sin esa segunda regla sería un
+  cajón donde meter lo incómodo.
+
+  Aviso que va escrito en los tres sitios: **cobertura no es lo mismo que probado.** Que una línea
+  se haya ejecutado no dice que haga lo correcto. Los dos fallos de más abajo vivían en líneas
+  perfectamente cubiertas.
+
 ### Corregido en esta tanda
+
+- **Un informe que no se podía guardar se anunciaba como guardado.** `Set-Content` y `Export-Csv`
+  sobre una carpeta que no existe dan un error **no terminante**: la función sigue y no lanza. Los
+  cuatro exportadores iban dentro de un `try/catch` de quien llama, así que el `catch` no se
+  disparaba nunca y la consola escribía *"Informe guardado en ..."* sobre un archivo inexistente —
+  y anotaba esa ruta en el historial, con lo que la ventana ofrecía después una tarjeta para abrir
+  un informe que no se escribió jamás. Misma familia que `[COR-01]`: el programa afirmando haber
+  hecho algo que no hizo. **Lo encontró la primera prueba que se escribió para el modo consola.**
+
+- **La tabla de resultados te devolvía al principio cada vez que terminaba un módulo.** Con quince
+  mil filas y un análisis de dos minutos, leer la fila 200 era imposible: se reengancha la colección
+  por módulo —correcto, y por rendimiento— y WPF regenera la lista entera, así que el desplazamiento
+  vuelve arriba y la selección se pierde. Ahora se guarda el sitio antes y se devuelve después.
+  Salieron dos cosas que el plan no decía: **el cambio de tema hacía el mismo salto** por el mismo
+  motivo, y una selección escondida por el filtro **no se restaura** —devolverla dejaría a *Abrir la
+  ubicación* actuando sobre una fila que nadie ve—. `[USO-10]`
 
 - **`-Quitar` no podía desmontar el banco de pruebas.** Recorría con `Get-ChildItem -Recurse`, que en
   PowerShell 5.1 se para a los 260 caracteres y bajo `-ErrorAction SilentlyContinue` no dice nada:

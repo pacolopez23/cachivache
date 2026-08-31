@@ -26,6 +26,10 @@ Add-Type -AssemblyName System.Xaml
 # las pruebas puedan recorrer las combinaciones sin interfaz grafica.
 . (Join-Path $PSScriptRoot 'Atajos.ps1')
 
+# Que posicion y que seleccion se recuperan al reenganchar la tabla. Otra
+# vez aparte y otra vez sin WPF dentro, por el mismo motivo. Ver [USO-10].
+. (Join-Path $PSScriptRoot 'Posicion.ps1')
+
 # =====================================================================
 #  CARGA DE XAML
 # =====================================================================
@@ -247,6 +251,13 @@ function Show-VentanaPrincipal {
         PerfilesVista = New-Object System.Collections.ObjectModel.ObservableCollection[Cachivache.PerfilVista]
         DiscosVista   = New-Object System.Collections.ObjectModel.ObservableCollection[Cachivache.DiscoVista]
         Cola          = @()
+        # El ScrollViewer que de verdad desplaza la tabla de resultados,
+        # una vez encontrado. Vive DENTRO de la plantilla del DataGrid, y
+        # esa plantilla no esta aplicada hasta que la ventana se carga, de
+        # modo que las primeras busquedas pueden no dar con el. Se guarda
+        # aqui SOLO cuando aparece: cachear el "no esta" condenaria a
+        # [USO-10] para toda la sesion.
+        DesplazadorTabla = $null
         Indice        = 0
         Total         = 0
         Ocupado       = $false

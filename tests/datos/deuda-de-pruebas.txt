@@ -1,0 +1,63 @@
+# Funciones de src/ que ninguna prueba nombra todavia.
+#
+# NO ES UNA LISTA DE EXCEPCIONES PERMANENTES: es lo que queda por hacer, y
+# SOLO PUEDE ENCOGER. tests/Inventario.Tests.ps1 falla si aparece una
+# funcion sin probar que no este aqui, y falla tambien si un nombre de
+# aqui ya esta probado o ya no existe. Esa segunda regla es la que impide
+# que esto se convierta en un cajon.
+#
+# POR QUE ESTO ES UN .txt Y NO UNA LISTA DENTRO DE LA PRUEBA
+# ----------------------------------------------------------
+# Porque el inventario busca cada nombre de funcion en el codigo de
+# tests/*.ps1, y una lista escrita ahi se nombraria a si misma: las 32
+# funciones sin probar constarian como probadas por figurar en la lista de
+# las que no lo estan. Se probo, y la suite se quedaba en verde diciendo
+# lo contrario de la verdad. Aqui no puede pasar: este archivo no es .ps1
+# y el inventario no lo lee.
+#
+# LOS MOTIVOS, por grupos, aunque los nombres van sin agrupar a proposito
+# -una lista partida en bloques invita a mover un nombre al bloque comodo
+# en vez de escribir la prueba-:
+#
+#   - Las de src/UI (Window.ps1, Maximizar.ps1): dot-sourcearlas exige
+#     PresentationFramework, o sea WPF, que no existe donde se ejecutan
+#     las pruebas. Tres de ellas son calculo puro y SI se podrian probar
+#     el dia que se muevan a un archivo sin WPF dentro, igual que se hizo
+#     con Atajos.ps1 y con Posicion.ps1. Ese es el arreglo, no una prueba.
+#   - Las que tocan el registro de Windows, el Shell o WMI: contestan otra
+#     cosa fuera de Windows, asi que su sitio es la integracion continua.
+#   - El resto es deuda a secas: se pueden probar aqui y todavia no lo
+#     estan. Empezar por ahi.
+
+Clear-CacheFirefox
+Clear-Miniaturas
+ConvertTo-RutaNormalizada
+Export-Preferencias
+Get-BibliotecasSteam
+Get-CarpetaConocida
+Get-CarpetaDatos
+Get-CarpetaInformes
+Get-CarpetaInterfaz
+Get-ColorAcentoTema
+Get-ColorRiesgo
+Get-DestinoAccesoDirecto
+Get-EstadoArranque
+Get-GeometriaTema
+Get-GuidVolumen
+Get-InformeEstiloCss
+Get-RaizProyecto
+Get-ReferenciaAnterior
+Get-RutaPowerShell
+Import-Xaml
+Initialize-InteropVentana
+Initialize-MotorBorrado
+Invoke-BusquedaPorLista
+New-EntradaCarpeta
+Register-LimiteMaximizado
+Resolve-EjecutableDeSistema
+Set-Progreso
+Show-VentanaPrincipal
+Test-CadenaSinEnlaces
+Test-Cancelacion
+Test-EsAdministrador
+Test-ProcesoAbierto

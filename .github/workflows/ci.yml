@@ -12,32 +12,45 @@ permissions:
 
 jobs:
   # ===================================================================
-  #  Analisis estatico: estilo, malas practicas y compatibilidad
+  #  La pasada completa: suite, analizador y suelo de cobertura
   # ===================================================================
-  analisis:
-    name: PSScriptAnalyzer
+  #
+  # Este trabajo NO reimplementa nada: llama a tools/Probar.ps1, que es el
+  # mismo comando que se ejecuta a mano. Antes aqui vivia una copia de la
+  # invocacion del analizador, y una copia es como se acaba teniendo dos
+  # sitios que comprueban cosas distintas -la leccion de [ARQ-01]-. Ademas
+  # es lo unico que hace que el suelo de cobertura se aplique de verdad:
+  # un trinquete que solo salta cuando alguien se acuerda de girarlo no es
+  # un trinquete.
+  #
+  # El trabajo "pruebas" de mas abajo sigue existiendo y no sobra: aquel
+  # ejecuta la suite en PowerShell 5.1 ademas de en 7, que es lo unico que
+  # detecta lo que solo se rompe en la version con la que corre el
+  # programa de verdad.
+  pasada:
+    name: Pasada completa (Probar.ps1)
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Instalar PSScriptAnalyzer
+      - name: Instalar Pester y PSScriptAnalyzer
         shell: pwsh
         run: |
           Set-PSRepository PSGallery -InstallationPolicy Trusted
+          Install-Module Pester -MinimumVersion 5.0 -Scope CurrentUser -Force -SkipPublisherCheck
           Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
 
-      - name: Analizar
+      - name: Probar
         shell: pwsh
-        run: |
-          $resultados = Invoke-ScriptAnalyzer -Path . -Recurse `
-                          -Settings ./PSScriptAnalyzerSettings.psd1
+        run: .\tools\Probar.ps1
 
-          if ($resultados) {
-              $resultados | Format-Table -AutoSize RuleName, Severity, ScriptName, Line, Message
-              Write-Host "::error::PSScriptAnalyzer ha encontrado $($resultados.Count) problemas."
-              exit 1
-          }
-          Write-Host 'Analisis limpio.'
+      - name: Guardar el informe de la pasada
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pasada-completa
+          path: pruebas
+          if-no-files-found: ignore
 
   # ===================================================================
   #  Pruebas en las dos versiones de PowerShell que hay en Windows

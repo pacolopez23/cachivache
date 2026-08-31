@@ -15,7 +15,8 @@ importa tanto como que funcione.
 - Se ejecuta con `Cachivache.exe`, que lanza `powershell.exe` (5.1) sin consola visible.
 - Las pruebas se ejecutan con PowerShell 7 + Pester.
 
-**Estado hoy: 1612 pruebas en verde, analizador limpio, 47 puntos de la hoja de ruta cerrados.**
+**Estado hoy: 1704 pruebas en verde, analizador limpio, 60,7 % de cobertura, 48 puntos de la hoja
+de ruta cerrados.**
 
 ---
 
@@ -37,6 +38,11 @@ importa tanto como que funcione.
    suite pasaba. El paso que existe para no fiarse de que una prueba pasa dio por buena una prueba
    porque pasaba. `Invoke-Mutacion` **lanza** si el texto no aparece o si aparece más de una vez, y
    restaura el archivo aunque el bloque reviente.
+
+   **Y verifica la mutación sobre lo que el `It` ve, no sobre lo que crees que ve.** Una lista
+   construida en el cuerpo de un `Describe` se evalúa en el DESCUBRIMIENTO de Pester y llega
+   **vacía** a los `It`. La suite se queda en verde diciendo lo contrario de la verdad, y solo se
+   ve mutando. Regla: **si un `It` lo lee, se construye en un `BeforeAll`.** Ha mordido tres veces.
 4. **Los comentarios explican el PORQUÉ, no el qué.** El repositorio está lleno de comentarios que
    cuentan qué fallaba antes y por qué la solución es esa. Mantén ese nivel: es media nota del
    portfolio. Comentarios en ASCII sin tildes; el texto que lee el usuario, con tildes y eñes.
@@ -49,7 +55,28 @@ importa tanto como que funcione.
 
 ## Cómo ejecutar las pruebas
 
-Desde la raíz del repositorio, en el entorno Linux del agente.
+**Un solo comando**, desde la raíz del repositorio:
+
+```bash
+~/pwsh/pwsh -NoProfile -File tools/Probar.ps1
+```
+
+Eso ejecuta la suite entera, el analizador y el suelo de cobertura, y deja el informe en
+`pruebas/ultima-pasada.txt` más una copia fechada al lado. Sale con código 0 si todo está en verde
+y 1 si no, así que sirve igual en la integración continua —donde ya lo usa el trabajo *Pasada
+completa*— y en un gancho de git.
+
+Opciones:
+
+- `-Rapido` — sin medir cobertura. Medirla multiplica por tres o cuatro lo que tarda, así que
+  mientras se itera sobre un punto no compensa.
+- `-Ruta tests/Cli.Tests.ps1` — un solo archivo.
+- `-SinRegistro` — no escribe el informe en disco.
+
+**Antes existía un bloque de PowerShell que había que pegar a mano desde aquí.** Se sustituyó por
+el guion porque un ritual copiado a mano es exactamente el tipo de cosa que se rompe en silencio:
+basta con que alguien olvide la segunda mitad para que el analizador deje de mirarse durante
+semanas.
 
 **Si `~/pwsh/pwsh` no existe, el entorno es nuevo y hay que montarlo primero** (tarda un par de
 minutos y solo hace falta una vez por sesión):
@@ -63,18 +90,28 @@ Install-Module Pester -MinimumVersion 5.0 -Scope CurrentUser -Force -SkipPublish
 Install-Module PSScriptAnalyzer -Scope CurrentUser -Force'
 ```
 
-Después:
+### Qué mide, y qué NO mide
 
-```bash
-~/pwsh/pwsh -NoProfile -Command '
-Import-Module Pester -MinimumVersion 5.0
-$c = New-PesterConfiguration; $c.Run.Path = "tests"; $c.Output.Verbosity = "None"; $c.Run.PassThru = $true
-$r = Invoke-Pester -Configuration $c
-"PRUEBAS: {0}  OK: {1}  FALLAN: {2}" -f $r.TotalCount, $r.PassedCount, $r.FailedCount
-$r.Failed | ForEach-Object { "=== " + $_.ExpandedPath; $_.ErrorRecord.Exception.Message }
-Import-Module PSScriptAnalyzer
-"ANALIZADOR: {0} avisos" -f @(Invoke-ScriptAnalyzer -Path . -Recurse -Settings ./PSScriptAnalyzerSettings.psd1).Count'
-```
+`Probar.ps1` imprime la cobertura por carpeta y la compara con el suelo de `tools/Cobertura.ps1`,
+que solo puede subir. Hoy:
+
+| Carpeta | Cobertura | Por qué |
+|---|---|---|
+| `src/Cli` | ~87 % | Estuvo **al 0 %** hasta el 31 de agosto de 2026 |
+| `src/Core` | ~85 % | |
+| `src/Modules` | ~65 % | Muchos módulos solo encuentran algo si el programa está instalado |
+| `src/UI` | ~5 % | **Aquí no hay WPF.** Ese 95 % no lo cubre ninguna prueba que se pueda escribir |
+
+**Cobertura no es lo mismo que probado.** Que una línea se haya ejecutado no dice que haga lo
+correcto: el fallo del `ValidateSet` del historial y el de los informes que se anunciaban guardados
+sin escribirse vivían los dos en líneas perfectamente cubiertas. Lo que protege este proyecto son
+las invariantes y la verificación por mutación; el suelo solo impide que un trozo entero se quede
+sin ejecutar nunca, como le pasó a `src/Cli` durante toda su vida.
+
+Y `tests/datos/deuda-de-pruebas.txt` lista **las funciones de `src/` que ninguna prueba nombra**.
+La lista solo puede encoger: `tests/Inventario.Tests.ps1` falla si aparece una función sin probar
+que no esté ahí, y falla también si un nombre de ahí ya está probado o ya no existe. Es la mejor
+lista de "qué hacer ahora" que tiene el proyecto.
 
 **Si tocas cualquier `src/UI/*.xaml`, regenera el oráculo de la ventana antes de ejecutar:**
 
@@ -111,8 +148,15 @@ Cada una de estas costó una sesión. Están aquí porque volverán a aparecer.
 
 **De las pruebas**
 
-- **Las pruebas que buscan texto encuentran tus propios comentarios.** Ha pasado cinco veces. Quita
+- **Las pruebas que buscan texto encuentran tus propios comentarios.** Ha pasado **siete** veces, y
+  las dos últimas el 31 de agosto de 2026: una prueba que prohibía `System.Windows` lo encontró en
+  la frase *"ni un tipo de System.Windows"* de la cabecera, y el inventario de funciones dio por
+  probadas trece funciones porque el comentario que explicaba que NO lo estaban las nombraba. Quita
   `^\s*#`, `<# #>` y `<!-- -->` antes de buscar.
+- **Y quita los bloques `<# #>` ANTES que las líneas que empiezan por `#`.** Al revés —que es como
+  está en varios archivos de pruebas— el primer paso se lleva por delante la línea del `#>`, el
+  bloque se queda sin cierre y el segundo encuentra el `#>` del bloque siguiente: sobrevive
+  documentación entera y desaparece código de verdad.
 - **Números mágicos en las expresiones regulares** (`{0,300}` sobre un bloque de 403 caracteres).
   Extrae el elemento y mira dentro, no cuentes caracteres.
 - **Toda prueba de texto necesita una guarda previa** del tipo "si no encuentro N cosas, esta prueba
@@ -154,7 +198,7 @@ Cada una de estas costó una sesión. Están aquí porque volverán a aparecer.
 
 ## Lo que queda abierto
 
-`docs/HOJA-DE-RUTA.md` es la fuente de verdad y está al día. Quedan **9 puntos**. El bloque de
+`docs/HOJA-DE-RUTA.md` es la fuente de verdad y está al día. Quedan **10 puntos**, dos de ellos nuevos (`VIS-04` y `VIS-05`). El bloque de
 accesibilidad está cerrado, y el de distribución entero salvo la firma. Lo que toca ahora:
 
 | Qué | Por qué |
@@ -162,8 +206,9 @@ accesibilidad está cerrado, y el de distribución entero salvo la firma. Lo que
 | **Pasar el banco en la VM** | `docs/BANCO-PRUEBAS.md`. Ahora es **mucho más corto**: la CI ya cubre lo que no exige mirar una ventana. Lo que queda a mano está en su apartado 8. Es lo primero, con diferencia: `COR-01`, `COR-02` y `COR-03` **no se han ejecutado nunca**, y ya son doce puntos entregados que él no ha visto. Cada punto nuevo ensancha esa distancia |
 | **Mirar la pestaña Actions** | La CI corre la suite en Windows real, en PowerShell 5.1 y en 7. Aquí solo se ejecuta en Linux con 7. Es información que no existe en ningún otro sitio |
 | **Enviar a `winget-pkgs`** | Trámite, no código: los manifiestos ya los genera la publicación. Hasta que se envíen, `winget install` no lo encuentra |
-| `USO-10` | La tabla salta al reengancharse por módulo: pierde posición y selección. Es lo más molesto de lo que queda |
 | `USO-11` | Limpiezas programadas. **Tiene una decisión de diseño pendiente que es suya**: qué significa "más conservador en desatendido" |
+| `VEL-03` | Marcar 5.000 filas bloquea la ventana. El recorrido es síncrono en el hilo de la interfaz |
+| `VIS-04` · `VIS-05` | Los dos huecos frente a WizTree que la hoja de ruta **no contemplaba**: analizar unidades extraíbles (solo analizar, nunca borrar) y enseñar la compresión NTFS. Salieron de comparar función a función en agosto de 2026 |
 
 La deuda de `CNF-01` —la tarjeta de Ajustes que su banner daba por hecha y nunca se hizo— **ya está
 cerrada**: *Lo que no se toca nunca*, con la lista y un botón por fila. Queda anotada en su banner.

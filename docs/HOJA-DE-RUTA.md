@@ -2,7 +2,7 @@
 
 **Fecha:** 29 de agosto de 2026
 **Punto de partida:** 21 módulos, 643 pruebas en verde, analizador limpio, `docs/PLAN-ACCION.md` cerrado.
-**Estado al 29 de agosto de 2026:** 1612 pruebas, analizador limpio, 47 puntos cerrados y **ejecutado en Windows 11 con PowerShell 5.1**.
+**Estado al 31 de agosto de 2026:** 1704 pruebas, analizador limpio, **60,7 % de cobertura**, 48 puntos cerrados y **ejecutado en Windows 11 con PowerShell 5.1**.
 **Objetivo de este documento:** decidir qué convierte a Cachivache en la mejor opción de su categoría,
 y en qué orden hacerlo.
 
@@ -70,6 +70,30 @@ Decidir esto ahora ahorra meses.
 ---
 
 ## Parte II — Validación en Windows
+
+### `VAL-04` · Una sola pasada, y saber qué NO se está probando · Hecha
+
+> ✅ **RESUELTO.** `tools/Probar.ps1` ejecuta la suite, el analizador y el suelo de cobertura de un
+> comando, y deja el informe en `pruebas/`. La integración continua llama al mismo guion en vez de
+> a una copia suya.
+>
+> **La medición dejó tres cosas por escrito, y ninguna era la esperada:**
+>
+> - **`src/Cli` estaba al 0 %.** 330 líneas de PowerShell corriente, sin una sola de WPF, que se
+>   podían haber probado desde el primer día. Es el camino que la documentación recomienda para la
+>   primera ejecución sin riesgo. Hoy está al 87 %, y la primera prueba que se escribió encontró un
+>   fallo vivo: **un informe que no se puede guardar se anunciaba como guardado.**
+> - **`src/UI` está al 5 %, y ese suelo no lo sube ninguna prueba.** Ahí no hay WPF: la mitad de lo
+>   que falta por cubrir no es deuda, es otra máquina. La cubren `docs/PRUEBA-MANUAL.md`, la CI en
+>   Windows y `docs/BANCO-PRUEBAS.md`.
+> - **32 funciones que ninguna prueba nombraba**, ahora en `tests/datos/deuda-de-pruebas.txt`. La
+>   lista solo puede encoger, y es la mejor lista de "qué hacer ahora" que tiene el proyecto.
+>
+> **Y la advertencia que va escrita en los tres archivos:** cobertura **no** es lo mismo que
+> probado. Los dos fallos vivos de esta tanda —el `ValidateSet` del historial y el informe que
+> mentía— vivían en líneas perfectamente cubiertas. Lo que protege este proyecto son las
+> invariantes y la verificación por mutación; el suelo solo impide que un trozo entero se quede sin
+> ejecutar nunca.
 
 ### `VAL-01` · Ejecutarlo en Windows · ~~Bloqueante~~ → **Hecho en parte, y hay que seguir haciéndolo**
 
@@ -698,6 +722,39 @@ cree que el análisis falló. → Texto según el caso, con *"[Quitar filtros]"*
 
 ### `USO-10` · La tabla salta mientras se analiza · Media
 
+> ✅ **RESUELTO.** Se guarda el sitio antes de desenganchar y se devuelve después. La decisión
+> —cuánto desplazamiento y si la selección se restaura— vive en `Get-PlanRestauracionTabla`, en
+> `src/UI/Posicion.ps1`, que es cálculo puro y no menciona un solo tipo de WPF.
+>
+> **No era un sitio, eran dos.** El análisis reengancha por módulo, pero **cambiar de tema con la
+> tabla llena hace exactamente lo mismo** y por el mismo motivo (`[C-12]`: los colores viajan como
+> cadenas que no notifican cambios, así que hay que reconstruir los contenedores). El plan solo
+> hablaba del análisis. Se arreglaron los dos con la misma pieza, y la invariante que lo protege
+> no cuenta sitios conocidos: **exige que en `src/UI` el número de desenganches, el de guardados y
+> el de restauraciones sean iguales, archivo por archivo.** Un cuarto sitio no puede aparecer sin
+> que la suite lo diga.
+>
+> **Dos decisiones que no son obvias y están escritas:**
+>
+> - **Una selección que el filtro esconde NO se restaura.** Devolverla dejaría al `DataGrid` con
+>   una fila marcada que nadie ve, y a *Abrir la ubicación*, al menú contextual y a Intro actuando
+>   sobre ella: el usuario pediría abrir una carpeta y se le abriría otra.
+> - **Restaurar la selección NO arrastra la tabla hasta ella.** Un `ScrollIntoView` se pelearía con
+>   el desplazamiento que se acaba de restaurar y ganaría el último en escribir. Si alguien marcó
+>   una fila y luego se fue a leer mil filas más abajo, su sitio es donde está mirando. Hay una
+>   invariante que prohíbe que aparezca ahí.
+>
+> **Un detalle que cuesta ver:** al reenganchar, WPF todavía no ha vuelto a medir, así que
+> `ScrollableHeight` sigue valiendo lo de la lista **anterior** y `ScrollToVerticalOffset` recorta
+> contra ese máximo viejo. Sin forzar la medida, un módulo que añade dos mil filas te deja en el
+> final de antes: otro salto, más pequeño. Por eso hay un `UpdateLayout()` en medio.
+>
+> **Pendiente de verlo en tu Windows.** Aquí no arranca WPF: lo probado es la decisión, no el
+> desplazamiento. Lo que hay que mirar es la fila 200 de un módulo largo mientras termina el
+> siguiente.
+>
+> *El análisis de abajo se conserva porque explica el porqué, que no caduca.*
+
 Se reengancha la colección por módulo, lo cual es correcto para el rendimiento pero **pierde la
 posición y la selección**: si estás leyendo la fila 200 cuando termina un módulo, saltas al
 principio. → Guardar y restaurar desplazamiento y selección.
@@ -1324,11 +1381,15 @@ es pequeña, y eso lo hace superable.
 | Contar bien los enlaces duros | ✗ **los cuenta dos veces** | **falta: `VIS-03`** |
 | Borrar desde el programa | ✓ WizTree apenas lo hace | ✓ |
 | Limpieza por categorías (21 módulos) | ✓ **WizTree no lo hace** | ✓ |
+| Escanea unidades extraíbles y externas | ✗ **solo discos fijos** | **falta: `VIS-04`** |
+| Enseña qué está comprimido con NTFS | ✗ | **falta: `VIS-05`** |
+| Escanea móviles y cámaras por USB | ✗ | **fuera de alcance: esto es un programa para PC** |
+| Versión portable | ✓ | ✓ |
 
-**Hoy: en torno al 50%. Con el plan actual: ~65%. Con los tres puntos `VIS`: por encima del 100%**,
+**Revisado en agosto de 2026, contra la lista de funciones real de WizTree. Hoy: ~55%.** Con `VEL-01` y los paneles de `VIS-01` y `VIS-02` en la ventana: **~80%**, no el 95% que se dijo primero — al comparar función a función aparecieron **dos huecos que este documento no contemplaba en ninguna parte**, y ahora son `VIS-04` y `VIS-05`. Con los cinco puntos `VIS` más `VEL-01`: **por encima del 100%**,
 porque a lo suyo se le suma todo lo que WizTree no hace.
 
-**Veredicto: sí, es alcanzable, y con tres puntos nuevos.**
+**Veredicto: sí, es alcanzable — pero con cinco puntos, no con tres.** Y la lección de haber hecho la comparación en serio: una tabla de competencia escrita de memoria **da por cubierto lo que nadie ha mirado**. Los dos huecos llevaban desde el principio sin aparecer en ningún punto, y el documento decía que el plan bastaba.
 
 ### Estado tras la primera tanda (29 de agosto de 2026)
 
@@ -1457,6 +1518,56 @@ devuelve 100 MB, no 200.
 
 ---
 
+### `VIS-04` · Analizar unidades extraíbles y externas · Media
+
+**Hueco descubierto al medirse contra WizTree en agosto de 2026, y no estaba en ningún punto.**
+
+Hoy `Get-UnidadesFijas` filtra por `DriveType Fixed`, así que un disco externo o una llave USB
+**no se analizan en absoluto**. WizTree los recorre sin más. Es la única función suya que este
+documento no contemplaba de ninguna forma.
+
+**El alcance, que es la decisión de fondo: analizar sí, borrar no.**
+
+Una unidad extraíble se puede desconectar en mitad de una operación, y eso convierte cualquier
+borrado en un error a medias sobre un disco que ya no está. Pero **medir y dibujar no tiene ese
+problema**: si el disco desaparece durante el análisis, se pierde el análisis y ya. Y medir es
+justo lo que hace falta para competir con WizTree, que no borra.
+
+Así que la regla es: **una unidad extraíble entra en el mapa, en la vista de archivos y en el
+informe, y NUNCA produce un candidato borrable.** Eso le gana la función a WizTree sin abrir la
+puerta peligrosa, y encaja con lo que ya existe — `Test-UnidadSeleccionada` es el sitio.
+
+**Lo que queda fuera, con su motivo:**
+
+- **Unidades de red.** La guardia las veta explícitamente, y con razón: son el disco de otro
+  ordenador, con la latencia y los permisos de otro, y un recorrido completo puede tardar horas o
+  molestar a alguien. Levantar ese veto es un punto propio, no un detalle de este.
+- **Móviles y cámaras por USB.** WizTree los escanea; Cachivache es un programa **para PC**, y
+  además esos dispositivos no son unidades con letra: van por MTP y exigen la API del Shell, que
+  es otro mundo entero. Fuera por alcance, no por dificultad.
+
+**Riesgo a vigilar:** la lista de unidades se calcula al arrancar y se refresca al abrir la
+ventana. Un disco enchufado a mitad de sesión no aparecerá hasta refrescar, y un disco quitado
+seguirá en la lista. Hoy eso no importa porque los discos fijos no se mueven; con los extraíbles
+sí, y la interfaz tendrá que decirlo en vez de fallar en silencio al analizar.
+
+### `VIS-05` · Enseñar qué está comprimido con NTFS · Pequeña
+
+**El otro hueco frente a WizTree**, y este es pequeño de verdad.
+
+WizTree marca los archivos comprimidos por NTFS y enseña su tamaño real frente al que ocupan en
+disco. Cachivache no lo mira, y eso significa que en una carpeta comprimida **el espacio que
+promete liberar es mayor que el que va a liberar**: es la misma familia de `VIS-03` con los
+enlaces duros, solo que en la otra dirección.
+
+**Es casi gratis, porque la mitad ya está hecha.** `Test-EsMarcadorNube` de `COR-03` ya lee
+atributos de archivo **por valor numérico** —no por nombre de enumeración, que es lo que rompía en
+.NET Framework—, y `FILE_ATTRIBUTE_COMPRESSED` es otro valor de la misma máscara que ya llega en
+el objeto del recorrido desde `COR-08`.
+
+**Criterio de aceptación:** un archivo comprimido de 100 MB que ocupa 30 MB en disco se enseña con
+las dos cifras, y lo que el programa promete liberar es 30, no 100.
+
 ## Parte XI — Orden de ejecución
 
 ### Estado (29 de agosto de 2026)
@@ -1497,6 +1608,7 @@ devuelve 100 MB, no 200.
 | `USO-09` estados vacíos | ✅ Hecho. La decisión en `Get-EstadoVacio`, cálculo puro; en el XAML ni un `DataTrigger`, y hay invariante que lo prohíbe. El botón quita **los dos** filtros y el rótulo dice cuántos. Salieron dos casos que no estaban en el plan y hacían falta. **Pendiente de verlo en tu Windows** |
 | `DIS-02` publicar los hashes | ✅ Hecho, y **no era una línea**. Sumas en la página de la versión y en `SHA256SUMS.txt`; el formato va probado, porque los cuatro descuidos que rompen un archivo de sumas no se ven mirándolo. El hallazgo: sin `--strict`, `sha256sum -c` sobre un archivo con BOM avisa, se salta esa línea y **sale con código 0** — la comprobación habría pasado por alto justo lo que venía a comprobar. Desbloquea `DIS-03` y `DIS-04` |
 | `VAL-02` banco de pruebas | 🟡 **El banco está hecho; falta la primera pasada.** `docs/BANCO-PRUEBAS.md` con los escenarios en orden y `tools/Banco-Pruebas.ps1` que monta los cebos. Las decisiones peligrosas —sobre todo "esta ruta cae dentro del banco"— viven aparte, en cálculo puro, con 31 pruebas y verificadas por mutación. Es lo único que puede convertir `COR-01`, `COR-02` y `COR-03` de "escrito" en "visto" |
+| `USO-10` la tabla salta al analizar | ✅ Hecho. Se guarda el sitio antes de desenganchar y se devuelve después; la decisión vive en `Get-PlanRestauracionTabla`, cálculo puro. **Eran dos sitios, no uno**: el cambio de tema hacía el mismo salto y el plan no lo decía. La invariante no cuenta sitios conocidos —exige que desenganches, guardados y restauraciones cuadren archivo por archivo—, así que un cuarto no puede colarse. Dos decisiones escritas: una selección que el filtro esconde **no** se restaura, y restaurarla **no** arrastra la tabla hasta ella. **Pendiente de verlo en tu Windows** |
 | `A11Y-04` atajos de teclado | ✅ Hecho, **sin `Supr`** y a propósito: es el único que empieza algo destructivo, y en una tabla esa tecla significa "esta fila", no "las 800 marcadas". La decisión vive en `Get-AtajoDeTecla`, cálculo puro, probada combinación por combinación; el despachador **levanta el `Click` del botón** en vez de repetir lo que hace, así que no pueden divergir y hereda gratis las guardas de cada botón |
 
 ### Ronda 0 — Antes de tocar nada (días)
@@ -1546,6 +1658,20 @@ los manifiestos de winget a `microsoft/winget-pkgs`, que es trámite, no código
 `VEL-01` tabla maestra de NTFS → `VIS-02` vista de archivos completa → `VIS-01` mapa del disco
 coloreado por riesgo. En ese orden: los tres se apoyan uno en otro, y el primero hace baratos a
 los otros dos.
+
+Y detrás, los dos que aparecieron al comparar función a función con WizTree en agosto de 2026:
+
+- **`VIS-05` compresión NTFS** va **pegado a `VIS-02`**, porque es una columna más de esa misma
+  vista y el atributo ya llega en el objeto del recorrido desde `COR-08`. Hacerlo aparte sería
+  volver a tocar lo mismo dos veces.
+- **`VIS-04` unidades extraíbles** va **el último de todos**, y no por tamaño: es el único que
+  cambia **qué discos mira el programa**. Con el mapa y la vista ya funcionando sobre discos fijos,
+  añadir una unidad más es un cambio acotado y verificable; al revés, sería mover el suelo mientras
+  se construye encima.
+
+**`VEL-01` decide antes que nada si `VIS-04` se complica**: la tabla maestra es de NTFS, y una
+llave USB suele venir en exFAT o FAT32. O sea que en extraíbles habrá que caer al recorrido normal
+igual — que es exactamente el retroceso que `VEL-01` ya contempla.
 
 `VIS-03` enlaces duros puede ir antes y por separado: es un error de cálculo, no una función.
 

@@ -47,7 +47,7 @@ Si sale **5.1**, tu ejecución vale doble: las pruebas automáticas corren en Po
 
 ---
 
-## Bloque 0 bis · La tanda del 30 de agosto — **diecisiete puntos sin ver**
+## Bloque 0 bis · La tanda del 30 de agosto — **dieciocho puntos sin ver**
 
 Esta es la lista de esta subida. Todo lo de aquí es **XAML o cableado de ventana**, o sea lo único
 que ninguna prueba de este proyecto puede ejecutar. Está ordenado por lo de siempre: si falla el
@@ -129,7 +129,26 @@ Es la vuelta completa, y la que más partes nuevas junta.
 - [ ] Marca **Anonimizar rutas**, guarda un informe HTML y busca tu nombre de usuario dentro: no debe
       estar. Repite con CSV y JSON desde *Informes* — la casilla vale también para ellos.
 
-### 0b.7 · Lo que se ve solo mirando
+### 0b.7 · La tabla ya no te devuelve al principio — `USO-10`
+
+Es lo más molesto de todo lo que había, y **hace falta un análisis largo para verlo**: perfil
+**Exhaustivo**, y hay que mirar la tabla *mientras* sigue analizando.
+
+- [ ] Con el análisis en marcha, **baja hasta la fila 200 y quédate ahí**. Cuando termine el módulo
+      siguiente y aparezcan filas nuevas, **la tabla no se mueve**. Antes saltabas al principio en
+      cada módulo.
+- [ ] **Selecciona una fila cualquiera** y espera a que termine otro módulo: la fila **sigue
+      seleccionada**.
+- [ ] Escribe algo en el filtro que **esconda esa fila seleccionada** y deja que termine un módulo.
+      Al quitar el filtro, **no debe quedar nada raro seleccionado**. Es deliberado: una selección
+      que no se ve no se restaura, porque *Abrir la ubicación* actuaría sobre ella.
+- [ ] Con la tabla llena y desplazada, **cambia de tema** (el botón de la luna/sol). Los colores
+      cambian y **sigues donde estabas**. Este sitio no estaba en el plan; salió al arreglarlo.
+- [ ] Si algo de esto no va, **mira el registro**: un fallo aquí se anota con nivel `AVISO` y el
+      texto *«No se ha podido restaurar la posición de la tabla»*. Que no aparezca esa línea es
+      parte de la comprobación.
+
+### 0b.8 · Lo que se ve solo mirando
 
 - [ ] **El resumen del análisis compara con el anterior** (`CNF-06`): al terminar el segundo análisis
       debe decir algo como *«(hace 4 días eran 890 elementos y 3,20 GB)»*. En el primero no dice nada,

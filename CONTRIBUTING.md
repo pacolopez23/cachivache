@@ -28,11 +28,16 @@ Install-Module PSScriptAnalyzer -Scope CurrentUser
 Antes de abrir un pull request:
 
 ```powershell
-Invoke-Pester ./tests
-Invoke-ScriptAnalyzer -Path . -Recurse -Settings ./PSScriptAnalyzerSettings.psd1
+.\tools\Probar.ps1
 ```
 
-Las dos cosas tienen que salir limpias. La CI las ejecuta en Windows con PowerShell 5.1 y con 7.
+Un solo comando: la suite, el analizador y el suelo de cobertura. Tiene que salir **TODO EN VERDE**,
+y el informe queda en `pruebas\ultima-pasada.txt`. La CI ejecuta este mismo guion, y además pasa la
+suite en Windows con PowerShell 5.1 y con 7.
+
+Si añades una función a `src\`, escríbele una prueba que la nombre. Si de verdad no se puede probar
+aquí —lo único con ese problema hoy es lo que necesita WPF—, añádela a
+`tests\datos\deuda-de-pruebas.txt` con su motivo. La lista solo puede encoger.
 
 ### Desarrollar fuera de Windows
 

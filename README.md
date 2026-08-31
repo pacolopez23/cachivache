@@ -273,14 +273,18 @@ El análisis y la eliminación se ejecutan en runspaces aparte, de modo que la v
 ## Desarrollo
 
 ```powershell
-# Pruebas
-Invoke-Pester ./tests
+# Todo de una pasada: suite, analizador y suelo de cobertura.
+# Deja el informe en pruebas\ultima-pasada.txt y sale con 0 o 1.
+.\tools\Probar.ps1
 
-# Análisis estático
-Invoke-ScriptAnalyzer -Path . -Recurse -Settings ./PSScriptAnalyzerSettings.psd1
+# Mientras iteras sobre un punto, sin medir cobertura:
+.\tools\Probar.ps1 -Rapido
 ```
 
-Ambas cosas se ejecutan en cada push mediante GitHub Actions. Si tocas la guardia de seguridad, las pruebas de `tests/Guard.Tests.ps1` tienen que seguir pasando todas: no hay excepciones.
+Se ejecuta en cada push mediante GitHub Actions, que llama **a este mismo guion**.
+
+`tests\datos\deuda-de-pruebas.txt` lleva las funciones que ninguna prueba nombra todavía, y la
+suite falla si esa lista crece. Es el mejor sitio por el que empezar si buscas dónde meter mano. Si tocas la guardia de seguridad, las pruebas de `tests/Guard.Tests.ps1` tienen que seguir pasando todas: no hay excepciones.
 
 Cómo contribuir en [`CONTRIBUTING.md`](CONTRIBUTING.md).
 

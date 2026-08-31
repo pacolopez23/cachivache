@@ -108,7 +108,7 @@ function Export-InformeCsv {
                       @{ n = 'Eliminado';     e = { $_.Hecho } },
                       @{ n = 'Liberado';      e = { Format-Tamano $_.BytesLiberados } },
                       @{ n = 'Error';         e = { & $limpiar $_.Error } } |
-        Export-Csv -LiteralPath $Ruta -NoTypeInformation -Encoding UTF8
+        Export-Csv -LiteralPath $Ruta -NoTypeInformation -Encoding UTF8 -ErrorAction Stop
 }
 
 function Export-InformeJson {
@@ -147,7 +147,7 @@ function Export-InformeJson {
             @{ n = 'Aviso';  e = { if ($Anonimo) { ConvertTo-RutaAnonima $_.Aviso }  else { $_.Aviso } } },
             @{ n = 'Error';  e = { if ($Anonimo) { ConvertTo-RutaAnonima $_.Error }  else { $_.Error } } })
     }
-    $documento | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $Ruta -Encoding UTF8
+    $documento | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $Ruta -Encoding UTF8 -ErrorAction Stop
 }
 
 function ConvertTo-HtmlSeguro {
@@ -314,7 +314,20 @@ function Export-InformeHtml {
     [void]$sb.AppendLine(('<footer>Generado por Cachivache v{0}. Este informe describe lo que el programa PROPONE; no implica que se haya borrado nada salvo que se indique lo contrario.</footer>' -f $script:VersionCachivache))
     [void]$sb.AppendLine('</div></body></html>')
 
-    Set-Content -LiteralPath $Ruta -Value $sb.ToString() -Encoding UTF8
+    # -ErrorAction Stop, y no es adorno. Set-Content sobre una carpeta que
+    # no existe -o sin permiso de escritura- da un error NO TERMINANTE: la
+    # funcion sigue, termina como si nada y NO lanza. Los cuatro sitios
+    # que exportan estan envueltos en un try/catch de quien llama, asi que
+    # el catch no se disparaba nunca y la consola escribia "Informe
+    # guardado en ..." sobre un archivo que no existe. Peor: la ruta se
+    # anotaba en el historial, de modo que la ventana ofrecia despues una
+    # tarjeta para abrir un informe que nunca se escribio.
+    #
+    # O sea, la misma familia que [COR-01]: el programa diciendo que hizo
+    # algo que no hizo. Lo encontro la primera prueba que se escribio para
+    # el modo consola; hay una invariante que exige el -ErrorAction Stop en
+    # los cuatro exportadores.
+    Set-Content -LiteralPath $Ruta -Value $sb.ToString() -Encoding UTF8 -ErrorAction Stop
 }
 
 function New-NombreInforme {
