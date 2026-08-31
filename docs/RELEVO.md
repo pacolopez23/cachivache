@@ -138,6 +138,27 @@ Cada una de estas costó una sesión. Están aquí porque volverán a aparecer.
   pantalla. Ha mordido **cuatro veces**. Pon paréntesis siempre: `('a' + 'b {0}') -f $x`.
 - **`-f` dentro de `.Add(...)`**: ahí la coma la lee PowerShell como separador de argumentos *del
   método*, no del formato. Arma la cadena en una variable y luego añádela.
+**De PowerShell 5.1 contra 7 — la suite pasa aquí en 7 y el programa corre allí en 5.1, así que
+esta lista es la frontera más cara del proyecto. Las cinco salieron de una sola tanda de CI.**
+
+- **`.Count` sobre el resultado de una función es `$null` en 5.1** cuando la función devolvió un
+  solo objeto: PowerShell desenvuelve la lista de un elemento, y `.Count` sobre un `PSCustomObject`
+  suelto vale 1 en PowerShell 7 y **`$null` en 5.1**. Escribe siempre `@(f ...).Count`. Se
+  manifestó como `Expected 1 ... but got $null` **solo en la integración continua**.
+- **`-Include` se IGNORA con `-LiteralPath` en 5.1.** En 7 filtra; en 5.1 devuelve el árbol entero.
+  Una invariante que exigía BOM a los `.ps1` pasó a exigírselo a `.md`, `.yml` y `.gitignore`.
+  Filtra por `$_.Extension` a mano.
+- **`$IsWindows` NO EXISTE en 5.1**: vale `$null`, así que `if (-not $IsWindows)` es **verdadero en
+  Windows**. Una rama escrita para no ejecutarse allí se ejecutaba justo allí. Usa
+  `$IsWindows -or ($null -eq $IsWindows)`.
+- **`[void]$x.A().B() | Out-Null` revienta en 5.1** con *"Argument type cannot be System.Void"*.
+  Cinturón y tirantes a la vez: elige uno. La misma línea sin el `Out-Null` funcionaba.
+- **`Remove-Item` sobre un enlace simbólico A UNA CARPETA lanza `NullReferenceException` en 5.1**, y
+  `-ErrorAction SilentlyContinue` no lo tapa porque es una excepción del proveedor. Usa
+  `[IO.Directory]::Delete($ruta, $false)`, que además nunca sigue el enlace.
+- **Un `$_` que atraviesa un `&` no es un mecanismo, es una apuesta.** Un scriptblock invocado con
+  `&` corre en un ámbito nuevo y con la afinidad de sesión de donde se creó, así que si la variable
+  automática llega depende de la versión. Pasa lo que necesite el bloque **como parámetro**.
 - **`New-Object System.Collections.Generic.List[...]`** devuelve algo que `@()` no sabe recorrer.
   Rompió todos los informes (`COR-07`). Usa siempre `::new()`. Hay una invariante.
 - **`$x = try { } catch { }`** es sintaxis de PowerShell 7. Aquí el programa corre en **5.1**.

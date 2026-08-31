@@ -191,8 +191,28 @@ Describe 'El recorrido no atraviesa puntos de reanalisis' {
         # Sin permiso para crear enlaces no hay nada que comprobar aquí.
         if (-not $creado) { return }
 
-        try   { Measure-Ruta $enlace | Should -Be 0 }
-        finally { Remove-Item -LiteralPath $enlace -Force -ErrorAction SilentlyContinue }
+        # SE BORRA CON System.IO Y NO CON Remove-Item.
+        #
+        # En Windows PowerShell 5.1, Remove-Item sobre un enlace simbolico A
+        # UNA CARPETA revienta con NullReferenceException -y ni siquiera
+        # -ErrorAction SilentlyContinue lo tapa, porque no es un error
+        # terminable sino una excepcion del proveedor-. La prueba fallaba en
+        # el finally, o sea DESPUES de haber comprobado lo que venia a
+        # comprobar, y el mensaje no hablaba de enlaces.
+        #
+        # Directory::Delete con $false borra el ENLACE y nunca su destino,
+        # que ademas es exactamente lo que este bloque quiere demostrar.
+        try {
+            Measure-Ruta $enlace | Should -Be 0
+        } finally {
+            try {
+                [IO.Directory]::Delete($enlace, $false)
+            } catch {
+                # No se calla del todo: un enlace que no se deja borrar deja
+                # basura en la carpeta temporal, y conviene poder verlo.
+                Write-Verbose "No se ha podido quitar el enlace de prueba: $($_.Exception.Message)"
+            }
+        }
     }
 
     It 'un enlace DENTRO del arbol no se sigue: su destino no se cuenta dos veces' {

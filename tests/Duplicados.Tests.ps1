@@ -28,7 +28,12 @@ BeforeAll {
 Describe 'Modulo duplicados: zonas solapadas (C-02)' {
 
     BeforeEach {
-        $script:carpetaPrueba = Join-Path ([IO.Path]::GetTempPath()) ('cachivache-dup-' + [guid]::NewGuid())
+        # Fuera de la carpeta temporal: en Windows cuelga de AppData y el
+        # modulo de duplicados descarta \AppData\ a proposito, asi que los
+        # cebos eran invisibles. La explicacion larga esta en el Describe
+        # de los enlaces duros, mas abajo.
+        $script:carpetaPrueba = Join-Path (Join-Path (Split-Path $PSScriptRoot -Parent) 'pruebas') `
+                                          ('tmp-dup-' + [guid]::NewGuid())
         New-Item -ItemType Directory -Path $script:carpetaPrueba -Force | Out-Null
 
         $script:sync = New-EstadoSincronizado
@@ -124,7 +129,25 @@ Describe 'VIS-03: dos enlaces duros no son dos copias' {
     #>
 
     BeforeAll {
-        $script:zonaDup = Join-Path ([IO.Path]::GetTempPath()) ('cachivache-dup-hl-' + [guid]::NewGuid())
+        # LOS CEBOS NO PUEDEN VIVIR EN LA CARPETA TEMPORAL DE WINDOWS.
+        #
+        # En Windows, [IO.Path]::GetTempPath() devuelve
+        # C:\Users\<quien>\AppData\Local\Temp, o sea DENTRO de AppData. Y el
+        # modulo de duplicados descarta a proposito todo lo que cuelgue de
+        # \AppData\, porque son datos de aplicacion y no trabajo del
+        # usuario. Resultado: el modulo no veia ni uno de los cebos,
+        # devolvia cero candidatos, y las pruebas comprobaban el vacio.
+        #
+        # En Linux la ruta es /tmp y no hay AppData, asi que pasaban aqui y
+        # solo fallaban en la integracion continua. Es exactamente el mismo
+        # fallo que [VAL-03] encontro en el banco -cebos invisibles para el
+        # programa-, con otro disfraz: alli era la guardia por el nombre,
+        # aqui es el filtro por la ruta.
+        #
+        # La carpeta va bajo pruebas\, que esta en .gitignore y no cuelga de
+        # AppData en ningun sistema.
+        $script:raizPruebas = Join-Path (Split-Path $PSScriptRoot -Parent) 'pruebas'
+        $script:zonaDup = Join-Path $script:raizPruebas ('tmp-dup-hl-' + [guid]::NewGuid())
         New-Item -ItemType Directory -Path $script:zonaDup -Force | Out-Null
 
         # Dos enlaces al MISMO contenido.

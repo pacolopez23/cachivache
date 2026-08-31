@@ -104,12 +104,38 @@ function Get-ReglasFiltroCandidato {
         - Nombre: para las pruebas y para leer la lista. Unico.
         - Coste: 0 = ni mira el candidato, 1 = solo texto en memoria,
           2 = consulta el disco. Ver el porque del orden mas abajo.
-        - Predicado: bloque de filtro al estilo de Where-Object. Recibe el
-          candidato en $_, el contexto de New-ContextoEmbudo como unico
-          parametro, y devuelve $true para CONSERVARLO. Se aplica siempre
-          igual, desde el embudo y desde las pruebas:
+        - Predicado: recibe DOS PARAMETROS -el contexto de
+          New-ContextoEmbudo y el candidato- y devuelve $true para
+          CONSERVARLO. Se aplica siempre igual, desde el embudo y desde las
+          pruebas:
 
-              @($candidatos) | Where-Object { & $regla.Predicado $contexto }
+              @($candidatos) | Where-Object { & $regla.Predicado $contexto $_ }
+
+        EL CANDIDATO VA COMO PARAMETRO, NO EN $_. Antes iba en $_, y eso
+        obliga a que la variable automatica del Where-Object atraviese el
+        operador "&". Un scriptblock invocado con "&" se ejecuta en un
+        ambito nuevo y con la afinidad de sesion del sitio donde se CREO,
+        no del sitio donde se llama, asi que si $_ llega o no depende de la
+        version de PowerShell. Aqui se prueba en 7 sobre Linux y el
+        programa corre en 5.1 sobre Windows: justo las dos puntas de esa
+        diferencia.
+
+        Y el sintoma de que no llegue no es un error, es EL PEOR POSIBLE:
+        $_ vale $null, "$null -ne $_" es falso, y el embudo tira TODOS los
+        candidatos. El programa no encuentra nada y no dice nada. Un
+        parametro corriente no depende de ningun ambito y no puede
+        comportarse distinto en una version que en otra. Hay una invariante
+        que prohibe que vuelva a aparecer un $_ en un predicado.
+
+        HONESTIDAD SOBRE ESTE CAMBIO: con $_ TAMBIEN funcionaba en 5.1. Se
+        cambio mientras se investigaban trece fallos de la integracion
+        continua, sospechando que la causa era esta; no lo era -las pruebas
+        del embudo en 5.1 pasaban, y las que fallaban lo hacian por como
+        cuenta ".Count" esa version-. Se deja cambiado igualmente, porque
+        depender de que una variable automatica atraviese un "&" es una
+        apuesta sobre el interprete, y este archivo ya se rompio una vez por
+        como se resuelven los ambitos al invocar un scriptblock: esa
+        historia, que si ocurrio, esta contada justo debajo.
 
         POR QUE UN CONTEXTO Y NO UN CIERRE. La primera version armaba los
         predicados con .GetNewClosure(), que parece justo lo que hace falta:
@@ -154,7 +180,7 @@ function Get-ReglasFiltroCandidato {
     $reglas.Add([pscustomobject]@{
         Nombre    = 'Candidato existente'
         Coste     = 0
-        Predicado = { param($Contexto) $null -ne $_ }
+        Predicado = { param($Contexto, $Candidato) $null -ne $Candidato }
     })
 
     # Regla 1. Las unidades que el usuario ha desmarcado.
@@ -162,8 +188,8 @@ function Get-ReglasFiltroCandidato {
         Nombre    = 'Unidad seleccionada'
         Coste     = 1
         Predicado = {
-            param($Contexto)
-            Test-UnidadSeleccionada -Ruta $_.Ruta -Configuracion $Contexto.Configuracion
+            param($Contexto, $Candidato)
+            Test-UnidadSeleccionada -Ruta $Candidato.Ruta -Configuracion $Contexto.Configuracion
         }
     })
 
@@ -174,9 +200,9 @@ function Get-ReglasFiltroCandidato {
         Nombre    = 'Exclusiones del usuario'
         Coste     = 1
         Predicado = {
-            param($Contexto)
+            param($Contexto, $Candidato)
             if ($Contexto.Excluidas.Count -eq 0) { return $true }
-            return -not (Test-ClaveExcluida -Clave $_.ClaveExclusion -Excluidas $Contexto.Excluidas)
+            return -not (Test-ClaveExcluida -Clave $Candidato.ClaveExclusion -Excluidas $Contexto.Excluidas)
         }
     })
 
@@ -187,10 +213,10 @@ function Get-ReglasFiltroCandidato {
         Nombre    = 'Guardia de rutas'
         Coste     = 2
         Predicado = {
-            param($Contexto)
-            if ($Contexto.SinRuta -contains $_.Metodo) { return $true }
-            return (Test-RutaSegura -Ruta $_.Ruta -Raices $_.Raices `
-                                    -PermitirPersonales:$_.PermitirPersonales)
+            param($Contexto, $Candidato)
+            if ($Contexto.SinRuta -contains $Candidato.Metodo) { return $true }
+            return (Test-RutaSegura -Ruta $Candidato.Ruta -Raices $Candidato.Raices `
+                                    -PermitirPersonales:$Candidato.PermitirPersonales)
         }
     })
 
@@ -313,7 +339,7 @@ function Invoke-ModuloLimpieza {
     $contexto = New-ContextoEmbudo -Configuracion $Configuracion
     $validos  = @($candidatos)
     foreach ($regla in (Get-ReglasFiltroCandidato)) {
-        $validos = @($validos | Where-Object { & $regla.Predicado $contexto })
+        $validos = @($validos | Where-Object { & $regla.Predicado $contexto $_ })
     }
 
     return [pscustomobject]@{

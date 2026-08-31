@@ -57,12 +57,21 @@ function Get-SueloCobertura {
     [OutputType([hashtable])]
     param()
 
+    # EL SUELO ES EL DEL PEOR SISTEMA, NO EL DEL QUE TENGAS DELANTE.
+    #
+    # Esto se aprendio a la primera: los numeros se fijaron midiendo en
+    # Linux, y la integracion continua -que mide en Windows- tumbo el
+    # trabajo por src/Modules. Y tenia razon en tumbarlo: hay modulos cuyo
+    # codigo solo se ejecuta en uno de los dos sistemas, asi que la misma
+    # suite cubre porcentajes distintos segun donde corra. Un suelo puesto
+    # con la medida del sistema mas generoso no es un trinquete: es un
+    # trabajo que falla los lunes.
     return @{
-        'total'   = 59    # medido 60,6
-        'Core'    = 84    # medido 85,0
-        'Modules' = 63    # medido 64,7
-        'Cli'     = 86    # medido 87,5 - estaba a 0 hasta el 31 de agosto de 2026
-        'UI'      = 4     # medido  5,1 - aqui no hay WPF; ver la cabecera
+        'total'   = 59    # Linux 60,6   Windows 60,1
+        'Core'    = 84    # Linux 85,0   Windows 86,1 (Windows cubre MAS)
+        'Modules' = 60    # Linux 64,7   Windows 61,1 (Windows cubre MENOS)
+        'Cli'     = 86    # Linux 87,5   Windows 87,5 - estaba a 0 hasta el 31 de agosto de 2026
+        'UI'      = 4     # Linux  5,1   Windows  5,1 - aqui no hay WPF; ver la cabecera
     }
 }
 

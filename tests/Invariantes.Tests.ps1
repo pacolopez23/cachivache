@@ -303,8 +303,19 @@ Describe 'La codificación de los archivos no puede volver a romperse' {
 
     BeforeAll {
         $script:RaizProyecto = Split-Path $PSScriptRoot -Parent
+        # -Include SE IGNORA con -LiteralPath en Windows PowerShell 5.1.
+        #
+        # En PowerShell 7 filtra; en 5.1 no, y devuelve el arbol ENTERO. La
+        # prueba de abajo pasaba a exigir un BOM a .md, .yml, .gitignore y
+        # al propio .bat, asi que fallaba con una lista de veinte archivos
+        # que no tienen por que llevarlo. Y la de los .bat pasaba a recorrer
+        # el repositorio entero buscando bytes altos: 23 segundos y otra
+        # lista enorme.
+        #
+        # Se filtra por extension a mano, que da igual en las dos versiones.
         $script:ConBom = @(
-            Get-ChildItem -LiteralPath $script:RaizProyecto -Recurse -File -Include '*.ps1', '*.xaml' |
+            Get-ChildItem -LiteralPath $script:RaizProyecto -Recurse -File |
+            Where-Object { $_.Extension -eq '.ps1' -or $_.Extension -eq '.xaml' } |
             Where-Object { $_.FullName -notmatch '\\\.git\\' }
         )
     }
@@ -329,7 +340,11 @@ Describe 'La codificación de los archivos no puede volver a romperse' {
         # La consola de Windows no usa UTF-8 por defecto: un acento en un
         # .bat sale como un símbolo raro en la ventana del usuario.
         $sucios = @()
-        foreach ($archivo in (Get-ChildItem -LiteralPath $script:RaizProyecto -Recurse -File -Include '*.bat')) {
+        # Filtrado a mano por lo mismo: -Include no filtra en 5.1.
+        $bats = @(Get-ChildItem -LiteralPath $script:RaizProyecto -Recurse -File |
+                  Where-Object { $_.Extension -eq '.bat' })
+        $bats.Count | Should -BeGreaterThan 0 -Because 'sin ningun .bat esta prueba no comprueba nada'
+        foreach ($archivo in $bats) {
             $bytes = [IO.File]::ReadAllBytes($archivo.FullName)
             if ($bytes | Where-Object { $_ -gt 127 }) { $sucios += $archivo.Name }
         }

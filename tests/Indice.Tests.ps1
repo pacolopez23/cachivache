@@ -278,8 +278,22 @@ Describe 'VIS-01: el mapa dibujado en SVG' {
     }
 
     It 'escapa el contenido: un nombre con caracteres de marcado no rompe el SVG' {
+        # EL NOMBRE LLEVABA < > Y COMILLAS, Y ESO NO EXISTE EN WINDOWS.
+        #
+        # Son caracteres PROHIBIDOS en un nombre de archivo de Windows, asi
+        # que New-Item fallaba con "The filename, directory name, or volume
+        # label syntax is incorrect" y la prueba se caia entera. En Linux
+        # si son legales, de ahi que aqui pasara y en la CI no.
+        #
+        # Peor que un fallo: la prueba comprobaba el escapado contra un
+        # nombre que NO SE PUEDE DAR en el unico sistema donde corre el
+        # programa. Verde por un caso imposible.
+        #
+        # El ampersand y el apostrofo SI son legales en Windows, y el
+        # ampersand es justo el que rompe un XML si no se escapa. Eso es lo
+        # que hay que probar: lo que un usuario puede llegar a crear.
         $zona = Join-Path ([IO.Path]::GetTempPath()) ('cachivache-svg2-' + [guid]::NewGuid())
-        $mala = Join-Path $zona 'a <b> & "c"'
+        $mala = Join-Path $zona "a & b 'c'"
         try {
             New-Item -ItemType Directory -Path $mala -Force | Out-Null
             [IO.File]::WriteAllBytes((Join-Path $mala 'x.bin'), (New-Object byte[] 2000000))
@@ -287,7 +301,8 @@ Describe 'VIS-01: el mapa dibujado en SVG' {
             $s = Get-MapaSvg -Indice $i -Ruta $zona
 
             { [xml]$s } | Should -Not -Throw -Because 'el nombre de una carpeta lo elige quien la creo'
-            $s | Should -Not -Match '<title>a <b>'
+            $s | Should -Not -Match "<title>a & b"
+            $s | Should -Match 'a &amp; b' -Because 'el ampersand tiene que salir escapado, no crudo'
         } finally {
             Remove-Item -LiteralPath $zona -Recurse -Force -ErrorAction SilentlyContinue
         }

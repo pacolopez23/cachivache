@@ -495,7 +495,7 @@ param($raiz)
     Sensible    = Test-NombreSensible 'CualquierCosa'
     Personal    = Test-ArchivoPersonal 'C:\x\basura.tmp'
 }
-'@).AddArgument($script:Raiz) | Out-Null
+'@).AddArgument($script:Raiz)
 
         $resultado = $sesion.Invoke() | Select-Object -First 1
         $sesion.Dispose()
@@ -738,7 +738,7 @@ $script:GuardiaLista = $false
     Personal = Test-ArchivoPersonal 'C:\Users\prueba\Documents\memoria.docx'
     Sensible = Test-NombreSensible 'CualquierCosa'
 }
-'@).AddArgument($script:Raiz) | Out-Null
+'@).AddArgument($script:Raiz)
 
         $resultado = $sesion.Invoke() | Select-Object -First 1
         $sesion.Dispose()

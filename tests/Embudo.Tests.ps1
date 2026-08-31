@@ -55,7 +55,7 @@ BeforeAll {
     # distinto del que corre en produccion.
     function Invoke-ReglaSuelta {
         param($Regla, $Candidatos, $Contexto)
-        return @(@($Candidatos) | Where-Object { & $Regla.Predicado $Contexto })
+        return @(@($Candidatos) | Where-Object { & $Regla.Predicado $Contexto $_ })
     }
 
     # Los candidatos de los casos. Cada uno esta construido para que lo
@@ -157,17 +157,71 @@ Describe 'ARQ-02: regla a regla, cada una rechaza lo suyo y respeta el resto' {
         @{ Regla = 'Exclusiones del usuario'; Caso = 'excluido' }
         @{ Regla = 'Guardia de rutas';        Caso = 'vetado por la guardia' }
     ) {
-        $regla = @(Get-ReglasFiltroCandidato | Where-Object { $_.Nombre -eq $Regla })
-        $regla.Count | Should -Be 1 -Because "sin la regla '$Regla' este caso no comprueba nada"
+        # $elegida y NO $regla: PowerShell NO distingue mayusculas en los
+        # nombres de variable, asi que "$regla = ..." pisaba el $Regla que
+        # trae el -ForEach. El nombre de la prueba seguia saliendo bien
+        # -se expande en el descubrimiento, antes de esta linea-, pero el
+        # texto del -Because salia vacio y el mensaje de fallo decia
+        # "'' no puede llevarse por delante un candidato legitimo", sin
+        # nombrar la regla. Un fallo que no dice cual de las tres es.
+        $elegida = @(Get-ReglasFiltroCandidato | Where-Object { $_.Nombre -eq $Regla })
+        $elegida.Count | Should -Be 1 -Because "sin la regla '$Regla' este caso no comprueba nada"
 
         $contexto = New-ContextoEmbudo -Configuracion $script:Cfg
         $malo     = Get-CandidatoDeCaso -Caso $Caso
         $bueno    = Get-CandidatoDeCaso -Caso 'control'
 
-        (Invoke-ReglaSuelta -Regla $regla[0] -Candidatos $malo  -Contexto $contexto).Count |
+        # Guarda: si los cebos no se hubieran construido, lo de abajo daria
+        # 0 y 0. El primer Should pasaria -por el motivo equivocado- y solo
+        # fallaria el segundo, culpando a la regla de tirar un candidato
+        # legitimo que en realidad nunca existio.
+        $malo  | Should -Not -BeNullOrEmpty -Because 'sin cebo no hay nada que rechazar'
+        $bueno | Should -Not -BeNullOrEmpty -Because 'sin control no se puede ver que la regla no pasa de largo'
+
+        # EL @( ) DE FUERA NO SOBRA, y es un trampa de PowerShell 5.1.
+        #
+        # Al devolver una lista de UN elemento, PowerShell la desenvuelve y
+        # quien llama recibe el objeto suelto. Y ".Count" sobre un
+        # PSCustomObject suelto vale 1 en PowerShell 7 pero $null en 5.1.
+        # De ahi el "Expected 1 ... but got $null" que solo salia en la
+        # integracion continua: no fallaba la regla, fallaba la forma de
+        # contar. Envolver en @( ) fija el tipo antes de preguntar.
+        @(Invoke-ReglaSuelta -Regla $elegida[0] -Candidatos $malo  -Contexto $contexto).Count |
             Should -Be 0 -Because "'$Regla' existe para rechazar esto"
-        (Invoke-ReglaSuelta -Regla $regla[0] -Candidatos $bueno -Contexto $contexto).Count |
+        @(Invoke-ReglaSuelta -Regla $elegida[0] -Candidatos $bueno -Contexto $contexto).Count |
             Should -Be 1 -Because "'$Regla' no puede llevarse por delante un candidato legitimo"
+    }
+
+    It 'ningun predicado lee el candidato de $_' {
+        # LA INVARIANTE QUE IMPIDE VOLVER AL MECANISMO FRAGIL.
+        #
+        # Con el candidato en $_, el predicado depende de que la variable
+        # automatica del Where-Object atraviese el operador "&", y eso
+        # cambia entre versiones de PowerShell. Si no llega, "$null -ne $_"
+        # es falso para todos y el embudo TIRA TODOS LOS CANDIDATOS: el
+        # programa no encuentra nada y no da ni un error.
+        #
+        # Se lee el codigo fuente y no se ejecuta nada, porque el fallo
+        # solo se manifiesta en la version en la que aqui no se puede
+        # ejecutar. Sin comentarios, que si no esta misma explicacion
+        # contaria como un $_.
+        $ruta  = Join-Path (Join-Path (Join-Path (Split-Path $PSScriptRoot -Parent) 'src') 'Core') 'ModuleRegistry.ps1'
+        $texto = [regex]::Replace([IO.File]::ReadAllText($ruta), '(?s)<#.*?#>', '')
+        $texto = (@($texto -split "`r?`n" | Where-Object { $_ -notmatch '^\s*#' }) -join "`n")
+
+        $bloques = [regex]::Matches($texto, '(?s)Predicado\s*=\s*\{(.*?)\n\s*\}\)')
+        # Guarda: si el patron dejara de encontrar los predicados, esta
+        # prueba pasaria sin mirar ninguno.
+        $bloques.Count | Should -BeGreaterOrEqual 3 -Because 'hay al menos tres predicados de varias lineas'
+
+        foreach ($b in $bloques) {
+            $b.Groups[1].Value | Should -Not -Match '\$_' -Because (
+                'el candidato tiene que llegar como parametro, no en $_: ver la cabecera de Get-ReglasFiltroCandidato')
+        }
+
+        # Y el de una sola linea, que el patron de arriba no coge.
+        ($texto -split "`n" | Where-Object { $_ -match 'Predicado\s*=\s*\{.*\}' }) |
+            Should -Not -Match '\$_'
     }
 
     It 'la regla del candidato nulo tira el nulo y solo el nulo' {
@@ -188,7 +242,10 @@ Describe 'ARQ-02: regla a regla, cada una rechaza lo suyo y respeta el resto' {
         $mezcla = @($null, (Get-CandidatoDeCaso -Caso 'control'), $null)
         $mezcla.Count | Should -Be 3 -Because 'si la lista llega colapsada, este caso no comprueba nada'
 
-        $vivos = Invoke-ReglaSuelta -Regla $regla[0] -Candidatos $mezcla -Contexto $contexto
+        # El @( ) de fuera, otra vez: en PowerShell 5.1 una lista de un
+        # elemento vuelve desenvuelta y su .Count vale $null. Ver la nota
+        # larga de la prueba de mas arriba.
+        $vivos = @(Invoke-ReglaSuelta -Regla $regla[0] -Candidatos $mezcla -Contexto $contexto)
         $vivos.Count | Should -Be 1
         $vivos[0].ClaveExclusion | Should -Be 'C:\normal\cosa'
     }

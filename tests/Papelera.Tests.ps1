@@ -106,7 +106,15 @@ Describe 'Get-EstadoPapelera: se comporta fuera de Windows' {
         # La diferencia entre "no cabe" y "no lo se" es justo la que evita
         # convertir un fallo de lectura en una parada total del programa.
         $e = Get-EstadoPapelera -Unidad 'C:'
-        if (-not $IsWindows) {
+
+        # $IsWindows NO EXISTE en Windows PowerShell 5.1: vale $null, y
+        # "-not $null" es verdadero, asi que esta rama -pensada para NO
+        # ejecutarse en Windows- se ejecutaba justo alli, exigiendo un -1
+        # sobre una papelera de verdad que si sabe decir su cuota.
+        # 5.1 solo corre en Windows, de modo que "no lo se" tambien cuenta
+        # como Windows.
+        $esWindows = $IsWindows -or ($null -eq $IsWindows)
+        if (-not $esWindows) {
             $e.CapacidadBytes | Should -Be -1
             $e.Disponible     | Should -BeTrue
         }

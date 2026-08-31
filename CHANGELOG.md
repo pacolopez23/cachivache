@@ -196,6 +196,32 @@ que se hace una vez a un hábito después de cada tanda de cambios.
   se haya ejecutado no dice que haga lo correcto. Los dos fallos de más abajo vivían en líneas
   perfectamente cubiertas.
 
+### La suite nunca había estado verde en Windows, y nadie lo sabía
+
+Tres ejecuciones de la integración continua, tres rojos. El proyecto se había validado siempre
+contra Linux con PowerShell 7; el programa corre en Windows con **5.1**. Trece pruebas fallaban
+allí, y **ninguna era un fallo del programa**: las trece eran pruebas mal escritas para la versión
+en la que el programa vive de verdad.
+
+- **`-Include` se ignora con `-LiteralPath` en 5.1.** La invariante que exige BOM a los `.ps1`
+  estaba recorriendo el repositorio entero y exigiéndoselo a `.md`, `.yml` y `.gitignore`.
+- **`$IsWindows` no existe en 5.1**, así que vale `$null` y `if (-not $IsWindows)` es **verdadero
+  en Windows**: una rama escrita para no ejecutarse allí se ejecutaba justo allí.
+- **`.Count` sobre una lista de un elemento vale `$null` en 5.1** y 1 en 7. Cuatro pruebas del
+  embudo fallaban por cómo contaban, no por lo que comprobaban.
+- **`[void]$x.A().B() | Out-Null` revienta en 5.1**: cinturón y tirantes a la vez.
+- **`Remove-Item` sobre un enlace simbólico a una carpeta lanza `NullReferenceException` en 5.1**, y
+  `-ErrorAction SilentlyContinue` no lo tapa.
+- **Los cebos de duplicados vivían en `%TEMP%`**, que en Windows es `AppData\Local\Temp`, y el
+  módulo descarta `\AppData\` a propósito: eran invisibles para el programa. Mismo fallo que
+  `[VAL-03]` encontró en el banco, con otro disfraz.
+- **Una prueba comprobaba el escapado del SVG con una carpeta llamada `a <b> & "c"`**, con
+  caracteres **prohibidos en Windows**. Verde por un caso imposible en el único sistema donde el
+  programa corre.
+
+Las cinco primeras están ahora en la lista de trampas de `docs/RELEVO.md`, que es donde se miran
+antes de escribir una prueba.
+
 ### Corregido en esta tanda
 
 - **Un informe que no se podía guardar se anunciaba como guardado.** `Set-Content` y `Export-Csv`
