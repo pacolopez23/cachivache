@@ -432,22 +432,29 @@ Describe 'VIS-03: los enlaces duros se cuentan una sola vez' {
         $script:suelto = Join-Path $script:carpetaEnlaces 'suelto.bin'
         [IO.File]::WriteAllBytes($script:suelto, (New-Object byte[] 50000))
 
-        # Se crea el enlace duro con la herramienta del sistema y se
-        # comprueba que ha funcionado: en un sistema de archivos que no los
-        # admita, las pruebas se saltan.
+        # DOS PREGUNTAS, NO UNA. Antes esto era una sola bandera que juntaba
+        # ".el sistema de archivos admite enlaces duros?" con ".sabe verlos
+        # el programa?", y al fallar no habia forma de saber cual de las dos
+        # habia dicho que no. Costo una ronda entera de integracion continua.
         $script:enlace = Join-Path $script:carpetaEnlaces 'enlace.bin'
-        $script:HayEnlaces = $false
+        $script:EnlaceCreado = $false
+        $script:HayEnlaces   = $false
         try {
             if ($IsWindows -or $env:OS -eq 'Windows_NT') {
                 & cmd /c mklink /H "`"$script:enlace`"" "`"$script:original`"" 2>&1 | Out-Null
             } else {
                 & ln $script:original $script:enlace 2>&1 | Out-Null
             }
-            $script:HayEnlaces = (Test-Path -LiteralPath $script:enlace) -and
-                                 ($null -ne (Get-IdentidadArchivo -Ruta $script:original))
+            $script:EnlaceCreado = Test-Path -LiteralPath $script:enlace
+            $script:HayEnlaces   = $script:EnlaceCreado -and
+                                   ($null -ne (Get-IdentidadArchivo -Ruta $script:original))
         } catch {
-            $script:HayEnlaces = $false
+            $script:EnlaceCreado = $false
+            $script:HayEnlaces   = $false
         }
+
+        # PowerShell 5.1 no define $PSEdition como 'Core'.
+        $script:EsPwsh7 = $PSVersionTable.PSVersion.Major -ge 6
     }
 
     AfterAll {
@@ -455,8 +462,37 @@ Describe 'VIS-03: los enlaces duros se cuentan una sola vez' {
     }
 
     It 'el sistema de archivos admite enlaces duros' {
-        # Si esta falla, las siguientes se saltan: mejor decirlo que fingir.
-        $script:HayEnlaces | Should -BeTrue -Because 'sin enlaces duros reales estas pruebas no prueban nada'
+        $script:EnlaceCreado | Should -BeTrue -Because 'sin enlace creado no hay nada que medir'
+    }
+
+    It 'y el programa sabe verlos, salvo la degradacion conocida de PowerShell 7' {
+        <#
+            AQUI HAY UN HUECO DE VERDAD, Y NO SE TAPA: SE ESCRIBE.
+
+            Get-IdentidadArchivo, en Windows, se apoya en LinkType y Target
+            de Get-Item. En Windows PowerShell 5.1 -que es donde arranca
+            Cachivache.exe- eso funciona. En PowerShell 7, Target dejo de
+            rellenarse para enlaces duros (solo devuelve destino de enlaces
+            SIMBOLICOS), asi que la funcion contesta $null y [VIS-03] se
+            degrada EN SILENCIO: los enlaces duros vuelven a contarse dos
+            veces, sin un solo error.
+
+            Por que esta prueba no se limita a saltarse en 7: porque un
+            Skipped permanente es una forma de dejar de mirar. Lo que se
+            exige aqui es que la degradacion sea EXACTAMENTE la conocida.
+            Si algun dia apareciera tambien en 5.1 -o sea, en la version en
+            la que el programa corre de verdad-, esto se pone en rojo, que
+            es justo cuando hay que enterarse.
+
+            El arreglo de verdad esta anotado como [COR-09] en la hoja de
+            ruta: leer el numero de serie del volumen y el indice del
+            archivo, que es el mismo dato que traeria gratis [VEL-01].
+        #>
+        if ($script:HayEnlaces) { return }
+
+        $script:EsPwsh7 | Should -BeTrue -Because (
+            'en PowerShell 5.1 los enlaces duros SI se detectan. Que no se detecten ahi ' +
+            'significa que VIS-03 esta roto en la version con la que corre el programa')
     }
 
     It 'un archivo con un solo enlace no tiene identidad compartida' {

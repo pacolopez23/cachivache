@@ -349,6 +349,33 @@ borra de menos, igual que antes — solo que ahora por otro motivo.
 esos recorridos a `System.IO` como se hizo con el borrado. **Tamaño: medio**, y toca los veintiún
 módulos o el sitio por el que todos pasan.
 
+### `COR-09` · La identidad de un archivo no puede depender de la versión de PowerShell · Media
+
+**Hueco encontrado por la integración continua el 1 de septiembre de 2026**, en la primera tanda en
+la que la suite llegó a ejecutarse entera en Windows.
+
+`Get-IdentidadArchivo` —la pieza de `VIS-03` que impide contar dos veces un enlace duro— averigua
+en Windows si un archivo comparte contenido mirando `LinkType` y `Target` de `Get-Item`. **Eso
+funciona en Windows PowerShell 5.1 y no en PowerShell 7**, donde `Target` solo devuelve el destino
+de enlaces *simbólicos*. Resultado: bajo 7 la función contesta `$null`, `VIS-03` deja de aplicarse
+y los enlaces duros vuelven a inflar la medición. **Sin ningún error**, que es lo de siempre.
+
+Hoy no afecta al programa de ventana —`Cachivache.exe` lanza `powershell.exe`, o sea 5.1—, pero sí
+a `Cachivache.ps1 -Consola` bajo `pwsh`, que el README ofrece como forma válida de usarlo.
+
+**El arreglo: no preguntárselo al proveedor de PowerShell.** El dato que hace falta es el número de
+serie del volumen más el índice del archivo, que identifican el contenido sin ambigüedad y son los
+mismos en las dos versiones. `GetFileInformationByHandle` los da, y de paso da el contador de
+enlaces, que es lo que permite salir barato en el caso normal.
+
+**Cuidado con una trampa que ya cerró `COR-03`:** esa API necesita un descriptor abierto, y **abrir
+un archivo de OneDrive bajo demanda lo descarga**. Hay que abrirlo sin acceso de lectura de datos,
+o comprobar antes el atributo de marcador de nube. Escribir esto sin poder ejecutarlo en Windows es
+justo la clase de cosa que este proyecto no hace: **requiere `VAL-01`.**
+
+**Criterio de aceptación:** la prueba *"y el programa sabe verlos"* de `tests/FileSystem.Tests.ps1`
+pasa en las dos versiones sin su rama de degradación, y esa rama se borra.
+
 ### `COR-05` · El mapeo candidato → fila de la interfaz es manual · Media
 
 > ✅ **RESUELTO.** `tests/Contrato.Tests.ps1`. **No hay ningún fallo vivo:** los 8 campos del
@@ -1496,7 +1523,14 @@ disco, listarlos y buscarlos no cuesta nada más.** Los dos puntos se sostienen 
 
 ### `VIS-03` · Contar bien los enlaces duros · Media — y hoy es un error de cálculo
 
-> ✅ **RESUELTO.** Los enlaces duros ya no se cuentan como espacio recuperable.
+> ✅ **RESUELTO en PowerShell 5.1**, que es donde arranca `Cachivache.exe`. Los enlaces duros ya no
+> se cuentan como espacio recuperable.
+>
+> ⚠️ **Y se degrada en silencio bajo PowerShell 7.** `Get-IdentidadArchivo` se apoya en `LinkType` y
+> `Target` de `Get-Item`; en 7, `Target` dejó de rellenarse para enlaces duros —solo devuelve
+> destino de enlaces **simbólicos**—, así que la función contesta `$null` y los enlaces duros
+> vuelven a contarse dos veces, sin un solo error. Lo destapó la integración continua el 1 de
+> septiembre de 2026, y el arreglo es `COR-09`.
 >
 > *El análisis de abajo se conserva porque explica el porqué, que no caduca.*
 
