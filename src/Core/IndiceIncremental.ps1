@@ -167,7 +167,23 @@ function ConvertTo-NumeroIndice {
 
     $largo = $null
 
-    if ($Valor -is [int] -or $Valor -is [long] -or $Valor -is [short] -or
+    # [int16] Y NO [short]. Los dos nombran el mismo tipo de .NET, pero
+    # "short" es un acelerador que PowerShell NO tiene hasta la version 6:
+    # en Windows PowerShell 5.1 -que es donde corre el programa- esta linea
+    # lanzaba "Unable to find type [short]" y se llevaba por delante la
+    # funcion entera. O sea que [VEL-02] estaba MUERTO en la unica
+    # plataforma que importa, y verde en las pruebas de Linux.
+    #
+    # No se vio antes porque la comprobacion de un tipo solo se evalua
+    # cuando se ejecuta la linea, no al cargar el archivo: el analizador no
+    # dice nada y la suite de PowerShell 7 pasa. Lo destapo la integracion
+    # continua de 5.1, con 21 pruebas en rojo de golpe.
+    #
+    # Los demas nombres de aqui ([int], [long], [byte], [uint32], [uint64],
+    # [double], [single], [decimal]) SI existen en 5.1. El unico que
+    # faltaba era este. Hay una invariante en tests/Invariantes.Tests.ps1
+    # que ahora barre src/ entera buscando aceleradores de la 6 en adelante.
+    if ($Valor -is [int] -or $Valor -is [long] -or $Valor -is [int16] -or
         $Valor -is [byte] -or $Valor -is [uint32] -or $Valor -is [uint64]) {
         $largo = [long]$Valor
     } elseif ($Valor -is [double] -or $Valor -is [single] -or $Valor -is [decimal]) {

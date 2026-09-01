@@ -66,28 +66,28 @@ function Get-SueloCobertura {
     # suite cubre porcentajes distintos segun donde corra. Un suelo puesto
     # con la medida del sistema mas generoso no es un trinquete: es un
     # trabajo que falla los lunes.
-    # Y POR ESO ESTOS NUMEROS NO SUBIERON EL 1 DE SEPTIEMBRE DE 2026.
+    # ASI SE SUBEN, Y ASI SE SUBIERON EL 1 DE SEPTIEMBRE DE 2026.
     #
-    # Ese dia se pago la deuda de pruebas entera -23 funciones que no
-    # nombraba nadie, 227 pruebas nuevas- y en Linux el total subio a 66,1
-    # y Core a 88,6. La tentacion era obvia: subir el suelo a 65 y a 88.
+    # Ese dia se pago la deuda de pruebas entera: 23 funciones que no
+    # nombraba ninguna prueba, 227 pruebas nuevas. En Linux el total paso
+    # a 66,1 y Core a 88,6, y la tentacion era subir los suelos en ese
+    # mismo momento.
     #
-    # No se hizo, y el motivo es el parrafo de aqui arriba. Windows NO se
-    # ha medido con esas pruebas todavia; la ultima medida suya es del 31
-    # de agosto, o sea de antes. Subir el suelo con la medida de UN solo
-    # sistema es literalmente el error que ya tumbo un trabajo una vez.
+    # No se hizo hasta tener LAS DOS MEDIDAS, por el parrafo de aqui
+    # arriba. Se subieron cuando la integracion continua publico la de
+    # Windows, y con esta receta: el MENOR de los dos sistemas en cada
+    # fila, menos un punto de margen. Windows resulto cubrir MAS que Linux
+    # en las cuatro filas, asi que el que manda es Linux.
     #
-    # ASI QUE ESTE ES EL SIGUIENTE PASO CONCRETO, cuando la integracion
-    # continua publique la medida de Windows de la version actual: coger
-    # el MENOR de los dos sistemas en cada fila, restarle un punto, y
-    # poner eso. Si Windows confirma numeros parecidos a los de Linux, el
-    # total se va a 65 y Core a 87.
+    # Los comentarios llevan las dos medidas a proposito. Cuando vuelvan a
+    # subir, se repite la receta: no se toca este archivo con una sola
+    # medida delante.
     return @{
-        'total'   = 59    # Linux 66,1 (01-sep)   Windows 60,1 (31-ago, SIN las pruebas nuevas)
-        'Core'    = 84    # Linux 88,6 (01-sep)   Windows 86,1 (31-ago, SIN las pruebas nuevas)
-        'Modules' = 60    # Linux 65,4            Windows 61,1 (Windows cubre MENOS)
-        'Cli'     = 86    # Linux 89,4            Windows 87,5 - estaba a 0 hasta el 31 de agosto de 2026
-        'UI'      = 4     # Linux  5,1            Windows  5,1 - aqui no hay WPF; ver la cabecera
+        'total'   = 65    # Linux 66,1   Windows 66,8
+        'Core'    = 87    # Linux 88,6   Windows 89,4
+        'Modules' = 64    # Linux 65,4   Windows 66,6
+        'Cli'     = 88    # Linux 89,4   Windows 89,4 - estaba a 0 hasta el 31 de agosto de 2026
+        'UI'      = 4     # Linux  5,1   Windows  5,1 - aqui no hay WPF; ver la cabecera
     }
 }
 

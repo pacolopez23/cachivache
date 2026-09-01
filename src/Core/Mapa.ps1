@@ -112,9 +112,16 @@ function Get-DisposicionMapa {
     $resultado = [Collections.Generic.List[object]]::new()
     if ($Ancho -le 0 -or $Alto -le 0) { return @($resultado) }
 
+    # El filtro de arriba ya leia la propiedad con una expresion y el orden
+    # de abajo no, y esa asimetria era un fallo esperando: sobre los
+    # diccionarios que devuelve un indice LEIDO de disco -[VEL-02]-, en
+    # Windows PowerShell 5.1 el Where-Object funciona y el "Sort-Object
+    # -Property $Propiedad" NO ORDENA, sin decir nada. El mapa de arbol
+    # saldria con los rectangulos repartidos en un orden cualquiera y
+    # nadie sabria por que.
     $lista = @(@($Elementos) |
                Where-Object { $null -ne $_ -and [double]$_.$Propiedad -gt 0 } |
-               Sort-Object -Property $Propiedad -Descending)
+               Sort-Object -Property { [double]$_.$Propiedad } -Descending)
     if ($lista.Count -eq 0) { return @($resultado) }
 
     $total = 0.0

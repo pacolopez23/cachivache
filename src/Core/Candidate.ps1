@@ -396,6 +396,13 @@ function Invoke-BusquedaPorLista {
     foreach ($entrada in @($Entradas)) {
         if (Test-Cancelacion $Sync) { break }
         if (-not $IncluirMenores -and $entrada.Menor) { continue }
+        # La ruta se comprueba ANTES de pasarsela a Test-Path, y no es
+        # paranoia: en PowerShell 5.1 un -LiteralPath nulo NO da un error
+        # no terminante como en la 7, sino una excepcion de enlace de
+        # parametros que aborta el recorrido ENTERO. Una sola entrada mal
+        # escrita en la lista de un modulo dejaba sin proponer todo lo que
+        # viniera detras, y en la 7 no se notaba nada.
+        if ([string]::IsNullOrWhiteSpace($entrada.R)) { continue }
         if (-not (Test-Path -LiteralPath $entrada.R)) { continue }
 
         # La guardia ANTES de medir. Las dos condiciones son independientes

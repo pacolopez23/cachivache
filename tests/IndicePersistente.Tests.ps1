@@ -32,11 +32,10 @@ BeforeAll {
     $script:Nucleo = Join-Path (Join-Path $script:Raiz 'src') 'Core'
     . (Join-Path $script:Nucleo 'Bootstrap.ps1')
 
-    # IndicePersistente.ps1 se carga APARTE y a proposito: todavia no esta
-    # en la lista de Bootstrap.ps1 porque el enganche del punto es otro
-    # trabajo. En cuanto entre en esa lista, esta linea sobra y hay que
-    # quitarla -dot-sourcearlo dos veces no rompe nada, pero mentiria
-    # sobre como se carga en el programa de verdad.
+    # IndicePersistente.ps1 lo carga ya Bootstrap.ps1, asi que aqui NO se
+    # vuelve a dot-sourcear: hacerlo funcionaria, pero estas pruebas
+    # dejarian de medir como se carga el archivo en el programa de verdad.
+    # La ruta se guarda solo para las invariantes que leen su texto.
     $script:RutaPersistente = Join-Path $script:Nucleo 'IndicePersistente.ps1'
 
     $script:Zona = Join-Path ([IO.Path]::GetTempPath()) ('cachivache-idxdisco-' + [guid]::NewGuid())
@@ -321,8 +320,21 @@ Describe 'Ida y vuelta con un indice de verdad' {
     It 'una entrada leida se deja usar igual que la que produce el recorrido' {
         # La promesa es "que quien lo consuma no note de donde vino": se
         # accede por propiedad, se ordena y se filtra igual.
-        $mayor = @($script:Leido.Archivos | Sort-Object Bytes -Descending)[0]
-        $mayorOriginal = @($script:Original.Archivos | Sort-Object Bytes -Descending)[0]
+        #
+        # OJO CON EL ORDEN, que es donde la promesa tiene UN limite y hay
+        # que decirlo. Las entradas leidas son diccionarios, y en Windows
+        # PowerShell 5.1 un "Sort-Object Bytes" a secas sobre diccionarios
+        # NO ORDENA: devuelve la lista tal cual, sin quejarse. Esta prueba
+        # se escribio asi y pasaba en Linux mientras en 5.1 comparaba el
+        # primer elemento contra el mayor.
+        #
+        # Se ordena con una expresion, que es como lo hace el programa de
+        # verdad (Get-VistaArchivos, src/Core/VistaArchivos.ps1). No es
+        # casualidad ni suerte: es la unica forma que funciona en las dos
+        # versiones, y por eso hay una invariante mas abajo que lo exige.
+        $porBytes = { [double]$_.Bytes }
+        $mayor = @($script:Leido.Archivos | Sort-Object $porBytes -Descending)[0]
+        $mayorOriginal = @($script:Original.Archivos | Sort-Object $porBytes -Descending)[0]
         $mayor.Bytes | Should -Be $mayorOriginal.Bytes
         @($script:Leido.Carpetas.Values | Where-Object { $_.Bytes -gt 0 }).Count |
             Should -BeGreaterThan 0
@@ -664,5 +676,63 @@ Describe 'Cuanto tarda de verdad' {
         # indice sirve ANTES de pagar la carga.
         $script:CabGrande | Should -Not -BeNullOrEmpty
         $script:TCabecera | Should -BeLessThan $script:TCargar
+    }
+}
+
+Describe 'Lo que se lee del indice se ordena con una EXPRESION, nunca por nombre de propiedad' {
+
+    # LA INVARIANTE QUE NACE DE UN FALLO DE PLATAFORMA.
+    #
+    # Read-IndiceDisco devuelve diccionarios y no pscustomobject, y eso es
+    # deliberado: leer un millon de entradas a objetos de PowerShell cuesta
+    # doce veces mas (docs/VEL-02-MEDICION.md). El precio de esa decision
+    # es este:
+    #
+    #     $indice.Archivos | Sort-Object Bytes -Descending
+    #
+    # En PowerShell 7 eso ordena. En Windows PowerShell 5.1 NO ORDENA, y
+    # no protesta: devuelve la lista en el orden en que estaba. Un "los
+    # archivos mas grandes primero" que en realidad ensenya los primeros
+    # que se leyeron, sin un solo error por ningun lado.
+    #
+    # Get-VistaArchivos ya lo hacia bien -ordena con { [double]$_.Bytes }-,
+    # pero lo hacia bien sin que nadie lo hubiera exigido. Esta prueba lo
+    # convierte en una regla, porque el sintoma de romperla es una lista
+    # ordenada al azar y ni una linea en el registro.
+
+    BeforeAll {
+        $script:RaizInv = Split-Path $PSScriptRoot -Parent
+        $script:Consumidores = @('VistaArchivos.ps1', 'IndiceIncremental.ps1', 'Indice.ps1', 'Mapa.ps1')
+    }
+
+    It 'los archivos que consumen el indice se han leido de verdad' {
+        foreach ($nombre in $script:Consumidores) {
+            $ruta = Join-Path (Join-Path (Join-Path $script:RaizInv 'src') 'Core') $nombre
+            Test-Path -LiteralPath $ruta | Should -BeTrue -Because "$nombre tiene que existir"
+        }
+    }
+
+    It 'ninguno ordena con un nombre de propiedad pelado' {
+        $culpables = @()
+        foreach ($nombre in $script:Consumidores) {
+            $ruta = Join-Path (Join-Path (Join-Path $script:RaizInv 'src') 'Core') $nombre
+            $n = 0
+            foreach ($linea in (Get-Content -LiteralPath $ruta)) {
+                $n++
+                if ($linea -match '^\s*#') { continue }
+                if ($linea -notmatch 'Sort-Object') { continue }
+                # Vale la forma con expresion -llave { } o tabla hash con
+                # Expression-; no vale "Sort-Object Bytes" ni
+                # "Sort-Object -Property Bytes".
+                if ($linea -match 'Sort-Object[^\{@]*$' -or
+                    $linea -match 'Sort-Object\s+(-Property\s+)?[A-Za-z]') {
+                    if ($linea -notmatch '\{' -and $linea -notmatch 'Expression') {
+                        $culpables += ('{0}:{1}  {2}' -f $nombre, $n, $linea.Trim())
+                    }
+                }
+            }
+        }
+        $culpables -join ' // ' | Should -BeNullOrEmpty -Because (
+            'sobre diccionarios, en PowerShell 5.1 eso NO ordena y no avisa')
     }
 }

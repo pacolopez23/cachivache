@@ -493,7 +493,28 @@ Describe 'Invoke-BusquedaPorLista: los limites, que es donde se rompe' {
         # si es posible. Lo que no puede pasar es que una entrada rota se
         # lleve por delante las quince que van detras, ni que salga un
         # candidato sin ruta que el motor intentaria borrar.
-        $r = @(Invoke-BusquedaPorLista @script:Comunes -ErrorAction SilentlyContinue -Entradas @(
+        #
+        # ESTA PRUEBA ESTABA VERDE Y MENTIA, y hay que leer por que.
+        #
+        # Nacio con -ErrorAction SilentlyContinue, porque en PowerShell 7
+        # una ruta nula hace que Test-Path escriba un error NO terminante
+        # y siga. En Windows PowerShell 5.1 el mismo -LiteralPath nulo lo
+        # rechaza el ENLAZADOR DE PARAMETROS, que lanza y aborta el bucle
+        # entero: la entrada buena no llegaba a mirarse. O sea que la
+        # funcion hacia exactamente lo que esta prueba prometia que no
+        # hacia, en la unica plataforma donde el programa se ejecuta.
+        #
+        # Ahora hay una guarda explicita en Candidate.ps1 y el -ErrorAction
+        # sobra. Se quita A PROPOSITO: sin el, esta prueba exige ademas
+        # que no se escriba ningun error, que es lo que de verdad
+        # distingue "lo saltamos bien" de "lo tapamos".
+        #
+        # AVISO PARA QUIEN VERIFIQUE POR MUTACION: quitar esa guarda NO
+        # pone nada en rojo si mutas en Linux o en PowerShell 7, porque
+        # ahi el fallo no existe. Esta prueba solo demuestra el arreglo en
+        # el trabajo "Pruebas (PowerShell 5.1)" de la integracion continua.
+        # No es un hueco de la prueba: es que el fallo era de plataforma.
+        $r = @(Invoke-BusquedaPorLista @script:Comunes -Entradas @(
                    @{ N = 'Sin ruta'; E = 'e' },
                    @{ N = 'Buena'; R = $script:Grande; E = 'e' }))
 
@@ -501,8 +522,20 @@ Describe 'Invoke-BusquedaPorLista: los limites, que es donde se rompe' {
         $r[0].Nombre | Should -Be 'Buena'
     }
 
+    It 'una entrada con la ruta en blanco tampoco' {
+        # La cadena vacia y los espacios van por la misma guarda que el
+        # nulo: Test-Path con "" tambien lanza en 5.1.
+        $r = @(Invoke-BusquedaPorLista @script:Comunes -Entradas @(
+                   @{ N = 'Vacia'; R = ''; E = 'e' },
+                   @{ N = 'Espacios'; R = '   '; E = 'e' },
+                   @{ N = 'Buena'; R = $script:Grande; E = 'e' }))
+
+        @($r).Count  | Should -Be 1
+        $r[0].Nombre | Should -Be 'Buena'
+    }
+
     It 'una entrada nula tampoco lo tumba' {
-        $r = @(Invoke-BusquedaPorLista @script:Comunes -ErrorAction SilentlyContinue -Entradas @(
+        $r = @(Invoke-BusquedaPorLista @script:Comunes -Entradas @(
                    $null,
                    @{ N = 'Buena'; R = $script:Grande; E = 'e' }))
 

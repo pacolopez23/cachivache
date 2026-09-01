@@ -184,7 +184,9 @@ function New-IndiceDisco {
                         # Asi la memoria no crece sin control y la lista
                         # sigue siendo la de los archivos que importan.
                         if ($archivos.Count -ge $MaximoArchivos) {
-                            $ordenados = @($archivos | Sort-Object Bytes -Descending |
+                            # Con expresion y no con "Sort-Object Bytes":
+                            # ver el comentario de la linea 235.
+                            $ordenados = @($archivos | Sort-Object { [double]$_.Bytes } -Descending |
                                            Select-Object -First ([int]($MaximoArchivos / 2)))
                             $archivos.Clear()
                             foreach ($a in $ordenados) { $archivos.Add($a) }
@@ -232,7 +234,20 @@ function New-IndiceDisco {
 
     return [pscustomobject]@{
         Carpetas     = $carpetas
-        Archivos     = @($archivos | Sort-Object Bytes -Descending)
+        # SIEMPRE con una expresion, nunca "Sort-Object Bytes" a secas.
+        #
+        # Hoy estas entradas son pscustomobject y las dos formas ordenan
+        # igual. Pero desde [VEL-02] el indice tambien se LEE de disco, y
+        # lo que se lee son diccionarios -es lo que hace la carga doce
+        # veces mas rapida-. Sobre un diccionario, en Windows PowerShell
+        # 5.1 un "Sort-Object Bytes" NO ORDENA y NO PROTESTA: devuelve la
+        # lista tal cual. Una lista de "los archivos mas grandes" en el
+        # orden en que se leyeron, sin un solo error en ningun sitio.
+        #
+        # Se escribe asi antes de que haga falta porque el dia que haga
+        # falta no se va a notar. Hay una invariante que lo exige en
+        # tests/IndicePersistente.Tests.ps1.
+        Archivos     = @($archivos | Sort-Object { [double]$_.Bytes } -Descending)
         Raices       = @($Rutas)
         Bytes        = $totalBytes
         TotalArchivos = $totalArchivos
@@ -291,5 +306,8 @@ function Get-HijasDirectas {
         }
     }
 
-    return @($resultado | Sort-Object Bytes -Descending)
+    # Con expresion: ver el comentario de la linea 235. Esta es ademas la
+    # que mas expuesta esta, porque lo que recorre puede venir de un
+    # indice LEIDO de disco, y entonces son diccionarios.
+    return @($resultado | Sort-Object { [double]$_.Bytes } -Descending)
 }

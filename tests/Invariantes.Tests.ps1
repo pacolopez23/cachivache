@@ -1118,6 +1118,49 @@ Describe 'COR-07: ninguna lista generica se crea con New-Object' {
             'hay que usar [Collections.Generic.X[...]]::new(); ver el comentario de Candidatos en Window.ps1')
     }
 
+    It 'ningun archivo usa un acelerador de tipos que 5.1 no tiene' {
+        # EL FALLO QUE ENCONTRO ESTA PRUEBA, y es el peor de su clase.
+        #
+        # src/Core/IndiceIncremental.ps1 comprobaba "$Valor -is [short]".
+        # [short] es un acelerador que PowerShell NO trae hasta la version
+        # 6: en Windows PowerShell 5.1 esa linea lanza "Unable to find type
+        # [short]" y se lleva por delante la funcion entera. O sea que
+        # [VEL-02] estaba MUERTO en la unica plataforma donde el programa
+        # se ejecuta de verdad, mientras la suite de PowerShell 7 lo daba
+        # por bueno.
+        #
+        # Por que se cuela: un nombre de tipo dentro de un -is solo se
+        # resuelve al EJECUTAR esa linea. No falla al cargar el archivo, no
+        # lo ve el analizador, y solo se nota si una prueba pasa por ahi
+        # EN 5.1. Son 21 pruebas las que lo destaparon, y todas de golpe en
+        # la integracion continua.
+        #
+        # Los tres nombres de abajo llegaron en PowerShell 6. Todos tienen
+        # un equivalente que si existe en 5.1 y significa exactamente lo
+        # mismo: [int16], [uint16] y [sbyte] por su nombre de .NET.
+        $prohibidos = @{
+            'short'  = '[int16]'
+            'ushort' = '[uint16]'
+            'bigint' = '[System.Numerics.BigInteger]'
+        }
+        $culpables = @()
+        foreach ($archivo in $script:Fuentes) {
+            $n = 0
+            foreach ($linea in (Get-Content -LiteralPath $archivo.FullName)) {
+                $n++
+                if ($linea -match '^\s*#') { continue }
+                foreach ($malo in $prohibidos.Keys) {
+                    if ($linea -match ('\[\s*{0}\s*\]' -f $malo)) {
+                        $culpables += ('{0}:{1} usa [{2}], hay que usar {3}' -f
+                                       $archivo.Name, $n, $malo, $prohibidos[$malo])
+                    }
+                }
+            }
+        }
+        $culpables -join ' // ' | Should -BeNullOrEmpty -Because (
+            'esos aceleradores llegaron en PowerShell 6 y el programa corre en 5.1')
+    }
+
     It 'la lista de candidatos de la ventana se puede enumerar con @( )' {
         # La comprobacion de verdad: se construye igual que Window.ps1 y se
         # enumera igual que Report.ps1. Si alguien vuelve a cambiarlo por

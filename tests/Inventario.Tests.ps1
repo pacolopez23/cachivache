@@ -103,39 +103,68 @@ Describe 'El suelo de cobertura' {
         # continua en Windows. El suelo tiene que aguantar LAS DOS, que es
         # la leccion que costo un trabajo en rojo.
         #
-        # OJO CON LA ASIMETRIA DE LAS FECHAS. La de Linux es del 1 de
-        # septiembre de 2026, con la deuda de pruebas ya pagada. La de
-        # Windows es del 31 de agosto, o sea de ANTES de esas 227 pruebas
-        # nuevas: nadie ha medido Windows desde entonces. Por eso los
-        # suelos no subieron ese dia, aunque Linux diera de sobra para
-        # subirlos. Ver el comentario largo de Get-SueloCobertura.
+        # Las dos son del 1 de septiembre de 2026, con la deuda de pruebas
+        # ya pagada. Windows cubre MAS que Linux en las cuatro filas, asi
+        # que el suelo lo marca Linux: por eso importa que esten las dos.
         @(Test-CoberturaSuficiente -Medido @{
             'total' = 66.1; 'Core' = 88.6; 'Modules' = 65.4; 'Cli' = 89.4; 'UI' = 5.1
-        }) | Should -BeNullOrEmpty -Because 'medido en Linux el 1 de septiembre de 2026'
+        }) | Should -BeNullOrEmpty -Because 'medido en Linux'
         @(Test-CoberturaSuficiente -Medido @{
-            'total' = 60.1; 'Core' = 86.1; 'Modules' = 61.1; 'Cli' = 87.5; 'UI' = 5.1
-        }) | Should -BeNullOrEmpty -Because 'medido en Windows el 31 de agosto, sin las pruebas nuevas'
+            'total' = 66.8; 'Core' = 89.4; 'Modules' = 66.6; 'Cli' = 89.4; 'UI' = 5.1
+        }) | Should -BeNullOrEmpty -Because 'medido en Windows por la integracion continua'
     }
 
-    It 'una carpeta que baja de su suelo se nombra' {
-        $medido = @{ 'total' = 60.6; 'Core' = 70.0; 'Modules' = 64.7; 'Cli' = 87.5; 'UI' = 5.1 }
+    # LOS TRES CASOS DE ABAJO SE CONSTRUYEN DESDE EL PROPIO SUELO, y no con
+    # numeros escritos a mano. Nacieron a mano y caducaron a la primera:
+    # el dia que los suelos subieron, "una carpeta que baja de su suelo"
+    # empezo a nombrar TRES carpetas en vez de una, porque los numeros del
+    # ejemplo se habian quedado por debajo de los suelos nuevos.
+    #
+    # Una prueba sobre un mecanismo no debe llevar dentro los datos que el
+    # mecanismo vigila: se rompe cada vez que los datos cambian, y el que
+    # la arregla acaba tocando el numero sin mirar que comprobaba.
+    BeforeAll {
+        function script:New-MedicionQueAprueba {
+            # Una medicion que pasa todos los suelos con holgura, sea cual
+            # sea el suelo de hoy.
+            $m = @{}
+            foreach ($par in (Get-SueloCobertura).GetEnumerator()) {
+                $m[$par.Key] = [double]$par.Value + 5.0
+            }
+            return $m
+        }
+    }
+
+    It 'una carpeta que baja de su suelo se nombra, y solo esa' {
+        $medido = script:New-MedicionQueAprueba
+        $medido['Core'] = (Get-SueloCobertura)['Core'] - 10.0
         $motivos = @(Test-CoberturaSuficiente -Medido $medido)
-        $motivos.Count | Should -Be 1
+        $motivos.Count | Should -Be 1 -Because 'solo Core esta por debajo'
         $motivos[0] | Should -Match 'Core'
+    }
+
+    It 'y una que esta JUSTO en su suelo no se nombra' {
+        # El borde exacto. Sin esto, un ">=" cambiado por un ">" pasaria
+        # desapercibido y el trinquete se volveria un punto mas estricto
+        # de lo que dice ser.
+        $medido = script:New-MedicionQueAprueba
+        $medido['Core'] = [double](Get-SueloCobertura)['Core']
+        @(Test-CoberturaSuficiente -Medido $medido) | Should -BeNullOrEmpty
     }
 
     It 'una carpeta que FALTA es un fallo, no un aprobado' {
         # El caso de verdad peligroso: alguien renombra src/Core y la
         # medicion deja de incluirla. Si esto pasara, estariamos exigiendo
         # un suelo a algo que ya nadie mide.
-        $medido = @{ 'total' = 60.6; 'Modules' = 64.7; 'Cli' = 87.5; 'UI' = 5.1 }
+        $medido = script:New-MedicionQueAprueba
+        $medido.Remove('Core')
         $motivos = @(Test-CoberturaSuficiente -Medido $medido)
         ($motivos -join ' ') | Should -Match "Falta la cobertura de 'Core'"
     }
 
     It 'una carpeta nueva sin suelo obliga a decidir' {
-        $medido = @{ 'total' = 60.6; 'Core' = 85.0; 'Modules' = 64.7; 'Cli' = 87.5; 'UI' = 5.1
-                     'Extensiones' = 12.0 }
+        $medido = script:New-MedicionQueAprueba
+        $medido['Extensiones'] = 12.0
         ($motivos = @(Test-CoberturaSuficiente -Medido $medido)) | Should -Not -BeNullOrEmpty
         ($motivos -join ' ') | Should -Match 'Extensiones'
     }

@@ -15,7 +15,7 @@ importa tanto como que funcione.
 - Se ejecuta con `Cachivache.exe`, que lanza `powershell.exe` (5.1) sin consola visible.
 - Las pruebas se ejecutan con PowerShell 7 + Pester.
 
-**Estado hoy: 2283 pruebas en verde, analizador limpio, 50 puntos de la hoja
+**Estado hoy: 2288 pruebas en verde, analizador limpio, 50 puntos de la hoja
 de ruta cerrados. La suite pasa también en Windows, en PowerShell 5.1 y en 7**, y los seis trabajos
 de la integración continua están en verde — nada de eso había pasado nunca hasta el 1 de septiembre
 de 2026.
@@ -57,7 +57,27 @@ de 2026.
    error. **Era un fallo del programa**, y siguió vivo hasta que una limpieza real en la CI murió
    con ese mismo mensaje. Carga, invoca y resuelve **igual que `Cachivache.ps1`**; cuando no puedas,
    para y pregunta por qué el programa no lo necesita.
-6. **Una invariante que enumera sitios no es una invariante: es una lista de fallos pasados.**
+6. **Un nombre de tipo solo existe cuando se ejecuta esa línea.** `[short]` es un acelerador que
+   PowerShell no tiene hasta la versión 6. `src/Core/IndiceIncremental.ps1` lo usaba dentro de un
+   `-is`, así que en Windows PowerShell 5.1 lanzaba *"Unable to find type [short]"* y se llevaba por
+   delante la función entera: **`VEL-02` estaba muerto en la única plataforma donde el programa se
+   ejecuta**, con la suite de PowerShell 7 en verde y el analizador a cero.
+
+   Se cuela porque no falla al cargar el archivo, no lo ve el analizador, y solo se nota si una
+   prueba pasa por esa línea **en 5.1**. Hay una invariante que barre `src/` en
+   `tests/Invariantes.Tests.ps1`, pero la regla general es más amplia: **lo que solo se resuelve en
+   tiempo de ejecución hay que ejecutarlo en 5.1 antes de creérselo.**
+
+   De la misma familia, y todos vistos ya: `Test-Path -LiteralPath $null` lanza en 5.1 y solo avisa
+   en 7; `Sort-Object Bytes` sobre un diccionario **no ordena y no protesta** en 5.1 (hay que ordenar
+   con una expresión, `{ [double]$_.Bytes }`); `.Count` sobre un objeto suelto vale `$null`.
+
+7. **Hay arreglos que esta máquina no puede verificar, y hay que decirlo en la prueba.** Los dos de
+   arriba no se cazan mutando en Linux: el fallo no existe aquí. Eso no es un hueco de la prueba,
+   es un fallo de plataforma — pero una prueba que parece cubrirlo y no lo cubre es peor que
+   ninguna. Se escribe en el comentario **qué trabajo de la integración continua lo demuestra**.
+
+8. **Una invariante que enumera sitios no es una invariante: es una lista de fallos pasados.**
    La que vigilaba que los informes no se anunciaran como guardados sin estarlo nombraba
    `Report.ps1` y `ReportEspacio.ps1` y exigía exactamente cuatro escrituras. Llevaba meses en
    verde. El 1 de septiembre de 2026, al escribir pruebas para `Export-Preferencias`, apareció un
@@ -70,19 +90,19 @@ de 2026.
    mal?"**. Cuando escribas una invariante, barre la carpeta entera y pon una guarda de cordura
    («si el barrido no encuentra nada, es el barrido lo que está roto»), en vez de escribir la
    lista de los sitios donde ya sabes que hubo un problema.
-7. **Los comentarios explican el PORQUÉ, no el qué.** El repositorio está lleno de comentarios que
+9. **Los comentarios explican el PORQUÉ, no el qué.** El repositorio está lleno de comentarios que
    cuentan qué fallaba antes y por qué la solución es esa. Mantén ese nivel: es media nota del
    portfolio. Comentarios en ASCII sin tildes; el texto que lee el usuario, con tildes y eñes.
-8. **Todo archivo `.ps1` y `.xaml` va en UTF-8 CON BOM.** Hay una prueba que lo comprueba.
+10. **Todo archivo `.ps1` y `.xaml` va en UTF-8 CON BOM.** Hay una prueba que lo comprueba.
 
-   Y si escribes un guion de usar y tirar que toque archivos, **usa `tools/Mutar.ps1` y no
-   `[IO.File]::WriteAllText` a pelo**: `ReadAllText` se come el BOM al leer y `WriteAllText` no lo
-   repone al escribir, así que un "restaurado por si acaso" detrás de la herramienta deja cuatro
-   archivos sin BOM. Pasó. La red de seguridad de más era menos cuidadosa que aquello que
-   respaldaba, y por eso lo rompió. `Invoke-Mutacion` sí detecta el BOM y lo conserva.
-9. **Se borra el código muerto.** No se deja "por si acaso".
-10. **Documentar al cerrar cada punto**: banner `> ✅ **RESUELTO.**` en `docs/HOJA-DE-RUTA.md`
-   (conservando el análisis original debajo, porque explica el porqué) y entrada en `CHANGELOG.md`.
+    Y si escribes un guion de usar y tirar que toque archivos, **usa `tools/Mutar.ps1` y no
+    `[IO.File]::WriteAllText` a pelo**: `ReadAllText` se come el BOM al leer y `WriteAllText` no lo
+    repone al escribir, así que un "restaurado por si acaso" detrás de la herramienta deja cuatro
+    archivos sin BOM. Pasó. La red de seguridad de más era menos cuidadosa que aquello que
+    respaldaba, y por eso lo rompió. `Invoke-Mutacion` sí detecta el BOM y lo conserva.
+11. **Se borra el código muerto.** No se deja "por si acaso".
+12. **Documentar al cerrar cada punto**: banner `> ✅ **RESUELTO.**` en `docs/HOJA-DE-RUTA.md`
+    (conservando el análisis original debajo, porque explica el porqué) y entrada en `CHANGELOG.md`.
 
 ---
 
@@ -295,7 +315,7 @@ tres estados de `USO-04`, `VEL-01` (tabla maestra de NTFS), `DIS-01` (firma, nec
 ## Lo primero que deberías hacer
 
 1. Leer `docs/HOJA-DE-RUTA.md` entero. Es largo y merece la pena: explica el porqué de todo.
-2. Ejecutar `tools/Probar.ps1` y confirmar **2283 en verde y analizador a cero**. Si no cuadra, eso es lo
+2. Ejecutar `tools/Probar.ps1` y confirmar **2288 en verde y analizador a cero**. Si no cuadra, eso es lo
    primero, antes que cualquier punto nuevo.
 3. Preguntarle con qué punto quiere seguir, ofreciéndole las opciones de la tabla de arriba con una
    frase de porqué cada una. No empieces por tu cuenta.

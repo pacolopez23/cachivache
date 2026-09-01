@@ -173,6 +173,40 @@ que se hace una vez a un hábito después de cada tanda de cambios.
   de la guardia son lógica de seguridad, no texto de interfaz: si alguien se las lleva a un archivo
   de idioma, rompe la guardia en silencio. `[I18N-02]`
 
+### `VEL-02` estaba muerto en Windows, y la suite de Linux no podía verlo
+
+`src/Core/IndiceIncremental.ps1` comprobaba `$Valor -is [short]`. **`[short]` es un acelerador de
+tipos que PowerShell no tiene hasta la versión 6**: en Windows PowerShell 5.1 —la versión con la que
+arranca el programa— esa línea lanza *"Unable to find type [short]"* y se lleva por delante la
+función entera. Todo el índice incremental estaba inservible en la única plataforma donde el programa
+se ejecuta, con las pruebas en verde y el analizador a cero.
+
+Se cuela porque un nombre de tipo dentro de un `-is` **solo se resuelve al ejecutar esa línea**: no
+falla al cargar el archivo y el analizador no dice nada. Lo destapó la integración continua de 5.1,
+con veintiuna pruebas en rojo de golpe. Hay ahora una invariante que barre `src/` entera buscando
+aceleradores posteriores a la 5.1.
+
+Y tirando de ese hilo aparecieron tres más de la misma familia — **cosas que en PowerShell 7 van y
+en 5.1 no, sin decir nada**:
+
+- **`Sort-Object Bytes` sobre un diccionario no ordena en 5.1, y no protesta.** Devuelve la lista
+  tal cual. Como el índice guardado se lee a diccionarios —es lo que hace la carga doce veces más
+  rápida—, en cuanto `VEL-02` se enganche, cuatro sitios habrían empezado a mostrar «los archivos más
+  grandes» en el orden en que se leyeron: `Indice.ps1` en tres puntos y el mapa de árbol en
+  `Mapa.ps1`, que además ya filtraba con una expresión y ordenaba sin ella. Los cuatro ordenan ahora
+  con `{ [double]$_.Bytes }`, y hay una invariante que lo exige.
+- **`Test-Path -LiteralPath $null` lanza en 5.1** —lo rechaza el enlazador de parámetros— mientras en
+  7 solo escribe un error no terminante. Una sola entrada mal escrita en la lista de un módulo
+  abortaba el recorrido entero y dejaba sin proponer todo lo que viniera detrás.
+- **`Get-CarpetaConocida` devolvía `%USERPROFILE%\Downloads` sin expandir.** El registro guarda la
+  entrada así, y `ExpandEnvironmentVariables` no falla con una variable que no existe: deja el
+  `%...%` dentro. Una ruta con pinta de ruta que no existe en ningún sitio es peor que no contestar.
+
+**Los suelos de cobertura suben por fin**: total a 65, `src/Core` a 87, `src/Modules` a 64 y
+`src/Cli` a 88. Se subieron con las dos medidas delante —Linux 66,1 % y Windows 66,8 %— cogiendo el
+menor de cada fila y dejando un punto de margen, que es la receta que quedó escrita el día que un
+suelo puesto con una sola medida tumbó un trabajo.
+
 ### La deuda de pruebas, pagada entera: dos fallos vivos que llevaban meses escondidos
 
 `tests\datos\deuda-de-pruebas.txt` nombraba **31 funciones que ninguna prueba tocaba**. Quedan 8, y
@@ -209,7 +243,7 @@ está fuera— rechazaba la cadena vacía **lanzando** desde el enlazador de par
 propia guarda de "falla cerrado" era inalcanzable. Una función de seguridad que lanza obliga a
 envolverla en un `try`, y un `try` es justo donde un rechazo se convierte por descuido en un permiso.
 
-Cobertura del **64,9 % al 66,1 %**; `src/Core`, del 86,4 % al 88,6 %. 2283 pruebas.
+Cobertura del **64,9 % al 66,1 %**; `src/Core`, del 86,4 % al 88,6 %. 2288 pruebas.
 
 Los suelos de cobertura **no se han subido**, y no es un olvido: se miden en dos sistemas y el suelo
 es el del peor. De Windows solo hay la medida del 31 de agosto, o sea de antes de estas pruebas.

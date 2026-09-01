@@ -280,6 +280,19 @@ Describe 'Get-CarpetaConocida: el conjunto cerrado de nombres' {
         # Se afirma $null Y que no lanza, las dos cosas: "no lanza" sola
         # la cumpliria tambien una funcion que devolviera una ruta
         # inventada colgando de la nada, que es peor que no contestar.
+        #
+        # Y hubo un SEGUNDO fallo detras del primero, que solo se vio en
+        # Windows: alli el registro SI responde, y responde justo
+        # "%USERPROFILE%\Downloads". ExpandEnvironmentVariables no falla
+        # con una variable que no existe, deja el %...% tal cual, asi que
+        # la funcion devolvia una ruta con pinta de ruta que no existe en
+        # ningun sitio. Por eso Get-CarpetaConocida descarta ahora lo que
+        # sigue teniendo %algo% dentro.
+        #
+        # AVISO PARA QUIEN VERIFIQUE POR MUTACION: quitar esa guarda no
+        # pone nada en rojo aqui, porque en Linux no hay registro que
+        # responda y esa rama no se ejecuta. Lo demuestra el trabajo
+        # "Pasada completa" de la integracion continua, no esta maquina.
         $previo = $env:USERPROFILE
         try {
             Remove-Item -Path 'Env:\USERPROFILE' -ErrorAction SilentlyContinue

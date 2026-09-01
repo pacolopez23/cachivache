@@ -1574,6 +1574,16 @@ function Get-CarpetaConocida {
             $valor = (Get-ItemProperty -Path $clave -Name $guid -ErrorAction SilentlyContinue).$guid
             if ($valor) {
                 $ruta = [Environment]::ExpandEnvironmentVariables($valor)
+                # ExpandEnvironmentVariables NO falla con una variable que
+                # no existe: deja el "%LOQUESEA%" tal cual dentro de la
+                # cadena. Y el registro guarda esta entrada justamente asi,
+                # como "%USERPROFILE%\Downloads", con lo que el valor sin
+                # expandir es el caso NORMAL y no uno raro.
+                #
+                # Devolverlo seria peor que devolver nulo: es una ruta con
+                # pinta de ruta que no existe en ningun sitio, y quien la
+                # reciba la va a tratar como buena. Se prefiere no saber.
+                if ($ruta -match '%[^%]+%') { $ruta = $null }
             }
             elseif (-not [string]::IsNullOrWhiteSpace($env:USERPROFILE)) {
                 $ruta = Join-Path $env:USERPROFILE 'Downloads'
