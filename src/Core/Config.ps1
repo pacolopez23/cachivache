@@ -143,7 +143,7 @@ function New-Configuracion {
         (Join-Path $env:USERPROFILE 'Projects')
     ) | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -Unique)
 
-    $configuracion.Unidades = @(Get-UnidadesFijas)
+    $configuracion.Unidades = @(Get-UnidadesAnalizables)
     # Por defecto se analizan todas las unidades detectadas. La interfaz
     # deja desmarcar las que no se quieran tocar, y ModuleRegistry.ps1
     # descarta los candidatos que caigan fuera de esta lista. Ver

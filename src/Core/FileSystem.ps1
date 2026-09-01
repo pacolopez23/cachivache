@@ -1266,10 +1266,27 @@ function Measure-RutaDetalle {
     return $resultado
 }
 
-function Get-UnidadesFijas {
+function Get-UnidadesAnalizables {
     <#
     .SYNOPSIS
-        Lista las unidades de disco fijas con su espacio libre y total.
+        Lista las unidades que el programa mira, con su espacio, su clase
+        y si en ellas se puede borrar.
+
+    .DESCRIPTION
+        SE LLAMABA Get-UnidadesFijas Y EL NOMBRE PASO A MENTIR con
+        [VIS-04]: ya no devuelve solo las fijas, tambien las extraibles.
+        Renombrarla cuesta tocar cuatro sitios; dejarla llamandose "Fijas"
+        cuesta que alguien, dentro de seis meses, de por hecho que lo que
+        sale de aqui se puede borrar. En este programa esa suposicion se
+        paga con archivos de alguien.
+
+        Cada unidad viene con `Clase` y con `Borrable`. **Que aparezca en
+        esta lista significa que se ANALIZA, no que se pueda borrar en
+        ella**: una extraible entra en el mapa, en la vista de archivos y
+        en el informe, y nunca produce un candidato borrable. La regla vive
+        en Extraibles.ps1 y el corte esta en el embudo y en el motor.
+
+        Lo de abajo se conserva porque explica por que esto usa DriveInfo.
     .DESCRIPTION
         Con System.IO.DriveInfo y no con Win32_LogicalDisk. Son el mismo
         dato -DriveType Fixed y DriveType=3 salen los dos de la misma
@@ -1296,7 +1313,12 @@ function Get-UnidadesFijas {
     catch { return }
 
     foreach ($unidad in $unidades) {
-        if ($unidad.DriveType -ne [IO.DriveType]::Fixed) { continue }
+        # [VIS-04]. Antes aqui ponia "-ne Fixed", y por eso un disco
+        # externo o una llave USB no se analizaban EN ABSOLUTO. Ahora la
+        # decision no se toma aqui: se le pregunta a Extraibles.ps1, que
+        # es donde vive la regla y donde esta probada.
+        $clase = Get-ClaseDeUnidad -Tipo $unidad.DriveType
+        if (-not (Test-UnidadAnalizable -Clase $clase).Analizable) { continue }
         if (-not $unidad.IsReady) { continue }
 
         try {
@@ -1319,7 +1341,56 @@ function Get-UnidadesFijas {
             Total        = $total
             Libre        = $libre
             PorcentajeUsado = if ($total -gt 0) { [Math]::Round(100 * $usado / $total, 1) } else { 0 }
+            # [VIS-04]. Los dos campos nuevos viajan pegados a la unidad
+            # para que nadie tenga que volver a clasificarla: dos sitios
+            # decidiendo la clase de un disco es como se acaba analizando
+            # una llave USB y borrando en ella.
+            Clase        = $clase
+            Borrable     = (Test-PuedeProducirCandidatoBorrable -Clase $clase)
         }
+    }
+}
+
+function Get-TipoDeUnidad {
+    <#
+    .SYNOPSIS
+        El DriveType de la unidad a la que pertenece una ruta, o $null si
+        no se puede saber.
+
+    .DESCRIPTION
+        Existe para [VIS-04]: el segundo corte de Get-MotivoNoSeBorra tiene
+        la ruta delante y necesita saber en que clase de disco esta, sin
+        depender de que la configuracion traiga la lista de unidades al
+        dia. Un disco enchufado despues de arrancar no esta en esa lista.
+
+        ANTE LA DUDA, $null, y quien llama lo traduce a "desconocida". Esa
+        eleccion no es neutral y conviene entenderla: devolver $null hace
+        que el corte NO se aplique, o sea que el candidato siga su camino y
+        lo juzguen las demas comprobaciones -la guardia, la papelera, las
+        exclusiones-, que es el comportamiento que habia antes de este
+        punto. Inventarse una clase seria peor en las dos direcciones:
+        decir "fija" sin saberlo abriria el borrado en un disco que quiza
+        se desconecte, y decir "extraible" sin saberlo dejaria al usuario
+        sin poder limpiar su propio disco duro.
+    #>
+    [CmdletBinding()]
+    [OutputType([object])]
+    param([Parameter(Mandatory)] [AllowNull()] [AllowEmptyString()] [string] $Ruta)
+
+    $letra = Get-LetraUnidad -Ruta $Ruta
+    if ([string]::IsNullOrWhiteSpace($letra)) { return $null }
+
+    try {
+        # DriveInfo y no una consulta CIM, por lo mismo que
+        # Get-UnidadesAnalizables: microsegundos frente a decenas de
+        # milisegundos, y sin depender del servicio WMI.
+        return ([IO.DriveInfo]::new($letra + '\')).DriveType
+    } catch {
+        # Fuera de Windows, o con una letra que no corresponde a ninguna
+        # unidad montada, esto lanza. No es un error del que informar: es
+        # justo el caso de "no lo se".
+        Write-Verbose "No se ha podido saber el tipo de la unidad '$letra': $($_.Exception.Message)"
+        return $null
     }
 }
 

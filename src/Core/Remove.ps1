@@ -262,6 +262,27 @@ function Get-MotivoNoSeBorra {
         [switch] $Permanente
     )
 
+    # [VIS-04]. SEGUNDO CORTE, y es defensa en profundidad a proposito.
+    #
+    # El embudo ya deberia haber tirado cualquier candidato de una unidad
+    # extraible, asi que en teoria esto no salta nunca. Se pone igual
+    # porque el embudo depende de que la configuracion traiga la lista de
+    # unidades con su clase, y hay un camino donde puede no traerla: un
+    # disco enchufado DESPUES de arrancar no esta en esa lista hasta que
+    # alguien refresca. Ahi el embudo deja pasar -su regla es permisiva
+    # ante lo que no conoce, y hace bien- y quien tiene que decir que no
+    # es este sitio, que ya tiene la ruta delante.
+    #
+    # Y aqui la respuesta llega ademas al usuario: esta funcion devuelve la
+    # frase que se ensenya, y la comparten el borrado real y la simulacion.
+    if ($Candidato.Metodo -notin @('Informativo', 'Papelera', 'Comando')) {
+        $clase = Get-ClaseDeUnidad -Tipo (Get-TipoDeUnidad -Ruta $Candidato.Ruta)
+        if ($clase -ne 'desconocida' -and -not (Test-PuedeProducirCandidatoBorrable -Clase $clase)) {
+            return (Get-MotivoNoBorrableEnUnidad -Clase $clase `
+                        -Letra (Get-LetraUnidad -Ruta $Candidato.Ruta))
+        }
+    }
+
     # Si el usuario NO ha pedido borrado permanente, ha pedido poder
     # arrepentirse. Cuando algo no cabe en la papelera, Windows lo borra
     # para siempre sin avisar y devolviendo exito: cumplir la orden al pie

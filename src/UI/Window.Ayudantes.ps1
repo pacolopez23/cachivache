@@ -214,7 +214,7 @@
     }
 
     $refrescarDiscos = {
-        $estado.Configuracion.Unidades = @(Get-UnidadesFijas)
+        $estado.Configuracion.Unidades = @(Get-UnidadesAnalizables)
         $estado.LibreCache = Get-EspacioLibre $estado.Configuracion.Unidad
 
         # Las carpetas que el usuario marco como intocables viajan de las

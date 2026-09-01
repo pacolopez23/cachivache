@@ -47,6 +47,15 @@ $BuscarAccesosRotos = {
         # Get-ElementosDelArbol y no Get-ChildItem -Recurse: ver [COR-08].
         # El filtro sigue siendo el de Windows, no un Where-Object: en un
         # menu Inicio con cientos de carpetas la diferencia se nota.
+        #
+        # SIN -MedirEnDisco, Y ES UNA DECISION, NO UN OLVIDO. [VIS-05]
+        # existe para dejar de prometer espacio que no se va a liberar, y
+        # aqui no hay espacio que prometer: un .lnk son uno o dos
+        # kilobytes, por debajo del cluster con el que NTFS empieza a
+        # comprimir. La diferencia entre lo que ocupa y lo que mide seria
+        # de bytes, invisible en pantalla, y a cambio se pagaria una
+        # llamada al sistema por cada acceso directo del menu Inicio, que
+        # son cientos. Este modulo borra accesos rotos, no libera disco.
         Get-ElementosDelArbol -Ruta $zona -Filtro '*.lnk' |
         ForEach-Object {
             if (Test-Cancelacion $Sync) { return }

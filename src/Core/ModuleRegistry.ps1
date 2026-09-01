@@ -206,6 +206,35 @@ function Get-ReglasFiltroCandidato {
         }
     })
 
+    # Regla 2 bis. [VIS-04]. Una unidad extraible se ANALIZA pero no se
+    # borra: entra en el mapa, en la vista de archivos y en el informe, y
+    # no produce ni un candidato borrable. Una llave USB se puede
+    # desconectar en mitad de una operacion, y eso convierte un borrado en
+    # un error a medias sobre un disco que ya no esta.
+    #
+    # Va DESPUES de "Unidad seleccionada" y ANTES de la guardia porque solo
+    # cuesta mirar una tabla en memoria: Coste 1.
+    #
+    # Y NO se metio dentro de Test-UnidadSeleccionada aunque las dos miren
+    # la letra: esa funcion contesta "el usuario eligio este disco", y
+    # mezclarlas sacaria a la extraible tambien del ANALISIS, que es justo
+    # lo contrario de lo que este punto quiere.
+    $reglas.Add([pscustomobject]@{
+        Nombre    = 'Unidad donde se puede borrar'
+        Coste     = 1
+        Predicado = {
+            param($Contexto, $Candidato)
+            # Lo que no tiene ruta con letra -un comando, la papelera, lo
+            # informativo- sobrevive, igual que hace la regla de la unidad
+            # seleccionada. Si no, desaparecerian todos los candidatos de
+            # tipo comando.
+            if ($Contexto.SinRuta -contains $Candidato.Metodo) { return $true }
+            $letra = Get-LetraUnidad -Ruta $Candidato.Ruta
+            if ([string]::IsNullOrWhiteSpace($letra)) { return $true }
+            return -not $Contexto.NoBorrables.Contains($letra)
+        }
+    })
+
     # Regla 3. La guardia: ningun candidato que borre archivos se libra de
     # ella. Es la unica que consulta el disco, de ahi el Coste 2 y de ahi
     # que vaya la ultima.
@@ -263,10 +292,30 @@ function New-ContextoEmbudo {
         $excluidas = @($Configuracion.RutasExcluidas)
     }
 
+    # [VIS-04]. Que letras NO admiten un candidato borrable, resuelto AQUI
+    # y no dentro del predicado. El predicado corre una vez por candidato;
+    # sobre 200.000 archivos, clasificar la unidad ahi dentro serian
+    # 200.000 clasificaciones para averiguar lo mismo veinticinco veces.
+    #
+    # Se guarda el conjunto de las PROHIBIDAS y no el de las permitidas a
+    # proposito: asi una letra que no este en la lista de unidades -porque
+    # el disco se enchufo despues de arrancar, que es el riesgo que la hoja
+    # de ruta ya anotaba- no se queda sin candidatos en silencio. Ante lo
+    # que no se conoce, el comportamiento de siempre.
+    $noBorrables = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    if ($null -ne $Configuracion -and $Configuracion.PSObject.Properties['Unidades']) {
+        foreach ($unidad in @($Configuracion.Unidades)) {
+            if ($null -eq $unidad) { continue }
+            if (-not $unidad.PSObject.Properties['Borrable']) { continue }
+            if (-not $unidad.Borrable) { [void]$noBorrables.Add([string]$unidad.Letra) }
+        }
+    }
+
     return [pscustomobject]@{
         Configuracion = $Configuracion
         Excluidas     = $excluidas
         SinRuta       = $sinRuta
+        NoBorrables   = $noBorrables
     }
 }
 

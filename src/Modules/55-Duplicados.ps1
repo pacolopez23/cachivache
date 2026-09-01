@@ -228,8 +228,26 @@ $BuscarDuplicados = {
                 # identica, así que borrar esta no pierde información.
                 if (-not (Test-RutaSegura -Ruta $copia.FullName -Raices $zonas -PermitirPersonales)) { continue }
 
+                # [VIS-05]. Se pregunta AQUI y no en el recorrido, por el
+                # mismo motivo que los enlaces duros de arriba y con el
+                # mismo razonamiento invertido: en el recorrido general
+                # habria que preguntar por todos los archivos de las zonas
+                # del usuario; aqui solo por los que ya han empatado en
+                # tamanyo Y en hash Y han sobrevivido al descarte de
+                # enlaces duros, o sea un punyado.
+                #
+                # Y sin -MedirEnDisco en el recorrido: encenderlo alli
+                # pagaria una llamada al sistema por cada archivo
+                # comprimido del disco para acabar usando el dato en unos
+                # pocos.
+                $enDisco = $null
+                if (Test-EstaComprimido -Atributos ([int]$copia.Attributes)) {
+                    $enDisco = Get-TamanoEnDisco -Ruta $copia.FullName
+                }
+
                 New-Candidato -ModuloId 'duplicados' -Categoria 'Archivos duplicados' `
                               -Nombre $copia.Name -Ruta $copia.FullName -Bytes $copia.Length `
+                              -TamanoEnDisco $enDisco `
                               -Info "copia identica de $(Get-RutaElidida $original.FullName 55)" `
                               -Efecto "Se conserva el original, creado el $($original.CreationTime.ToString('yyyy-MM-dd'))." `
                               -Aviso 'Comprueba que la copia que se conserva es la que quieres.' `

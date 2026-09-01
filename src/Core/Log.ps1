@@ -176,7 +176,7 @@ function Get-InformeDiagnostico {
 
     $lineas.Add('--- Unidades ---')
     try {
-        foreach ($unidad in @(Get-UnidadesFijas)) {
+        foreach ($unidad in @(Get-UnidadesAnalizables)) {
             $lineas.Add(('  {0}  {1}  -  {2} libres de {3} ({4}% usado)' -f
                 $unidad.Letra, $unidad.Etiqueta, (Format-Tamano $unidad.Libre),
                 (Format-Tamano $unidad.Total), $unidad.PorcentajeUsado))

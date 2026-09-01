@@ -1660,17 +1660,35 @@ devuelve 100 MB, no 200.
 
 ### `VIS-04` · Analizar unidades extraíbles y externas · Media
 
-> 🟡 **La mitad de núcleo está hecha y probada:** `src/Core/Extraibles.ps1`. La regla del punto vive
-> en `Test-PuedeProducirCandidatoBorrable`, con una invariante que recorre las clases sacándolas del
-> AST: **añadir una clase de unidad sin decidir su respuesta hace fallar la suite**. Ante lo
-> desconocido, ni analizable ni borrable.
+> ✅ **ENGANCHADO el 1 de septiembre de 2026.** Un disco externo o una llave USB **ya se analizan**
+> —entran en el mapa, en la vista de archivos y en el informe— y **no pueden producir ni un
+> candidato borrable**. La regla vive en `src/Core/Extraibles.ps1` con una invariante que saca las
+> clases del AST: añadir una sin decidir su respuesta hace fallar la suite.
 >
-> **Falta engancharlo**, y son cinco sitios, no uno: `Get-UnidadesFijas` (que pasaría a mentir con
-> ese nombre), los tres puntos donde se refresca la lista de unidades, una regla nueva en el embudo
-> —calculando la clase **una vez por módulo**, no por candidato— y un segundo corte en
-> `Get-MotivoNoSeBorra`. **Trampa concreta:** `25-Papelera.ps1` emite un único candidato para la
-> primera unidad con contenido, así que con extraíbles en la lista o pierdes la papelera de `C:` o
-> vacías la del disco externo.
+> **Son cuatro cortes, y cada uno tapa un agujero del otro:**
+>
+> 1. **El descubrimiento.** `Get-UnidadesFijas` pasó a llamarse **`Get-UnidadesAnalizables`**,
+>    porque el nombre había empezado a mentir, y cada unidad sale con `Clase` y `Borrable`.
+> 2. **El embudo.** Regla nueva, con las letras prohibidas resueltas **una vez por módulo** en
+>    `New-ContextoEmbudo`: dentro del predicado serían 200.000 clasificaciones para averiguar lo
+>    mismo veinticinco veces. Guarda el conjunto de las **prohibidas** y no el de las permitidas,
+>    para que un disco enchufado a mitad de sesión no se quede sin candidatos en silencio.
+> 3. **El motor.** `Get-MotivoNoSeBorra` mira la ruta directamente, que es lo que salva justo ese
+>    caso. Y la respuesta llega al usuario, porque la comparten el borrado real y la simulación.
+> 4. **`25-Papelera.ps1`**, que la regla del embudo **no puede proteger**: emite un candidato cuya
+>    ruta es de `C:` aunque la lista lleve dentro una llave USB. Sin su propio filtro, o se pierde
+>    la papelera de `C:` o se vacía la del disco externo.
+>
+> **Y lo que la verificación por mutación destapó, que es la parte que merece leerse:** de las ocho
+> mutaciones, **seis no las cazaba nadie**. Seis pruebas que pasaban mirando otra cosa. La peor era
+> quitarle al motor la comparación con `'desconocida'`: en un equipo donde la clasificación fallara,
+> el programa **habría dejado de borrar absolutamente todo, en silencio**, y la prueba seguía en
+> verde porque comprobaba que el motivo *"no mencionara las extraíbles"* en vez de exigir que
+> estuviera vacío.
+>
+> **Tres de los cuatro cortes no se pueden ejercitar fuera de Windows**, y eso está escrito en las
+> pruebas en vez de disimulado: lo que se ata aquí es que los enganches sigan llamando a la
+> decisión, no que la decisión funcione sobre una llave USB de verdad. Eso es el banco.
 >
 > **Y una pregunta que solo se contesta en tu Windows:** algunos discos externos por USB se
 > presentan como `Fixed` y no como `Removable`. Si el tuyo lo hace, `VIS-04` no lo distinguiría.
@@ -1717,9 +1735,12 @@ sí, y la interfaz tendrá que decirlo en vez de fallar en silencio al analizar.
 > sitio que decide**. Cuatro módulos lo piden ya: archivos grandes, descargas, temporales y
 > WSL/Docker.
 >
-> **Faltan dos, con su motivo:** `55-Duplicados` es delicado —arrastra la corrección de `COR-03` y
-> compara contenido—, y `45-AccesosRotos` trabaja sobre `.lnk` de un kilobyte, donde la compresión
-> no cambia nada que el usuario vaya a leer.
+> **Y los dos que faltaban, cerrados el 1 de septiembre, cada uno a su manera.** `55-Duplicados`
+> pregunta el tamaño en disco **al final y solo por los candidatos**, no en el recorrido: igual que
+> ya hacía con los enlaces duros, porque ahí solo llegan los que han empatado en tamaño Y en hash.
+> `45-AccesosRotos` **no lo hace, y es una decisión escrita**: un `.lnk` son uno o dos kilobytes,
+> por debajo del clúster donde NTFS empieza a comprimir; la diferencia sería de bytes y a cambio se
+> pagaría una llamada al sistema por cada acceso directo del menú Inicio.
 >
 > **Y el criterio de aceptación solo se ve en tu Windows:** `GetCompressedFileSize` no se ha
 > ejecutado nunca. Hay un cebo nuevo en el banco (`08-comprimido`) y un paso 4.1 en

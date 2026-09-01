@@ -231,8 +231,8 @@ Describe 'El recorrido no atraviesa puntos de reanalisis' {
 
 Describe 'Las unidades y el nombre del sistema no se preguntan dos veces' {
 
-    It 'Get-UnidadesFijas devuelve la forma que espera el resto del programa' {
-        foreach ($unidad in @(Get-UnidadesFijas)) {
+    It 'Get-UnidadesAnalizables devuelve la forma que espera el resto del programa' {
+        foreach ($unidad in @(Get-UnidadesAnalizables)) {
             $unidad.Letra    | Should -Not -BeNullOrEmpty
             # Hay sitios que hacen $unidad.Letra + '\': no puede venir ya
             # con separador al final. OJO: esta comprobación concreta solo

@@ -45,8 +45,17 @@ BeforeAll {
     # cada regla tenga algo que rechazar.
     $script:Cfg = [pscustomobject]@{
         Admin                 = $true
-        UnidadesSeleccionadas = @('C:')
+        UnidadesSeleccionadas = @('C:', 'E:')
         RutasExcluidas        = @('C:\excluida')
+        # [VIS-04]. C: es un disco fijo y E: una llave USB. Las DOS estan
+        # elegidas por el usuario a proposito: asi el caso de la extraible
+        # no puede pasar por la regla de "unidad seleccionada" y hace falta
+        # que lo rechace la suya. Si solo estuviera C:, la prueba pasaria
+        # por el motivo equivocado.
+        Unidades              = @(
+            [pscustomobject]@{ Letra = 'C:'; Clase = 'fija';      Borrable = $true  }
+            [pscustomobject]@{ Letra = 'E:'; Clase = 'extraible'; Borrable = $false }
+        )
     }
 
     # Aplica UNA regla suelta EXACTAMENTE como la aplica el embudo. Si el
@@ -91,6 +100,14 @@ BeforeAll {
                 return New-Candidato -ModuloId 'prueba' -Categoria 'c' -Nombre 'system32' `
                                      -Ruta 'C:\Windows\System32' -Bytes 70 -Metodo 'Ruta' `
                                      -Raices @('C:\Windows')
+            }
+            # [VIS-04]. En la llave USB, que el usuario SI ha elegido y
+            # que la guardia no tiene nada que objetar: la unica regla que
+            # puede tirarlo es la suya.
+            'en extraible' {
+                return New-Candidato -ModuloId 'prueba' -Categoria 'c' -Nombre 'en la llave' `
+                                     -Ruta 'E:\fotos\cosa.tmp' -Bytes 60 -Metodo 'Ruta' `
+                                     -Raices @('E:\fotos')
             }
             default { throw "Caso desconocido: $Caso" }
         }
@@ -156,6 +173,7 @@ Describe 'ARQ-02: regla a regla, cada una rechaza lo suyo y respeta el resto' {
         @{ Regla = 'Unidad seleccionada';     Caso = 'otra unidad' }
         @{ Regla = 'Exclusiones del usuario'; Caso = 'excluido' }
         @{ Regla = 'Guardia de rutas';        Caso = 'vetado por la guardia' }
+        @{ Regla = 'Unidad donde se puede borrar'; Caso = 'en extraible' }
     ) {
         # $elegida y NO $regla: PowerShell NO distingue mayusculas en los
         # nombres de variable, asi que "$regla = ..." pisaba el $Regla que
@@ -259,6 +277,7 @@ Describe 'ARQ-02: regla a regla, cada una rechaza lo suyo y respeta el resto' {
             'Unidad seleccionada'
             'Exclusiones del usuario'
             'Guardia de rutas'
+            'Unidad donde se puede borrar'
         )
         $sinCaso = @(Get-ReglasFiltroCandidato |
                      Where-Object { $_.Nombre -notin $conCaso } |

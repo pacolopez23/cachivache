@@ -21,7 +21,26 @@ $BuscarPapelera = {
     # papelera vive en la unidad del sistema, así que pasaria el filtro y
     # aun así habría medido (y vaciado) papeleras de discos desmarcados.
     # Aquí se mide lo mismo que después se vacía.
+    # Y SOLO LAS UNIDADES DONDE SE PUEDE BORRAR. [VIS-04].
+    #
+    # Este modulo es la trampa concreta del punto, y merece leerse. Emite
+    # UN candidato de metodo 'Papelera' cuya Ruta es la primera unidad con
+    # contenido, y el vaciado despues vacia LAS LETRAS QUE SE LE PASEN. O
+    # sea que la regla del embudo no puede protegerlo: mira la ruta del
+    # candidato, y esa ruta es de C: aunque la lista lleve dentro una llave
+    # USB. El corte tiene que estar aqui, donde se decide QUE letras se
+    # miden y se vacian.
+    #
+    # Si no estuviera, con un disco externo enchufado pasaria una de dos
+    # cosas, las dos malas: o el candidato entero desapareceria por apuntar
+    # a la extraible, y el usuario perderia la papelera de C:, o se
+    # vaciaria la papelera del disco externo sin habersela pedido.
+    #
+    # Por Borrable y no por Clase: la clase la traduce Get-UnidadesAnalizables
+    # una sola vez, y preguntar aqui otra vez seria un segundo sitio
+    # decidiendo lo mismo.
     $unidades = @($Configuracion.Unidades | Where-Object {
+        if ($_.PSObject.Properties['Borrable'] -and -not $_.Borrable) { return $false }
         Test-UnidadSeleccionada -Ruta ($_.Letra + '\') -Configuracion $Configuracion
     })
 

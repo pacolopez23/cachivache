@@ -196,6 +196,32 @@ que se hace una vez a un hábito después de cada tanda de cambios.
   se haya ejecutado no dice que haga lo correcto. Los dos fallos de más abajo vivían en líneas
   perfectamente cubiertas.
 
+### `VIS-04`: los discos externos y las llaves USB ya se analizan, y nunca se borran en ellos
+
+Hasta hoy un disco externo o una llave USB **no se analizaban en absoluto**: el descubrimiento
+filtraba por `DriveType Fixed`. Ahora entran en el mapa, en la vista de archivos y en el informe, y
+**no pueden producir ni un candidato borrable** — una extraíble se puede desconectar en mitad de una
+operación, y eso convierte un borrado en un error a medias sobre un disco que ya no está.
+
+Son **cuatro cortes**, y cada uno tapa un agujero del otro: el descubrimiento —`Get-UnidadesFijas`
+pasó a llamarse **`Get-UnidadesAnalizables`**, porque el nombre había empezado a mentir—, una regla
+nueva en el embudo, un segundo corte en el motor de borrado que mira la ruta directamente (el que
+salva el caso de un disco enchufado **después** de arrancar), y el módulo de la papelera, que la
+regla del embudo **no puede proteger** porque su candidato apunta a `C:` aunque la lista lleve dentro
+una llave USB.
+
+**Lo que destapó la verificación por mutación merece leerse:** de las ocho mutaciones, **seis no las
+cazaba nadie**. Seis pruebas que pasaban mirando otra cosa. La peor: quitarle al motor la
+comparación con `'desconocida'` hacía que el programa **dejara de borrar absolutamente todo en
+silencio** en cualquier equipo donde la clasificación fallara — y la prueba seguía en verde porque
+comprobaba que el motivo *"no mencionara las extraíbles"* en vez de exigir que estuviera vacío.
+
+### `VIS-05` cerrado: los dos módulos que faltaban
+
+`55-Duplicados` pregunta el tamaño en disco **al final y solo por los candidatos**, igual que ya
+hacía con los enlaces duros. Y `45-AccesosRotos` **no lo hace, y es una decisión escrita**: un `.lnk`
+son dos kilobytes, por debajo del clúster donde NTFS empieza a comprimir.
+
 ### `VEL-02` medido: guardar el índice SÍ compensa, y es la forma de ganarle en velocidad
 
 Descartado `VEL-01`, quedaba el otro camino: **no volver a escanear**. WizTree vuelve a recorrer el
