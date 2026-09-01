@@ -144,7 +144,30 @@ try {
         exit 1
     }
 
-    $fallaronPruebas = $resultado.FailedCount -gt 0
+    # UN ARCHIVO QUE NO LLEGA A CARGARSE NO CUENTA COMO PRUEBA FALLIDA.
+    #
+    # Si un .Tests.ps1 revienta en el descubrimiento -un error de sintaxis,
+    # un BeforeAll que lanza, un dot-source a un archivo que no existe-,
+    # Pester lo apunta como CONTENEDOR roto y FailedCount sigue a cero. O
+    # sea: la suite entera de ese archivo desaparece y esto imprimia "TODO
+    # EN VERDE" con los contadores de los demas. Es el mismo error de
+    # siempre —"no he medido nada" pareciendose a "todo bien"— y aparecio
+    # justo aqui, en el guion escrito para no fiarse.
+    $contenedoresRotos = [int] $resultado.FailedContainersCount
+    if ($contenedoresRotos -gt 0) {
+        Write-Informe ''
+        Write-Informe ('  {0} archivo(s) de pruebas NO SE HAN PODIDO EJECUTAR.' -f $contenedoresRotos) 'Red'
+        foreach ($c in $resultado.Containers) {
+            if (-not $c.Passed) {
+                Write-Informe ('    x {0}' -f $c.Item) 'Red'
+                foreach ($e in @($c.ErrorRecord)) {
+                    if ($e) { Write-Informe ('        {0}' -f $e.Exception.Message) 'DarkGray' }
+                }
+            }
+        }
+    }
+
+    $fallaronPruebas = $resultado.FailedCount -gt 0 -or $contenedoresRotos -gt 0
     Write-Informe ('  PRUEBAS      {0} en total, {1} bien, {2} mal' -f `
                    $resultado.TotalCount, $resultado.PassedCount, $resultado.FailedCount) `
                   $(if ($fallaronPruebas) { 'Red' } else { 'Green' })

@@ -15,9 +15,10 @@ importa tanto como que funcione.
 - Se ejecuta con `Cachivache.exe`, que lanza `powershell.exe` (5.1) sin consola visible.
 - Las pruebas se ejecutan con PowerShell 7 + Pester.
 
-**Estado hoy: 1705 pruebas en verde, analizador limpio, 60,7 % de cobertura, 48 puntos de la hoja
-de ruta cerrados. La suite pasa también en Windows, en PowerShell 5.1 y en 7** — algo que no había
-pasado nunca hasta el 1 de septiembre de 2026.
+**Estado hoy: 1871 pruebas en verde, analizador limpio, 62,2 % de cobertura, 48 puntos de la hoja
+de ruta cerrados. La suite pasa también en Windows, en PowerShell 5.1 y en 7**, y los seis trabajos
+de la integración continua están en verde — nada de eso había pasado nunca hasta el 1 de septiembre
+de 2026.
 
 ---
 
@@ -142,6 +143,12 @@ Cada una de estas costó una sesión. Están aquí porque volverán a aparecer.
 
 **Del lenguaje**
 
+- **`0xFFFFFFFF` es un `Int32` que vale −1.** Comparado con un `UInt32` da **siempre falso**, sin
+  lanzar ni avisar. Si necesitas el valor de verdad, escribe `0xFFFFFFFFL`. Dejó una detección de
+  fin de lista que no funcionaba nunca, y lo cazó la mutación, no la prueba.
+- **Una función que devuelve un `byte[]` sin la coma no devuelve un `byte[]`.** PowerShell lo
+  desenvuelve a `Object[]`, y al enlazarlo a un parámetro `[byte[]]` se **copia**: una prueba de «no
+  toca los bytes de quien llama» pasaba sola. Se arregla con `return ,$r`.
 - **`-f` se enlaza más fuerte que `+`.** `'texto {0}' + 'más' -f $x` deja el `{0}` literal en
   pantalla. Ha mordido **cuatro veces**. Pon paréntesis siempre: `('a' + 'b {0}') -f $x`.
 - **`-f` dentro de `.Add(...)`**: ahí la coma la lee PowerShell como separador de argumentos *del

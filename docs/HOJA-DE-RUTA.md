@@ -1158,7 +1158,39 @@ categorías del mismo dominio.
 
 ## Parte VIII — Velocidad
 
-### `VEL-01` · Leer la tabla maestra de NTFS · Alta — y es el diferenciador técnico
+### `VEL-01` · Leer la tabla maestra de NTFS · ~~Alta — el diferenciador técnico~~ → **MEDIDO Y DESCARTADO**
+
+> ❌ **DESCARTADO EL 1 DE SEPTIEMBRE DE 2026, CON NÚMEROS.** No se descarta por difícil: se descartó
+> porque **pierde**. Ver [`docs/VEL-01-MEDICION.md`](VEL-01-MEDICION.md).
+>
+> | Sobre un disco de 1.000.000 de archivos | |
+> |---|---|
+> | El recorrido de hoy (`New-IndiceDisco`) | **5 s** |
+> | El recorrido de hoy (`Get-ElementosDelArbol`) | **21 s** |
+> | El camino «rápido» de la tabla maestra, completo | **≈ 188 s** |
+>
+> **Y lo incómodo es dónde está la lentitud: no en el parseo.** El 80 % del coste es *llamar a una
+> función de PowerShell* — 12 µs cada una, doce segundos por millón, hagan lo que hagan por dentro.
+> El mismo bucle en C# tarda prácticamente cero. **La ventaja de WizTree está en el lenguaje, no en
+> el algoritmo**, y el algoritmo es lo único copiable. `Add-Type` se descartó aparte: 0,44 s en cada
+> arranque, y un `.exe` sin firmar que compila código en ejecución agrava justo `DIS-01`.
+>
+> **Lo que esto cambia en el resto del plan:**
+>
+> - La Ronda 6 se queda sin su primer eslabón. `VEL-01` no abarataba `VIS-01` y `VIS-02`: los
+>   **encarecía**.
+> - `VIS-04` pierde su decisión pendiente. Ya no hay que preguntarse qué pasa con exFAT.
+> - **`VEL-02` recupera todo el sentido**, que este documento le había quitado condicionándolo a
+>   este punto.
+>
+> **La lección, que vale más que el punto:** llevaba desde el principio escrito como *«el
+> diferenciador técnico del proyecto»* y **nadie había comprobado el único supuesto del que
+> dependía entero**. Medirlo costó una tarde; construirlo habría costado meses para llegar a un
+> programa más lento.
+>
+> *El análisis de abajo se conserva porque explica el porqué de la idea, que sigue siendo correcta
+> — en otro lenguaje.*
+
 
 WizTree es **cuarenta veces más rápido** que WinDirStat por una sola razón: no recorre carpetas,
 **lee directamente la tabla maestra de archivos de NTFS**. Un disco de 250 GB pasa de 45 segundos
@@ -1397,7 +1429,7 @@ es pequeña, y eso lo hace superable.
 
 | Función de WizTree | Cachivache hoy | Con el plan |
 |---|---|---|
-| Lectura de la tabla maestra de NTFS (velocidad) | ✗ | `VEL-01` |
+| Lectura de la tabla maestra de NTFS (velocidad) | ✗ | ❌ **Nunca.** Medido: en PowerShell sale 9 veces más lento que lo que ya hay |
 | Mapa de árbol visual | ✗ | **falta: `VIS-01`** |
 | Vista de archivos: todos, ordenados por tamaño | ~ solo los mayores de X MB, e informativo | **falta: `VIS-02`** |
 | Búsqueda por nombre y tipo con comodines | ~ filtra la lista de candidatos, no el disco | `VIS-02` |
@@ -1413,10 +1445,32 @@ es pequeña, y eso lo hace superable.
 | Escanea móviles y cámaras por USB | ✗ | **fuera de alcance: esto es un programa para PC** |
 | Versión portable | ✓ | ✓ |
 
-**Revisado en agosto de 2026, contra la lista de funciones real de WizTree. Hoy: ~55%.** Con `VEL-01` y los paneles de `VIS-01` y `VIS-02` en la ventana: **~80%**, no el 95% que se dijo primero — al comparar función a función aparecieron **dos huecos que este documento no contemplaba en ninguna parte**, y ahora son `VIS-04` y `VIS-05`. Con los cinco puntos `VIS` más `VEL-01`: **por encima del 100%**,
-porque a lo suyo se le suma todo lo que WizTree no hace.
+**Revisado en agosto de 2026 contra la lista real de funciones de WizTree, y corregido el 1 de
+septiembre con la medición de `VEL-01` en la mano. Hoy: ~55%.**
 
-**Veredicto: sí, es alcanzable — pero con cinco puntos, no con tres.** Y la lección de haber hecho la comparación en serio: una tabla de competencia escrita de memoria **da por cubierto lo que nadie ha mirado**. Los dos huecos llevaban desde el principio sin aparecer en ningún punto, y el documento decía que el plan bastaba.
+**El veredicto ha cambiado, y hay que decirlo sin rodeos: superar a WizTree en TODO ya no es
+posible.** Una de sus funciones es *ser muy rápido*, y eso no se alcanza desde PowerShell —
+`VEL-01` se midió y pierde por un factor de nueve. Esa casilla se queda vacía para siempre, salvo
+que el programa se reescriba en otro lenguaje, que es otro proyecto.
+
+Lo que sí queda al alcance, y no es poco:
+
+| Con los cuatro puntos que quedan (`VIS-01` panel, `VIS-02` panel, `VIS-04`, `VIS-05`) | |
+|---|---|
+| Todo lo que WizTree hace **salvo la velocidad bruta** | ✅ alcanzable |
+| Duplicados por SHA-256, exportar a tres formatos, enlaces duros, excluir carpetas | ✅ **ya mejor que él** |
+| 21 módulos de limpieza por categorías, y borrar de verdad | ✅ **él no lo hace** |
+| El mapa coloreado **por cuánto de ese espacio es recuperable** | ✅ **no lo hace ninguno de los dos** |
+
+**Veredicto honesto: se le gana en superficie y se le pierde en velocidad.** Para un disco de
+1.000.000 de archivos WizTree tardará un segundo y Cachivache cinco. Quien quiera exclusivamente
+velocidad seguirá prefiriendo WizTree, y está bien que así sea: hace una cosa y la hace en C++.
+
+**Y la lección de haber hecho esto en serio, que ya va por dos:** una tabla de competencia escrita
+de memoria **da por cubierto lo que nadie ha mirado**. Primero aparecieron dos huecos que el plan no
+contemplaba (`VIS-04` y `VIS-05`). Después resultó que el punto marcado como *«el diferenciador
+técnico»* nunca se había medido, y al medirlo perdía. **Las dos veces, el documento afirmaba más de
+lo que nadie había comprobado.**
 
 ### Estado tras la primera tanda (29 de agosto de 2026)
 
@@ -1510,7 +1564,19 @@ documento — y para un portfolio, la que se ve en la primera captura de pantall
 
 ### `VIS-02` · Vista de archivos completa · Media-Alta
 
-> ✅ **RESUELTO.** Vista de archivos en consola. Falta el panel de WPF.
+> 🟡 **Vista de archivos en consola, y desde el 1 de septiembre de 2026 su capa de consulta
+> completa y probada:** `src/Core/VistaArchivos.ps1`. Búsqueda por comodines **sin usar `-like`**,
+> que interpreta también los corchetes y devolvía resultados absurdos para un nombre como
+> `foto[1].jpg`; orden por bytes y nunca por el texto formateado; y un resumen que distingue las
+> tres situaciones que hoy se ven como el mismo hueco —nada por encima del umbral, nada que case con
+> la búsqueda, y hay más de los que se enseñan—. Lo que sale de ahí es **informativo por
+> construcción**: se copia a un objeto de seis campos, así que ninguna fila puede llegar a la
+> ventana pareciendo un candidato.
+>
+> **Faltan dos cosas, y la segunda no es el panel.** Falta el panel de WPF, sí; pero sobre todo
+> falta que el índice pueda cubrir el disco entero: hoy `New-IndiceDisco` tiene un tope de 20.000
+> archivos y al llegar **sube el umbral solo y tira media lista**. Correcto para «los mayores»,
+> insuficiente para una vista tipo WizTree. Eso es `VEL-02`.
 >
 > *El análisis de abajo se conserva porque explica el porqué, que no caduca.*
 
@@ -1554,6 +1620,23 @@ devuelve 100 MB, no 200.
 
 ### `VIS-04` · Analizar unidades extraíbles y externas · Media
 
+> 🟡 **La mitad de núcleo está hecha y probada:** `src/Core/Extraibles.ps1`. La regla del punto vive
+> en `Test-PuedeProducirCandidatoBorrable`, con una invariante que recorre las clases sacándolas del
+> AST: **añadir una clase de unidad sin decidir su respuesta hace fallar la suite**. Ante lo
+> desconocido, ni analizable ni borrable.
+>
+> **Falta engancharlo**, y son cinco sitios, no uno: `Get-UnidadesFijas` (que pasaría a mentir con
+> ese nombre), los tres puntos donde se refresca la lista de unidades, una regla nueva en el embudo
+> —calculando la clase **una vez por módulo**, no por candidato— y un segundo corte en
+> `Get-MotivoNoSeBorra`. **Trampa concreta:** `25-Papelera.ps1` emite un único candidato para la
+> primera unidad con contenido, así que con extraíbles en la lista o pierdes la papelera de `C:` o
+> vacías la del disco externo.
+>
+> **Y una pregunta que solo se contesta en tu Windows:** algunos discos externos por USB se
+> presentan como `Fixed` y no como `Removable`. Si el tuyo lo hace, `VIS-04` no lo distinguiría.
+> Compruébalo con `[IO.DriveInfo]::GetDrives() | Select-Object Name, DriveType`.
+
+
 **Hueco descubierto al medirse contra WizTree en agosto de 2026, y no estaba en ningún punto.**
 
 Hoy `Get-UnidadesFijas` filtra por `DriveType Fixed`, así que un disco externo o una llave USB
@@ -1586,6 +1669,18 @@ seguirá en la lista. Hoy eso no importa porque los discos fijos no se mueven; c
 sí, y la interfaz tendrá que decirlo en vez de fallar en silencio al analizar.
 
 ### `VIS-05` · Enseñar qué está comprimido con NTFS · Pequeña
+
+> 🟡 **La mitad de núcleo está hecha y probada:** `src/Core/Compresion.ps1`. `Get-EspacioRecuperable`
+> decide cuánto se puede prometer —lo que ocupa en disco cuando se sabe, el tamaño lógico cuando
+> no— y **ante la duda nunca promete de más**. `Format-DetalleCompresion` da el texto con las dos
+> cifras. El criterio de aceptación de abajo está cubierto por una prueba literal.
+>
+> **Falta engancharlo**, y hasta entonces el programa sigue prometiendo de más en carpetas
+> comprimidas: leer el atributo en el recorrido de `COR-08`, llevar un `TamanoEnDisco` **anulable**
+> al contrato del candidato (si nace a 0 en vez de a `$null` se pierde la distinción entre «no
+> ocupa» y «no lo sé», que es justo lo que este punto establece) y usarlo en todo lo que suma bytes
+> prometidos. **`GetCompressedFileSize` no se ha ejecutado nunca**: aquí no hay Windows.
+
 
 **El otro hueco frente a WizTree**, y este es pequeño de verdad.
 
@@ -1687,27 +1782,33 @@ los manifiestos de winget a `microsoft/winget-pkgs`, que es trámite, no código
 ~~`A11Y-04` atajos de teclado~~. **El bloque de accesibilidad queda cerrado**, salvo `A11Y-02`
 —descartado, no se puede verificar sin WPF delante— y `Supr`, descartado a propósito en `A11Y-04`.
 
-### Ronda 6 — Superar a WizTree (meses)
+### Ronda 6 — Acercarse a WizTree (meses)
 
-`VEL-01` tabla maestra de NTFS → `VIS-02` vista de archivos completa → `VIS-01` mapa del disco
-coloreado por riesgo. En ese orden: los tres se apoyan uno en otro, y el primero hace baratos a
-los otros dos.
+**Ya no se llama «superar».** `VEL-01` se midió el 1 de septiembre de 2026 y se descartó: la
+velocidad bruta de WizTree no se alcanza desde PowerShell. Lo demás sí.
 
-Y detrás, los dos que aparecieron al comparar función a función con WizTree en agosto de 2026:
+El orden, ahora que el primer eslabón ha desaparecido:
 
-- **`VIS-05` compresión NTFS** va **pegado a `VIS-02`**, porque es una columna más de esa misma
-  vista y el atributo ya llega en el objeto del recorrido desde `COR-08`. Hacerlo aparte sería
-  volver a tocar lo mismo dos veces.
-- **`VIS-04` unidades extraíbles** va **el último de todos**, y no por tamaño: es el único que
-  cambia **qué discos mira el programa**. Con el mapa y la vista ya funcionando sobre discos fijos,
-  añadir una unidad más es un cambio acotado y verificable; al revés, sería mover el suelo mientras
-  se construye encima.
+1. **`VIS-05` compresión NTFS.** La mitad de núcleo ya está hecha y probada
+   (`src/Core/Compresion.ps1`). Falta engancharla al recorrido y al contrato del candidato. Es la
+   más pequeña y la que arregla una mentira: hoy en una carpeta comprimida se promete de más.
+2. **`VIS-02` vista de archivos.** La capa de consulta ya está hecha y probada
+   (`src/Core/VistaArchivos.ps1`). Falta el panel de la ventana **y una decisión del índice**: hoy
+   `New-IndiceDisco` tiene un tope de 20.000 archivos y, al llegar, sube el umbral solo y tira media
+   lista. Para una vista completa de verdad hace falta un modo sin tope. **Eso es `VEL-02`, que
+   recupera todo su sentido ahora que `VEL-01` no está.**
+3. **`VIS-01` mapa del disco.** Algoritmo y SVG hechos y medidos. Falta el panel de WPF, que es la
+   captura de pantalla del portfolio.
+4. **`VIS-04` unidades extraíbles, el último.** La mitad de núcleo ya está hecha y probada
+   (`src/Core/Extraibles.ps1`). Va la última porque es la única que cambia **qué discos mira el
+   programa**: con el mapa y la vista funcionando sobre discos fijos, añadir una unidad más es
+   acotado; al revés sería mover el suelo mientras se construye encima.
 
-**`VEL-01` decide antes que nada si `VIS-04` se complica**: la tabla maestra es de NTFS, y una
-llave USB suele venir en exFAT o FAT32. O sea que en extraíbles habrá que caer al recorrido normal
-igual — que es exactamente el retroceso que `VEL-01` ya contempla.
+`VIS-04` **ya no depende de `VEL-01`**: la duda era qué hacer con una llave USB en exFAT cuando la
+tabla maestra es de NTFS, y esa pregunta ha desaparecido con el punto.
 
-`VIS-03` enlaces duros puede ir antes y por separado: es un error de cálculo, no una función.
+`VIS-03` enlaces duros puede ir antes y por separado: es un error de cálculo, no una función. Ojo
+con `COR-09`, que lo degrada en PowerShell 7.
 
 ### Ronda 7 — Alcance (meses)
 

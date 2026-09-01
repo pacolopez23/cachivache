@@ -68,7 +68,7 @@ function Get-SueloCobertura {
     # trabajo que falla los lunes.
     return @{
         'total'   = 59    # Linux 60,6   Windows 60,1
-        'Core'    = 84    # Linux 85,0   Windows 86,1 (Windows cubre MAS)
+        'Core'    = 84    # Linux 85,4   Windows 86,1 (Windows cubre MAS)
         'Modules' = 60    # Linux 64,7   Windows 61,1 (Windows cubre MENOS)
         'Cli'     = 86    # Linux 87,5   Windows 87,5 - estaba a 0 hasta el 31 de agosto de 2026
         'UI'      = 4     # Linux  5,1   Windows  5,1 - aqui no hay WPF; ver la cabecera

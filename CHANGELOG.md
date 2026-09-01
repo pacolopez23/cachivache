@@ -196,6 +196,53 @@ que se hace una vez a un hábito después de cada tanda de cambios.
   se haya ejecutado no dice que haga lo correcto. Los dos fallos de más abajo vivían en líneas
   perfectamente cubiertas.
 
+### `VEL-01` medido y descartado: el diferenciador técnico no lo era
+
+`VEL-01` —leer la tabla maestra de NTFS— llevaba en la hoja de ruta desde el principio marcado como
+**«el diferenciador técnico del proyecto»**, y nadie había comprobado el único supuesto del que
+dependía entero. Se ha medido:
+
+| Sobre un disco de 1.000.000 de archivos | |
+|---|---|
+| El recorrido de hoy (`New-IndiceDisco`) | **5 s** |
+| El camino «rápido» de la tabla maestra, completo | **≈ 188 s** |
+
+**Pierde por un factor de nueve**, y lo incómodo es dónde está la lentitud: no en el parseo. El
+80 % del coste es *llamar a una función de PowerShell* —12 µs cada una— y un millón de llamadas son
+doce segundos hagan lo que hagan por dentro. El mismo bucle en C# tarda prácticamente cero: **la
+ventaja de WizTree está en el lenguaje, no en el algoritmo**, y el algoritmo es lo único copiable.
+
+Consecuencia directa: **superar a WizTree en TODO ya no es posible**, porque una de sus funciones es
+ser muy rápido. Se le gana en superficie y se le pierde en velocidad, y eso está ahora escrito en la
+hoja de ruta en lugar de la promesa anterior. Medirlo costó una tarde; construirlo habría costado
+meses para llegar a un programa más lento. Todo en
+[`docs/VEL-01-MEDICION.md`](docs/VEL-01-MEDICION.md).
+
+### Tres mitades de núcleo, escritas y probadas
+
+- **`VIS-05` compresión NTFS** (`src/Core/Compresion.ps1`): hoy, en una carpeta comprimida, el
+  programa **promete liberar más de lo que va a liberar**. `Get-EspacioRecuperable` decide cuánto se
+  puede prometer y ante la duda nunca promete de más.
+- **`VIS-04` unidades extraíbles** (`src/Core/Extraibles.ps1`): la regla del punto —*entra en el
+  mapa y en el informe, y NUNCA produce un candidato borrable*— con una invariante que saca las
+  clases de unidad del AST, así que añadir una sin decidir su respuesta hace fallar la suite.
+- **`VIS-02` vista de archivos** (`src/Core/VistaArchivos.ps1`): búsqueda por comodines **sin
+  `-like`**, que interpreta los corchetes y hacía imposible encontrar un `foto[1].jpg`; orden por
+  bytes y no por el texto; y lo que sale es informativo **por construcción**, copiado a un objeto de
+  seis campos para que ninguna fila pueda llegar a la ventana pareciendo un candidato.
+
+Las tres están **sin enganchar** todavía: hasta que lo estén, el programa se comporta igual que
+antes.
+
+### El ejecutor de pruebas podía decir "todo en verde" con un archivo roto
+
+Si un `.Tests.ps1` revienta al cargarse —un error de sintaxis, un `BeforeAll` que lanza—, Pester lo
+apunta como **contenedor** roto y `FailedCount` sigue a cero. `tools\Probar.ps1` miraba solo ese
+contador, así que la suite entera de ese archivo desaparecía y el resumen decía **TODO EN VERDE**
+con los contadores de los demás. Comprobado: con un archivo mal cerrado a propósito, ahora imprime
+*1871 bien, 0 mal* y aun así se pone en rojo nombrando el archivo. Es el error de siempre —"no he
+medido nada" pareciéndose a "todo bien"— y esta vez estaba en el guion escrito para no fiarse.
+
 ### El modo consola no podía borrar nada, y llevaba así desde `[ARQ-01]`
 
 `Cachivache.ps1 -Consola -Ejecutar` **moría en el momento de borrar**, con

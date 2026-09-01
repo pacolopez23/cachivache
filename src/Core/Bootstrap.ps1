@@ -32,7 +32,9 @@ $OrdenNucleoCachivache = @(
     'Texto.ps1'           # normalizacion de texto para comparar identidad
     'Format.ps1'          # formato de tamaños, tiempos y rutas para mostrar
     'EstadoVacio.ps1'     # que decir cuando la tabla no ensenya ni una fila
+    'Extraibles.ps1'      # que clase de unidad es cada letra: la lee FileSystem para decidir cuales se analizan
     'FileSystem.ps1'      # medición, unidades, carpetas conocidas
+    'Compresion.ps1'      # compresion NTFS: lo que se libera de verdad, que no es lo que ocupa
     'Exclusiones.ps1'     # como se ensenya la lista de "no tocar": lee la clave que compone FileSystem
     'Guard.ps1'           # guardia de seguridad
     'Candidate.ps1'       # contrato de candidato y de módulo
@@ -50,6 +52,8 @@ $OrdenNucleoCachivache = @(
     'Comparacion.ps1'     # comparar con el analisis anterior: lee Historial, formatea con Format
     'Inspeccion.ps1'      # que hay dentro de una carpeta, para poder decidir
     'Indice.ps1'          # indice de espacio en disco (una sola pasada)
+    'VistaArchivos.ps1'   # la capa de consulta del indice: todos los archivos por tamano, con comodines
+    'Mft.ps1'             # tabla maestra de NTFS. MEDIDO Y DESCARTADO como camino rapido: ver docs/VEL-01-MEDICION.md
     'Mapa.ps1'            # disposicion del mapa de arbol (calculo puro)
     'Report.ps1'          # informes HTML, CSV y JSON
     'ReportEspacio.ps1'   # informe de espacio con mapa de arbol en SVG

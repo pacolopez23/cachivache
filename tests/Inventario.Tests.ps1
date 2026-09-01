@@ -103,7 +103,7 @@ Describe 'El suelo de cobertura' {
         # continua en Windows. El suelo tiene que aguantar LAS DOS, que es
         # la leccion que costo un trabajo en rojo.
         @(Test-CoberturaSuficiente -Medido @{
-            'total' = 60.6; 'Core' = 85.0; 'Modules' = 64.7; 'Cli' = 87.5; 'UI' = 5.1
+            'total' = 62.2; 'Core' = 85.4; 'Modules' = 64.7; 'Cli' = 87.7; 'UI' = 5.1
         }) | Should -BeNullOrEmpty -Because 'medido en Linux'
         @(Test-CoberturaSuficiente -Medido @{
             'total' = 60.1; 'Core' = 86.1; 'Modules' = 61.1; 'Cli' = 87.5; 'UI' = 5.1
