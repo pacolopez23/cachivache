@@ -297,6 +297,30 @@ Describe 'Get-CebosBanco: el catalogo' {
         $larga.MotivoFuera | Should -Match 'papelera'
     }
 
+    It 'VIS-05: el cebo comprimido existe, es grande y dice que hay que comprimirlo a mano' {
+        # Es el unico cebo que el guion NO deja listo: comprimir es
+        # "compact /C", que solo existe en Windows y sobre NTFS, y el guion
+        # tiene que poder ejecutarse donde no hay ninguna de las dos cosas.
+        # Si esa instruccion desapareciera del catalogo, el cebo se
+        # montaria sin comprimir, el paso 5.12 del banco compararia dos
+        # cifras iguales y daria VIS-05 por comprobado sin haber
+        # comprimido nada.
+        $comprimido = $script:Cebos | Where-Object { $_.Id -eq 'comprimido' }
+        $comprimido | Should -Not -BeNullOrEmpty
+
+        # 100 MB: el criterio de aceptacion de [VIS-05] esta escrito con
+        # esa cifra, y un cebo pequenyo no distinguiria una compresion de
+        # un redondeo.
+        $comprimido.KiloBytes | Should -Be 102400
+        $comprimido.Para      | Should -Match 'compact'
+        $comprimido.Para      | Should -Match 'BANCO-PRUEBAS'
+
+        # Sin comprimir sigue siendo un .dmp de 100 MB en Documentos, asi
+        # que la integracion continua lo trata como a cualquier otro.
+        $comprimido.EnAnalisis | Should -BeTrue
+        $comprimido.EnLimpieza | Should -BeTrue
+    }
+
     It 'el numero de archivos de relleno es el que se pide' {
         $relleno = $script:Cebos | Where-Object { $_.Id -eq 'relleno' }
         $relleno.Cuantos | Should -Be 300

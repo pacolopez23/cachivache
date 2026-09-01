@@ -175,6 +175,18 @@ Describe 'Ningun campo del contrato puede nacer invisible en la interfaz (COR-05
             # que contradecir. Ver Remove.ps1 (Invoke-EliminacionCandidato).
             ForzarPermanente = 'decision del motor de borrado; la fila no habla de papelera en ninguna columna'
 
+            # Lo que el archivo ocupa de verdad en el disco cuando NTFS lo
+            # tiene comprimido, o $null si no se sabe ([VIS-05]). No es lo
+            # que la fila tiene que ensenyar: la columna de tamanyo ya
+            # ensenya Bytes, que ES la promesa -New-Candidato la hace pasar
+            # por Get-EspacioRecuperable-, y poner al lado la cifra en
+            # crudo daria dos numeros sin decir cual de los dos se libera.
+            # Este campo esta para que la mitad de interfaz de [VIS-05]
+            # -ensenyar LAS DOS cifras con Format-DetalleCompresion- no
+            # tenga que volver a preguntarle al disco. Mientras ese panel
+            # no exista, el dato viaja y no se pinta.
+            TamanoEnDisco = 'dato en crudo de [VIS-05]; la fila ensenya Bytes, que ya es la promesa que decide Get-EspacioRecuperable'
+
             # Resultado del borrado, no de la propuesta: vale 0 hasta que
             # se borra. Lo que la fila cuenta despues es Estado
             # ('Eliminado'), y el total liberado va al pie y al informe,

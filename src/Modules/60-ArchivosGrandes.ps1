@@ -22,7 +22,12 @@ $BuscarArchivosGrandes = {
         Set-Progreso $Sync "Buscando archivos grandes en $(Get-RutaCorta $zona)..."
 
         # Get-ElementosDelArbol y no Get-ChildItem -Recurse: ver [COR-08].
-        Get-ElementosDelArbol -Ruta $zona |
+        # -MedirEnDisco: [VIS-05]. Solo pregunta el tamano en disco de lo
+        # que lleva el bit de comprimido, asi que en el caso normal no
+        # cuesta ni una llamada al sistema. Sin esto, en una carpeta
+        # comprimida el modulo promete liberar el tamano LOGICO y libera
+        # bastante menos.
+        Get-ElementosDelArbol -Ruta $zona -MedirEnDisco |
         Where-Object {
             # Un archivo que solo esta en la nube ocupa unos kilobytes aqui,
             # no su tamaño logico. Listarlo como "4 GB que puedes liberar"
@@ -44,6 +49,7 @@ $BuscarArchivosGrandes = {
 
             New-Candidato -ModuloId 'grandes' -Categoria 'Archivos grandes sin usar' `
                           -Nombre $_.Name -Ruta $_.FullName -Bytes $_.Length `
+                          -TamanoEnDisco $_.TamanoEnDisco `
                           -Info "$(Get-RutaElidida $_.DirectoryName 55) - sin abrir desde $($ultimoUso.ToString('yyyy-MM-dd')) ($(Format-Antiguedad $ultimoUso))" `
                           -Efecto 'Solo informativo: este módulo no borra nada. Decide tú si lo mueves a un disco externo o lo eliminas a mano.' `
                           -Metodo 'Informativo' -Raices $zonas -Riesgo 'Medio' -Preseleccionado $false

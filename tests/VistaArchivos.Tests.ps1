@@ -433,19 +433,45 @@ Describe 'La vista y su resumen no pueden divergir' {
         Dos ValidateSet copiados a mano son dos listas que acaban diciendo
         cosas distintas, y entonces el resumen describe un orden que la
         consulta no ha aplicado. Es el mismo patron de [ARQ-01].
+
+        Desde que el modo consola usa la vista son TRES los sitios que
+        escriben la lista a mano: la consulta, el resumen y el parametro
+        -Orden de Show-InformeEspacio. PowerShell no deja poner una llamada
+        a funcion dentro de un atributo, asi que la copia es inevitable; lo
+        que no es inevitable es que se separen sin que nadie se entere.
     #>
 
     BeforeAll {
         $script:ordenes = @(Get-OrdenesVistaArchivos)
         $script:archivoFuente = Join-Path (Join-Path (Join-Path $script:Raiz 'src') 'Core') 'VistaArchivos.ps1'
+
+        # Show-InformeEspacio vive en el modo consola, no en el nucleo, y
+        # aqui solo se le miran los METADATOS: cargarlo no ejecuta nada.
+        . (Join-Path (Join-Path (Join-Path $script:Raiz 'src') 'Cli') 'Espacio.ps1')
+
+        # Los tres sitios que tienen que decir lo mismo. Si alguien anyade
+        # un cuarto y no lo mete aqui, esta invariante no lo protege; por
+        # eso la lista esta en un solo sitio y con el porque escrito.
+        $script:ConOrden = @('Get-VistaArchivos', 'Get-ResumenVistaArchivos', 'Show-InformeEspacio')
     }
 
     It 'Get-OrdenesVistaArchivos dice algo' {
         @($script:ordenes).Count | Should -BeGreaterThan 1
     }
 
-    It 'las dos funciones aceptan exactamente los mismos ordenes' {
-        foreach ($nombre in @('Get-VistaArchivos', 'Get-ResumenVistaArchivos')) {
+    It 'las tres funciones que hablan de orden estan cargadas' {
+        # La guarda. Sin ella, si Espacio.ps1 dejara de cargarse, el bucle
+        # de abajo recorreria una lista de nombres que no existen y la
+        # prueba fallaria por el motivo equivocado -o peor, dejaria de
+        # mirar el sitio nuevo sin decirlo.
+        foreach ($nombre in $script:ConOrden) {
+            @(Get-Command $nombre -ErrorAction SilentlyContinue).Count |
+                Should -Be 1 -Because "$nombre tiene que existir para poder mirarle el ValidateSet"
+        }
+    }
+
+    It 'las tres funciones aceptan exactamente los mismos ordenes' {
+        foreach ($nombre in $script:ConOrden) {
             $atributo = @((Get-Command $nombre).Parameters['Orden'].Attributes |
                           Where-Object { $_ -is [ValidateSet] })
             @($atributo).Count | Should -Be 1 -Because "$nombre tiene que validar el orden"

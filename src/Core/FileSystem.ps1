@@ -906,6 +906,12 @@ function Get-ElementosDelArbol {
         los ocho modulos siguieron funcionando sin tocar ni una linea de su
         logica.
 
+        Y TamanoEnDisco, que es lo unico que NO sale del WIN32_FIND_DATA:
+        vale $null salvo que se pida -MedirEnDisco y el archivo lleve la
+        marca de compresion de NTFS. $null significa "no lo se", nunca
+        "no ocupa nada"; quien decide que hacer con esa diferencia es
+        Get-EspacioRecuperable. Ver [VIS-05].
+
         NO trae Directory (el DirectoryInfo del padre): construirlo cuesta
         un objeto por archivo y ningun llamante lo usa. Si alguna vez hace
         falta, DirectoryName lleva la misma ruta ya limpia.
@@ -958,6 +964,10 @@ function Get-ElementosDelArbol {
     .PARAMETER IncluirEnlaces
         Devuelve tambien los puntos de reanalisis. Nunca se entra en ellos,
         se pida o no.
+
+    .PARAMETER MedirEnDisco
+        Rellena TamanoEnDisco en los archivos que llevan la marca de
+        compresion de NTFS. Ver [VIS-05] y el comentario de la propia rama.
     #>
     [CmdletBinding()]
     [OutputType([object[]])]
@@ -967,7 +977,21 @@ function Get-ElementosDelArbol {
         [string] $Filtro = '*',
         [AllowNull()] [scriptblock] $NoDescender,
         [AllowNull()] [scriptblock] $Cancelado,
-        [switch] $IncluirEnlaces
+        [switch] $IncluirEnlaces,
+        # Averigua lo que OCUPA de verdad cada archivo comprimido con NTFS,
+        # que no es lo que mide. Va APAGADO por defecto, igual que
+        # -ContarEnlacesDuros en Get-ResumenArbol y por el mismo motivo:
+        # cuesta una llamada al sistema por archivo medido, y quien solo
+        # esta enumerando -buscar un .lnk roto, contar cuantos hay- no
+        # tiene por que pagarla.
+        #
+        # Lo que hace barata la rama es el ORDEN: primero Test-EstaComprimido,
+        # que es aritmetica sobre unos atributos que la enumeracion ya
+        # trajo del WIN32_FIND_DATA, y solo si contesta que si se pregunta
+        # al sistema. Los archivos comprimidos son la excepcion, asi que en
+        # un arbol normal esto no llega a costar nada aunque se pida.
+        # Ver [VIS-05] en docs/HOJA-DE-RUTA.md.
+        [switch] $MedirEnDisco
     )
 
     if ([string]::IsNullOrWhiteSpace($Ruta)) { return }
@@ -1029,6 +1053,24 @@ function Get-ElementosDelArbol {
             try {
                 foreach ($archivo in $actual.EnumerateFiles($Filtro)) {
                     $nombre = $archivo.Name
+
+                    # $null quiere decir "no lo se", y es lo que sale casi
+                    # siempre: sin -MedirEnDisco no se pregunta nunca, y con
+                    # el solo se pregunta por lo que ya dice estar
+                    # comprimido. La medicion de verdad tampoco puede
+                    # devolver cero por no saber -Get-TamanoEnDisco contesta
+                    # $null-, asi que "no ocupa nada" y "no se ha podido
+                    # medir" siguen siendo dos respuestas distintas hasta
+                    # Get-EspacioRecuperable, que es quien decide.
+                    $enDisco = $null
+                    if ($MedirEnDisco -and (Test-EstaComprimido -Atributos ([int]$archivo.Attributes))) {
+                        # Se le pasa la ruta LIMPIA, la misma que sale en
+                        # FullName: Get-TamanoEnDisco pone el prefijo de
+                        # ruta larga por su cuenta, y ponerselo aqui ademas
+                        # seria duplicarlo.
+                        $enDisco = Get-TamanoEnDisco -Ruta ($base + $separador + $nombre)
+                    }
+
                     [pscustomobject]@{
                         FullName       = $base + $separador + $nombre
                         Name           = $nombre
@@ -1040,6 +1082,7 @@ function Get-ElementosDelArbol {
                         CreationTime   = $archivo.CreationTime
                         DirectoryName  = $base
                         Attributes     = $archivo.Attributes
+                        TamanoEnDisco  = $enDisco
                         EsCarpeta      = $false
                     }
                 }
@@ -1071,6 +1114,15 @@ function Get-ElementosDelArbol {
                         CreationTime   = $sub.CreationTime
                         DirectoryName  = $base
                         Attributes     = $sub.Attributes
+                        # Siempre $null en una carpeta, y la propiedad esta
+                        # de todas formas: quien recorre con -Que Todo mira
+                        # la misma propiedad en las dos clases de elemento,
+                        # y una que unas veces existe y otras no obliga a
+                        # preguntar por ella antes de leerla. Una carpeta
+                        # comprimida no ocupa lo que ocupan sus archivos:
+                        # GetCompressedFileSize contestaria por la ENTRADA
+                        # de directorio, que no es la pregunta.
+                        TamanoEnDisco  = $null
                         EsCarpeta      = $true
                     }
                 }

@@ -30,7 +30,12 @@ $BuscarTemporales = {
         # Este es el modulo donde mas se nota, porque es el que recorre las
         # carpetas del usuario enteras: un .tmp o un .dmp al fondo de un
         # node_modules anidado no se proponia nunca.
-        Get-ElementosDelArbol -Ruta $zona |
+        # -MedirEnDisco: [VIS-05]. Solo pregunta el tamano en disco de lo
+        # que lleva el bit de comprimido, asi que en el caso normal no
+        # cuesta ni una llamada al sistema. Sin esto, en una carpeta
+        # comprimida el modulo promete liberar el tamano LOGICO y libera
+        # bastante menos.
+        Get-ElementosDelArbol -Ruta $zona -MedirEnDisco |
         Where-Object {
             $_.FullName -notmatch '\\node_modules\\|\\\.git\\' -and
             (
@@ -82,6 +87,7 @@ $BuscarTemporales = {
 
             New-Candidato -ModuloId 'temporales' -Categoria $categoria `
                           -Nombre $_.Name -Ruta $_.FullName -Bytes $_.Length `
+                          -TamanoEnDisco $_.TamanoEnDisco `
                           -Info "$(Get-RutaElidida $_.DirectoryName 55) - $($_.LastWriteTime.ToString('yyyy-MM-dd'))" `
                           -Efecto $efecto -Aviso $aviso -Metodo 'Ruta' -Raices $zonas -Riesgo $riesgo
         }

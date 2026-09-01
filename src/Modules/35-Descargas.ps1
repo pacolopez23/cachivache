@@ -52,7 +52,12 @@ $BuscarDescargas = {
         Set-Progreso $Sync "Revisando $(Get-RutaCorta $zona)..."
 
         # Get-ElementosDelArbol y no Get-ChildItem -Recurse: ver [COR-08].
-        Get-ElementosDelArbol -Ruta $zona |
+        # -MedirEnDisco: [VIS-05]. Solo pregunta el tamano en disco de lo
+        # que lleva el bit de comprimido, asi que en el caso normal no
+        # cuesta ni una llamada al sistema. Sin esto, en una carpeta
+        # comprimida el modulo promete liberar el tamano LOGICO y libera
+        # bastante menos.
+        Get-ElementosDelArbol -Ruta $zona -MedirEnDisco |
         # Solo LastWriteTime, NO la fecha de ultimo acceso, y es una
         # decision meditada en contra de lo que proponia [FAL-12].
         #
@@ -103,6 +108,7 @@ $BuscarDescargas = {
 
             New-Candidato -ModuloId 'descargas' -Categoria 'Descargas antiguas' `
                           -Nombre $_.Name -Ruta $_.FullName -Bytes $_.Length `
+                          -TamanoEnDisco $_.TamanoEnDisco `
                           -Info "$tipo - descargado $($_.LastWriteTime.ToString('yyyy-MM-dd')) ($(Format-Antiguedad $_.LastWriteTime))" `
                           -Efecto 'Se puede volver a descargar de su página original.' `
                           -Aviso $aviso -Metodo 'Ruta' -Raices $zonas `

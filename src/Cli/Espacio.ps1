@@ -51,7 +51,13 @@ function Show-InformeEspacio {
     .PARAMETER Archivos
         Cuántos archivos mayores listar.
     .PARAMETER Buscar
-        Filtra los archivos por nombre. Admite comodines.
+        Filtra los archivos por nombre. Admite comodines: * es "cualquier
+        cosa" y ? es "un carácter". Todo lo demás es literal, corchetes
+        incluidos.
+    .PARAMETER Orden
+        Tamaño (de mayor a menor) o Nombre (alfabético). El ValidateSet
+        tiene que ser el mismo que el de la capa de consulta; hay una
+        invariante que compara los tres.
     .PARAMETER Anonimo
         Sustituye perfil, usuario y equipo por marcadores, para poder
         pegar la salida en una incidencia.
@@ -62,6 +68,13 @@ function Show-InformeEspacio {
         [int]      $Profundidad  = 2,
         [int]      $Archivos     = 15,
         [string]   $Buscar       = '',
+        # El mismo ValidateSet que Get-VistaArchivos y
+        # Get-ResumenVistaArchivos. Copiado a mano, si: PowerShell no deja
+        # poner una llamada a funcion dentro de un atributo. Por eso lo
+        # ata una invariante en tests/VistaArchivos.Tests.ps1 que compara
+        # los tres contra Get-OrdenesVistaArchivos.
+        [ValidateSet('Tamano', 'Nombre')]
+        [string]   $Orden        = 'Tamano',
         [switch]   $ContarEnlacesDuros,
         [switch]   $Anonimo,
         # Si se da, ademas del volcado en consola se escribe un informe
@@ -139,37 +152,57 @@ function Show-InformeEspacio {
     Write-Linea '  Solo se muestran las carpetas que pasan del 1% del total.'
 
     # ---------------- Archivos ----------------
-    Write-Cabecera 'Archivos mayores'
+    # La cabecera dice lo que se ha hecho. Con -Orden Nombre esta lista no
+    # son "los mayores", y dejar ese titulo seria el programa afirmando
+    # algo que no ha hecho, que es la familia de fallos de [COR-01].
+    $titulo = 'Archivos mayores'
+    if ($Orden -eq 'Nombre') { $titulo = 'Archivos por nombre' }
+    Write-Cabecera $titulo
 
-    $sinFiltrar = @($indice.Archivos)
-    $lista      = $sinFiltrar
+    # AQUI NO SE FILTRA NI SE ORDENA A MANO. Esto lo decide la capa de
+    # consulta del nucleo (src/Core/VistaArchivos.ps1), y la razon es la
+    # de [ARQ-01]: dos sitios que deciden lo mismo acaban decidiendo cosas
+    # distintas. Lo que habia aqui era una segunda version, peor, de ese
+    # mismo trabajo, y ya divergia en dos puntos concretos:
+    #
+    #   1. Filtraba con -like, que interpreta ademas [ y ] como clases de
+    #      caracteres. Buscar "foto[1].jpg" -el nombre que pone el
+    #      navegador a la segunda descarga- pedia sin querer "foto, un
+    #      caracter que sea 1, y .jpg": encontraba foto1.jpg, que no es lo
+    #      que se pidio, y NO encontraba foto[1].jpg, que si lo es. El
+    #      usuario no tenia forma de entender por que.
+    #   2. Escribia el resumen SOLO cuando la lista salia vacia, asi que
+    #      faltaba justo el caso peligroso: hay mas de los que se ensenyan
+    #      Y hay un filtro puesto. El usuario veia quince lineas, ninguna
+    #      la que buscaba, y concluia que el analisis se dejo cosas.
     if (-not [string]::IsNullOrWhiteSpace($Buscar)) {
-        $lista = @($lista | Where-Object { $_.Nombre -like $Buscar })
         Write-Linea ('  Filtrando por: {0}' -f $Buscar)
         Write-Linea ''
     }
 
-    if ($lista.Count -eq 0) {
-        # Tres situaciones distintas que se veian como el mismo hueco. La
-        # tercera es la peligrosa: el usuario cree que el analisis fallo.
-        if ($sinFiltrar.Count -eq 0) {
-            Write-Linea ('  Ningún archivo llega a {0}: aquí el espacio esta repartido en archivos pequeños.' -f
-                         (Format-Tamano $indice.UmbralArchivo))
-        } else {
-            Write-Linea ('  Ninguno de los {0} archivos grandes coincide con "{1}".' -f
-                         $sinFiltrar.Count, $Buscar) 'aviso'
-        }
-    } else {
-        foreach ($a in ($lista | Select-Object -First $Archivos)) {
-            Write-Linea ('  {0,10}  {1}' -f (Format-Tamano $a.Bytes),
-                         (Get-RutaElidida (& $mostrar $a.Ruta) 60))
-        }
-        if ($lista.Count -gt $Archivos) {
-            Write-Linea ''
-            Write-Linea ('  ... y {0} archivos más de más de {1}.' -f
-                         ($lista.Count - $Archivos), (Format-Tamano $indice.UmbralArchivo))
-        }
+    # @() alrededor: en PowerShell 5.1, .Count sobre el resultado de una
+    # funcion que devolvio un solo objeto vale $null.
+    $vista = @(Get-VistaArchivos -Indice $indice -Buscar $Buscar `
+                                 -Cuantos $Archivos -Orden $Orden)
+    foreach ($a in $vista) {
+        Write-Linea ('  {0,10}  {1}' -f (Format-Tamano $a.Bytes),
+                     (Get-RutaElidida (& $mostrar $a.Ruta) 60))
     }
+
+    # El resumen se escribe SIEMPRE, haya filas o no. Es lo unico que
+    # distingue "esto es todo lo que hay" de "esto es lo que cabe", y las
+    # dos cosas se ven exactamente igual: una lista que se acaba.
+    if ($vista.Count -gt 0) { Write-Linea '' }
+    $resumen = Get-ResumenVistaArchivos -Indice $indice -Buscar $Buscar `
+                                        -Cuantos $Archivos -Orden $Orden
+    # Amarillo SOLO cuando hay una busqueda que no encontro nada, que es
+    # lo unico que el usuario puede corregir. El texto de "no hay nada por
+    # encima del umbral" dice que el analisis fue bien: pintarlo de aviso
+    # seria contradecir con el color lo que pone la linea, que es el fallo
+    # de [USO-02] al reves.
+    $estilo = 'normal'
+    if ($vista.Count -eq 0 -and -not [string]::IsNullOrWhiteSpace($Buscar)) { $estilo = 'aviso' }
+    Write-Linea ('  ' + $resumen) $estilo
 
     # ---------------- Resumen ----------------
     Write-Cabecera 'Resumen'

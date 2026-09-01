@@ -196,6 +196,47 @@ que se hace una vez a un hábito después de cada tanda de cambios.
   se haya ejecutado no dice que haga lo correcto. Los dos fallos de más abajo vivían en líneas
   perfectamente cubiertas.
 
+### `VEL-02` medido: guardar el índice SÍ compensa, y es la forma de ganarle en velocidad
+
+Descartado `VEL-01`, quedaba el otro camino: **no volver a escanear**. WizTree vuelve a recorrer el
+disco entero cada vez que se abre; si Cachivache guarda su índice y al abrirse lee **solo lo que ha
+cambiado**, la comparación se da la vuelta.
+
+**El punto de equilibrio está en ~30.000 archivos tocados** entre una sesión y la siguiente. Por
+debajo compensa leer el diario de cambios de NTFS; por encima, recorrer de nuevo. Un orden de
+magnitud por encima de lo que haría inservible la idea. Y esta vez el coste por elemento del
+intérprete —lo que hundió a `VEL-01`— se paga sobre decenas de miles de registros, no sobre un
+millón.
+
+Tres cosas que solo se supieron midiendo: el índice **tiene que ir en binario** (`ConvertTo-Json`
+con un millón de entradas **no termina**: el proceso muere por memoria sin llegar a lanzar); hay que
+guardar **tres tablas y no una**, porque volver a sumar las carpetas cuesta más que el recorrido que
+se quería evitar; y falta medir en Windows lo único que no se puede medir aquí, que es leer el
+diario. Todo en [`docs/VEL-02-MEDICION.md`](docs/VEL-02-MEDICION.md), incluida la decisión que
+protege al programa: **el índice pinta el mapa, nunca decide qué se borra**, y ante un índice dudoso
+se recorre de nuevo sin reparación parcial.
+
+### `VIS-05` enganchado: deja de prometer espacio que no va a liberar
+
+En una carpeta comprimida con NTFS, el programa prometía liberar el **tamaño lógico** y liberaba
+bastante menos. Ahora el recorrido lee el bit de comprimido —que viene gratis en la enumeración— y
+**solo entonces** pregunta lo que ocupa de verdad; `New-Candidato` lleva un `TamanoEnDisco`
+anulable y `Bytes` **nace ya siendo la promesa**, así que los ocho sitios que suman bytes heredan la
+cifra correcta y **solo hay un sitio que decide**. Cuatro módulos lo piden: archivos grandes,
+descargas, temporales y WSL/Docker.
+
+El detalle que más costó y que la hoja de ruta ya avisaba: `TamanoEnDisco` es **anulable de verdad**.
+Si naciera a `0` en vez de a `$null` se perdería la diferencia entre *"no ocupa nada"* y *"no lo
+sé"*, que es justo lo que este punto viene a establecer. Hay una mutación que lo comprueba.
+
+### `VIS-02`: la consola dejó de tener su propia versión peor
+
+`Show-InformeEspacio` filtraba y ordenaba por su cuenta. Ahora usa la capa de consulta, y el usuario
+ve tres cosas que antes no: el resumen **siempre** —faltaba justo *"y queda 1 más sin mostrar"*
+cuando había filtro, que es lo que hacía creer que el análisis se dejó cosas—, buscar `foto[1].jpg`
+**encuentra `foto[1].jpg`** en vez de `foto1.jpg`, y un `-Orden` cuya cabecera dice el orden que de
+verdad se aplicó.
+
 ### `VEL-01` medido y descartado: el diferenciador técnico no lo era
 
 `VEL-01` —leer la tabla maestra de NTFS— llevaba en la hoja de ruta desde el principio marcado como

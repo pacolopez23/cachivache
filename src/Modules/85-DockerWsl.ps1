@@ -40,7 +40,12 @@ $BuscarDockerWsl = {
         (Join-Path $env:APPDATA 'Docker\vms'))) {
         if (-not (Test-Path -LiteralPath $carpeta)) { continue }
         # Get-ElementosDelArbol y no Get-ChildItem -Recurse: ver [COR-08].
-        Get-ElementosDelArbol -Ruta $carpeta -Filtro '*.vhdx' |
+        # -MedirEnDisco: [VIS-05]. Solo pregunta el tamano en disco de lo
+        # que lleva el bit de comprimido, asi que en el caso normal no
+        # cuesta ni una llamada al sistema. Sin esto, en una carpeta
+        # comprimida el modulo promete liberar el tamano LOGICO y libera
+        # bastante menos.
+        Get-ElementosDelArbol -Ruta $carpeta -Filtro '*.vhdx' -MedirEnDisco |
             ForEach-Object { $encontrados += $_ }
     }
 
@@ -58,6 +63,7 @@ $BuscarDockerWsl = {
         New-Candidato -ModuloId 'dockerwsl' -Categoria 'WSL y Docker' `
                       -Nombre "Disco virtual: $(Split-Path (Split-Path $disco.FullName -Parent) -Leaf)" `
                       -Ruta $disco.FullName -Bytes $disco.Length `
+                      -TamanoEnDisco $disco.TamanoEnDisco `
                       -Info "$($disco.Name) - último cambio $($disco.LastWriteTime.ToString('yyyy-MM-dd'))" `
                       -Efecto $efecto `
                       -Aviso 'Este archivo contiene TODO el sistema de archivos de esa distribución. Borrarlo destruye los datos que haya dentro.' `

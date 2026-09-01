@@ -489,6 +489,53 @@ Describe 'invariante: un informe que no se puede escribir NO se anuncia como gua
 
 Describe 'Show-InformeEspacio: el modo "donde se fue el espacio"' {
 
+    BeforeAll {
+        # Una carpeta con archivos DE VERDAD, todos por encima del umbral
+        # de 1 MB que usa Show-InformeEspacio, y con nombres elegidos para
+        # que el orden por tamanyo y el orden por nombre NO coincidan:
+        # asi una prueba del orden alfabetico no puede pasar por casualidad.
+        #
+        # Y con "foto[1].jpg" al lado de "foto1.jpg", que son las dos
+        # mitades del defecto de -like: buscando el primero, -like encuentra
+        # el segundo -que no es lo que se pidio- y no encuentra el primero
+        # -que si lo es-.
+        $script:CarpetaVista = Join-Path $script:Datos 'vista'
+        [void](New-Item -ItemType Directory -Path $script:CarpetaVista -Force)
+        foreach ($par in @(
+            @{ Nombre = 'copia.iso';   Bytes = 4MB   }
+            @{ Nombre = 'video.mkv';   Bytes = 3MB   }
+            @{ Nombre = 'basura.tmp';  Bytes = 2560KB }
+            @{ Nombre = 'otro.tmp';    Bytes = 2MB   }
+            @{ Nombre = 'tercero.tmp'; Bytes = 1536KB }
+            @{ Nombre = 'foto[1].jpg'; Bytes = 1280KB }
+            @{ Nombre = 'foto1.jpg';   Bytes = 1200KB }
+        )) {
+            # WriteAllBytes y no New-Item: la ruta lleva corchetes, y
+            # cualquier cosa que los lea como comodin no crearia el archivo.
+            [IO.File]::WriteAllBytes((Join-Path $script:CarpetaVista $par.Nombre),
+                                     [byte[]]::new([int]$par.Bytes))
+        }
+        $script:CuantosVista = 7
+
+        function script:Get-SalidaEspacio {
+            <#
+            .SYNOPSIS
+                La salida de Show-InformeEspacio sobre la carpeta de arriba,
+                como un solo texto.
+            .DESCRIPTION
+                Write-Host va al flujo de informacion, asi que 6>&1 lo
+                captura. Los argumentos se pasan en una tabla y no por un
+                cierre: un cierre se ejecuta en un modulo dinamico donde no
+                se ven las funciones del nucleo. Ver la cabecera.
+            #>
+            param([hashtable] $Argumentos = @{})
+            $Argumentos['Rutas'] = @($script:CarpetaVista)
+            if (-not $Argumentos.ContainsKey('Profundidad')) { $Argumentos['Profundidad'] = 1 }
+            $salida = & { Show-InformeEspacio @Argumentos } 6>&1
+            return ($salida | ForEach-Object { [string]$_ }) -join "`n"
+        }
+    }
+
     It 'la barra se llena en proporcion, y nunca se sale del ancho' {
         (Write-BarraProporcion -Parte 0   -Total 100 -Ancho 10) | Should -Not -Match ([string][char]0x2588)
         (Write-BarraProporcion -Parte 100 -Total 100 -Ancho 10) | Should -Be ([string][char]0x2588 * 10)
@@ -531,9 +578,111 @@ Describe 'Show-InformeEspacio: el modo "donde se fue el espacio"' {
     It 'un filtro que no encuentra nada NO se ve igual que un disco vacio' {
         # Tres situaciones que se veian como el mismo hueco, y la tercera
         # es la que hace creer que el analisis fallo.
-        $carpeta = Join-Path $script:Datos 'espacio'
-        $salida = (& { Show-InformeEspacio -Rutas @($carpeta) -Buscar 'no-existe-*' } 6>&1 |
-                   ForEach-Object { [string]$_ }) -join "`n"
-        $salida | Should -Match 'Ninguno de los .* archivos grandes coincide'
+        $salida = script:Get-SalidaEspacio @{ Buscar = 'no-existe-*' }
+        $salida | Should -Match ('Ninguno de los {0} archivos' -f $script:CuantosVista)
+        $salida | Should -Match '«no-existe-\*»'
+        $salida | Should -Not -Match 'Ningún archivo llega a'
+    }
+
+    It 'el resumen se escribe SIEMPRE, tambien cuando la lista trae filas' {
+        # ESTA ES LA PRUEBA DEL PUNTO. Antes el resumen solo salia con la
+        # lista vacia: con filas, el usuario veia una lista que se acababa
+        # y no habia forma de distinguir "esto es todo lo que hay" de
+        # "esto es lo que cabe". Son cosas distintas y se veian iguales.
+        $salida = script:Get-SalidaEspacio @{ Archivos = 2 }
+        $salida | Should -Match ('Se muestran los 2 mayores de {0} archivos' -f $script:CuantosVista)
+        $salida | Should -Match 'quedan 5 más sin mostrar'
+        $salida | Should -Match 'no se propone borrar nada'
+    }
+
+    It 'y sale tambien cuando hay filtro Y hay mas de los que caben' {
+        # El hueco exacto que faltaba. Con un filtro puesto, la lista
+        # recortada es lo mas enganyoso que ensenya el programa: el usuario
+        # busca algo, no lo ve entre las que caben, y concluye que el
+        # analisis se dejo cosas. El resumen tiene que nombrar los DOS
+        # numeros -las que se ensenyan y las que coinciden- para que eso no
+        # se pueda pensar.
+        $salida = script:Get-SalidaEspacio @{ Buscar = '*.tmp'; Archivos = 2 }
+        $salida | Should -Match 'Filtrando por: \*\.tmp'
+        $salida | Should -Match 'Se muestran los 2 mayores de 3 archivos'
+        $salida | Should -Match 'queda 1 más sin mostrar'
+        # Y en singular: "quedan 1" es el fallo de plural que ya salio en
+        # las cabeceras de grupo y en el historial.
+        $salida | Should -Not -Match 'quedan 1 '
+    }
+
+    It 'cuando caben todos lo dice, y no promete que haya mas' {
+        $salida = script:Get-SalidaEspacio @{ Archivos = 50 }
+        $salida | Should -Match ('Se muestran los {0} archivos' -f $script:CuantosVista)
+        $salida | Should -Match 'todos'
+        $salida | Should -Not -Match 'sin mostrar'
+    }
+
+    It 'buscar un nombre con corchetes encuentra ESE archivo y no el otro' {
+        # El defecto real que arregla este punto. Antes se filtraba con
+        # -like, que lee [1] como "un caracter que sea 1".
+        $salida = script:Get-SalidaEspacio @{ Buscar = 'foto[1].jpg'; Archivos = 50 }
+        $salida | Should -Match ([regex]::Escape('foto[1].jpg'))
+        $salida | Should -Not -Match 'foto1\.jpg'
+
+        # La guarda que demuestra que el defecto existe de verdad: si algun
+        # dia -like dejara de comportarse asi, las dos lineas de arriba
+        # dejarian de estar comprobando nada y esto lo diria.
+        ('foto1.jpg'   -like 'foto[1].jpg') | Should -BeTrue  -Because 'es la mitad que sobraba'
+        ('foto[1].jpg' -like 'foto[1].jpg') | Should -BeFalse -Because 'es la mitad que faltaba'
+    }
+
+    It '-Orden Nombre cambia el orden de verdad, y el resumen lo cuenta' {
+        # Se comparan POSICIONES dentro del texto y no la primera linea:
+        # asi la prueba no depende de cuantas lineas de carpetas salgan
+        # antes. basura.tmp es el primero por nombre y copia.iso el primero
+        # por tamanyo, asi que el par se invierte entre los dos ordenes y
+        # ninguna de las dos mitades puede pasar por casualidad.
+        $porNombre = script:Get-SalidaEspacio @{ Orden = 'Nombre'; Archivos = 3 }
+        $porTamano = script:Get-SalidaEspacio @{ Orden = 'Tamano'; Archivos = 3 }
+
+        # Guarda: si alguno no apareciera, los IndexOf valdrian -1 y la
+        # comparacion pasaria sin mirar nada.
+        foreach ($texto in @($porNombre, $porTamano)) {
+            $texto | Should -Match 'basura\.tmp'
+            $texto | Should -Match 'copia\.iso'
+        }
+
+        $porNombre.IndexOf('basura.tmp') | Should -BeLessThan $porNombre.IndexOf('copia.iso')
+        $porTamano.IndexOf('copia.iso')  | Should -BeLessThan $porTamano.IndexOf('basura.tmp')
+
+        # Y ni el resumen ni la cabecera pueden llamar "mayores" a una
+        # lista alfabetica: seria el programa contando algo que no hizo.
+        $porNombre | Should -Match 'los 3 primeros por orden alfabético'
+        $porNombre | Should -Match 'Archivos por nombre'
+        $porNombre | Should -Not -Match 'mayores'
+        $porTamano | Should -Match 'los 3 mayores'
+        $porTamano | Should -Match 'Archivos mayores'
+    }
+
+    It 'rechaza un orden que no existe en vez de ordenar de cualquier manera' {
+        { Show-InformeEspacio -Rutas @($script:CarpetaVista) -Orden 'Inventado' } | Should -Throw
+    }
+
+    It 'invariante: el modo consola NO vuelve a filtrar ni a resumir por su cuenta' {
+        # El patron central del proyecto: dos sitios que deciden lo mismo
+        # acaban diciendo cosas distintas. Aqui ya paso -un -like propio y
+        # un resumen a medias- y esto es lo que impide que vuelva.
+        #
+        # Los bloques <# #> se quitan ANTES que las lineas que empiezan por
+        # #: al reves, el primer paso se lleva la linea del #>, el bloque se
+        # queda sin cierre y sobrevive documentacion mientras desaparece
+        # codigo. Y esta prueba busca "-like", que sale escrito en los
+        # comentarios de este mismo archivo fuente.
+        $ruta   = Join-Path (Join-Path (Join-Path $script:Raiz 'src') 'Cli') 'Espacio.ps1'
+        $codigo = [regex]::Replace([IO.File]::ReadAllText($ruta), '(?s)<#.*?#>', '')
+        $codigo = [regex]::Replace($codigo, '(?m)^\s*#.*$', '')
+
+        # Guarda: si el despiece se comiera el archivo entero, esto pasaria
+        # sin mirar nada.
+        $codigo | Should -Match 'function Show-InformeEspacio'
+        $codigo | Should -Match 'Get-VistaArchivos'
+        $codigo | Should -Match 'Get-ResumenVistaArchivos'
+        $codigo | Should -Not -Match '\-like'
     }
 }

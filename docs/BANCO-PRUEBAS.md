@@ -85,7 +85,7 @@ Dentro de la VM, en la carpeta del programa:
 .\tools\Banco-Pruebas.ps1
 ```
 
-Crea `Documentos\Banco-Cachivache` con siete grupos de cebos. Cada uno existe para una afirmación
+Crea `Documentos\Banco-Cachivache` con ocho grupos de cebos. Cada uno existe para una afirmación
 concreta:
 
 | Carpeta | Qué contiene | Para qué |
@@ -97,10 +97,30 @@ concreta:
 | `05-duplicados` | Dos archivos idénticos de 512 KB, independientes | El módulo de duplicados, y el contraste con el anterior |
 | `06-carpetas-vacias` | Cinco carpetas vacías | El módulo de carpetas vacías |
 | `07-muchas-filas` | 3.000 `.tmp` de un byte | `USO-01` desplazamiento, `VEL-03` marcar en lote |
+| `08-comprimido` | `volcado-comprimible.dmp`, de 100 MB | `VIS-05`: **hay que comprimirlo tú**, ver abajo |
 
 **Las fechas son de hace 400 días a propósito.** El módulo de temporales no propone un `.tmp`
 escrito hace menos de treinta minutos, porque podría estar en uso ahora mismo. Con cebos recién
 creados no saldría ninguno y parecería que el módulo está roto.
+
+### 4.1 · Comprimir el cebo de `VIS-05` — **antes de analizar**
+
+Es el único cebo que el guion no deja listo, y a propósito: comprimir es `compact`, que solo existe
+en Windows y solo sobre NTFS, y el guion tiene que poder ejecutarse también donde no hay ninguna de
+las dos cosas. Son dos órdenes:
+
+```powershell
+compact /C /S "$([Environment]::GetFolderPath('MyDocuments'))\Banco-Cachivache\08-comprimido"
+
+# Y confirmar que de verdad ocupa menos de lo que mide:
+compact "$([Environment]::GetFolderPath('MyDocuments'))\Banco-Cachivache\08-comprimido\volcado-comprimible.dmp"
+```
+
+La segunda línea imprime las dos cifras y la proporción. **Si dicen lo mismo, la compresión no se
+ha aplicado** y el paso 5.12 no comprueba nada: probablemente el disco no es NTFS.
+
+Si te la saltas, el cebo sigue sirviendo —es un `.dmp` de 100 MB que el análisis tiene que
+encontrar y la limpieza tiene que borrar—, pero `VIS-05` se queda sin comprobar.
 
 ---
 
@@ -212,6 +232,24 @@ atajo.)
 - [ ] `Ctrl+A` dentro del filtro selecciona el texto; fuera, marca la lista.
 - [ ] Tab no se para en ningún sitio vacío.
 
+### 5.12 · La compresión NTFS — `VIS-05`
+
+Requiere haber hecho el paso 4.1. **Hazlo antes de la limpieza real del 5.9**, o el cebo ya no
+estará. Mira lo que dice el análisis de `volcado-comprimible.dmp`, el de `08-comprimido`.
+
+- [ ] El tamaño que anuncia **no es 100 MB**: es lo que el archivo ocupa de verdad, que después de
+      `compact /C` sobre un archivo de ceros es mucho menos. Este es el punto entero: hasta `VIS-05`
+      el programa prometía los 100 MB que el archivo mide y devolvía al disco lo poco que ocupaba.
+- [ ] Compara con lo que dijo `compact` en el paso 4.1. Las dos cifras tienen que parecerse.
+- [ ] El total del pie **también** baja: la promesa la decide `Get-EspacioRecuperable` en un solo
+      sitio, así que la fila y el total no pueden decir cosas distintas.
+- [ ] Si te saltaste el paso 4.1, dice **100 MB**, y eso también es correcto: sin comprimir, el
+      tamaño en disco y el lógico son el mismo.
+
+Y una que solo se ve en un equipo donde la medición falle —no la busques, pero si aparece es
+importante—: si alguna vez un archivo comprimido apareciera con **0 B**, eso es el fallo que este
+punto viene a evitar. "No he podido medirlo" se cuenta como el tamaño lógico, nunca como cero.
+
 ---
 
 ## 6. Las tres variantes que faltan
@@ -266,6 +304,13 @@ Después de `VAL-03`, esto es lo que sigue necesitando la máquina virtual y tus
 6. **La memoria de dos análisis seguidos**: la CI compara los recuentos e imprime la memoria, pero no
    falla por ella — un recolector de basura no promete cuándo devuelve memoria, y un umbral ahí sería
    un paso que falla algunos días.
+7. **`VIS-05`, la compresión NTFS** — pasos 4.1 y 5.12. El agente monta el banco igual, pero nadie
+   ejecuta `compact` allí: un paso que comprime una carpeta y después afirma que ocupa menos
+   dependería de que el disco del agente sea NTFS y de que la compresión esté permitida, y si un día
+   dejara de estarlo la comprobación **se invertiría sola y en silencio** —exactamente el motivo por
+   el que `COR-01` también se quedó fuera—. Aquí, además, `GetCompressedFileSize` **no se ha
+   ejecutado nunca**: fuera de Windows contesta `$null` siempre, así que la rama que mide de verdad
+   solo la recorre tu equipo.
 
 ---
 

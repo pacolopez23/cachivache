@@ -454,6 +454,27 @@ function Get-CebosBanco {
             Premarcado = $true
             Para = 'Miles de filas: [USO-01] desplazamiento, [VEL-03] marcar en lote, y el borrado real en lote'
         }
+        @{
+            Id = 'comprimido'; Carpeta = '08-comprimido'
+            Patron = 'volcado-comprimible.dmp'; Cuantos = 1; KiloBytes = 102400
+            Premarcado = $true
+            # El cebo de [VIS-05], y el unico del catalogo que NO queda
+            # listo al montarlo: comprimir una carpeta es "compact /C", que
+            # solo existe en Windows y sobre NTFS, y el guion que monta el
+            # banco tiene que poder ejecutarse tambien donde no hay ninguna
+            # de las dos cosas. El paso va escrito en docs/BANCO-PRUEBAS.md,
+            # en el apartado de lo que la integracion continua no puede ver.
+            #
+            # Sin comprimir sigue sirviendo -es un .dmp de 100 MB que el
+            # analisis tiene que encontrar y la limpieza real borrar-, asi
+            # que la CI lo trata como a cualquier otro y sus dos campos van
+            # a $true. Lo que solo se ve despues de comprimirlo es la
+            # afirmacion del punto: que lo prometido baja al tamano en
+            # disco y no se queda en los 100 MB que el archivo mide.
+            Para = ('[VIS-05]: 100 MB que, comprimidos con NTFS, ocupan mucho menos. Lo prometido ' +
+                    'tiene que ser lo que ocupan, no lo que miden. Hay que comprimirlo a mano ' +
+                    'con "compact /C": ver docs/BANCO-PRUEBAS.md, apartado 8.')
+        }
     )
 
     $cebos = [Collections.Generic.List[object]]::new()

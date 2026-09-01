@@ -144,7 +144,17 @@ function New-Candidato {
     .PARAMETER Ruta
         Ruta absoluta afectada.
     .PARAMETER Bytes
-        Espacio que se recuperaria.
+        Tamano LOGICO de lo que se propone: lo que mide al leerlo. NO es
+        directamente lo que se promete liberar; eso lo decide
+        Get-EspacioRecuperable cruzandolo con -TamanoEnDisco.
+    .PARAMETER TamanoEnDisco
+        Lo que ocupa de verdad en el disco, o $null si no se sabe. ANULABLE
+        A PROPOSITO, y ese $null es el punto entero de [VIS-05]: si naciera
+        a 0 se perderia la diferencia entre "no ocupa nada" y "no lo se", y
+        un descuido convertiria "no lo se" en "no se libera nada" para todo
+        un equipo donde la medicion fallara. Lo rellena quien recorre
+        (Get-ElementosDelArbol -MedirEnDisco); los modulos que no lo sepan
+        no lo pasan y el candidato sale como salia antes.
     .PARAMETER Info
         Detalle secundario (fechas, número de archivos...).
     .PARAMETER Efecto
@@ -198,6 +208,11 @@ function New-Candidato {
         [Parameter(Mandatory)] [string] $Nombre,
         [Parameter(Mandatory)] [string] $Ruta,
         [double]   $Bytes  = 0,
+        # Sin tipo y con $null por defecto, y las dos cosas hacen falta:
+        # con [double] el $null se convertiria en 0 al enlazar el
+        # parametro, o sea que "no lo se" llegaria aqui dentro convertido
+        # en "no ocupa nada" sin que nadie pudiera notarlo. Ver [VIS-05].
+        [AllowNull()] $TamanoEnDisco = $null,
         [string]   $Info   = '',
         [string]   $Efecto = '',
         [string]   $Aviso  = '',
@@ -241,7 +256,20 @@ function New-Candidato {
         Categoria      = $Categoria
         Nombre         = $Nombre
         Ruta           = $Ruta
-        Bytes          = [double]$Bytes
+        # LO QUE SE PROMETE, y lo decide Get-EspacioRecuperable: aqui no,
+        # ni en la vista, ni en el informe, ni en el motor. Es [ARQ-01]
+        # otra vez -una sola funcion decide- y ademas el arreglo de
+        # [VIS-05]: en una carpeta comprimida con NTFS, [double]$Bytes es
+        # el tamano LOGICO, o sea mas de lo que el disco va a recuperar, y
+        # este campo es el que suman los cuatro sitios que ensenyan cuanto
+        # se libera. Con -TamanoEnDisco a $null devuelve el logico, que es
+        # lo que el programa ha hecho siempre.
+        Bytes          = Get-EspacioRecuperable -TamanoLogico $Bytes -TamanoEnDisco $TamanoEnDisco
+        # El dato en crudo, para poder ensenyar LAS DOS cifras -que es la
+        # otra mitad del criterio de aceptacion- sin volver a preguntarle
+        # al disco. Se guarda tal cual, con su $null: convertirlo aqui
+        # seria el descuido que este punto viene a evitar.
+        TamanoEnDisco  = $TamanoEnDisco
         Info           = $Info
         Efecto         = $Efecto
         Aviso          = $Aviso

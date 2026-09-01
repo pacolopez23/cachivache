@@ -1204,7 +1204,41 @@ sería un salto de orden de magnitud, no un ajuste.
 con retroceso al recorrido normal. **Tamaño: grande.** Pero es lo que convertiría el análisis
 completo en algo que se ejecuta sin pensárselo.
 
-### `VEL-02` · El índice compartido de disco · Media
+### `VEL-02` · El índice compartido de disco · Media — **y ahora es el camino principal**
+
+> ✅ **MEDIDO EL 1 DE SEPTIEMBRE DE 2026, Y COMPENSA.** Ver
+> [`docs/VEL-02-MEDICION.md`](VEL-02-MEDICION.md). Este punto vivía condicionado a `VEL-01`;
+> con `VEL-01` descartado, **es la única forma real de ganarle en velocidad a WizTree**, y sale.
+>
+> **La idea:** WizTree vuelve a escanear el disco entero cada vez que se abre. Guardar el índice y
+> leer solo lo que cambió desde la última vez le da la vuelta a la comparación — porque el coste por
+> elemento del intérprete, que fue lo que hundió a `VEL-01`, se paga sobre decenas de miles de
+> registros en lugar de sobre un millón.
+>
+> | Sobre un disco de 1.000.000 de archivos | |
+> |---|---|
+> | Volver a recorrerlo | **5,7 s** |
+> | Cargar el índice guardado en binario | **1,0 s** |
+> | **Punto de equilibrio** | **≈ 125.000 registros del diario ≈ 30.000 archivos tocados** |
+>
+> **Tres condiciones, y las tres salieron de medir:**
+>
+> 1. **El índice va en binario.** `ConvertTo-Json` con un millón de entradas **no termina**: el
+>    proceso muere por memoria sin llegar a lanzar. Y aunque hubiera memoria, extrapolado da 9,5 s
+>    de carga — más que el recorrido que se quería evitar. Binario 1,0 s · TSV 1,8 s · `Import-Csv`
+>    6,3 s.
+> 2. **Se guardan tres tablas, no una** (archivos, carpetas y referencia→ruta). Volver a sumar las
+>    carpetas desde el millón de archivos cuesta 6,0 s y se come la carga barata entera.
+> 3. **Falta medir lo único que no se puede medir aquí:** leer el diario va por `DeviceIoControl`
+>    con `FSCTL_READ_USN_JOURNAL`, y no se ha ejecutado nunca. En PowerShell 5.1 el punto de
+>    equilibrio cae a ~13.000 archivos, que sigue siendo cómodo.
+>
+> **Y la decisión de diseño que se deriva, que es la que protege al programa:** el índice guardado
+> puede estar obsoleto o corrupto —cambios con el diario apagado, o desde otro sistema—, y un índice
+> que miente enseñaría espacio que ya no existe. La respuesta es la misma en los cinco casos que se
+> analizaron: **recorrer de nuevo, sin reparación parcial.** Y sobre todo: **el índice pinta el mapa,
+> nunca decide qué se borra.**
+
 
 Heredado de `[REN-30]`. Seis módulos recorren las mismas carpetas. Tras las podas de la fase 5 su
 margen se redujo mucho; **si se hace `VEL-01`, este pierde casi todo el sentido**. Decidir uno u
@@ -1564,8 +1598,14 @@ documento — y para un portfolio, la que se ve en la primera captura de pantall
 
 ### `VIS-02` · Vista de archivos completa · Media-Alta
 
-> 🟡 **Vista de archivos en consola, y desde el 1 de septiembre de 2026 su capa de consulta
-> completa y probada:** `src/Core/VistaArchivos.ps1`. Búsqueda por comodines **sin usar `-like`**,
+> 🟡 **La consola YA USA la capa de consulta** desde el 1 de septiembre de 2026: `Show-InformeEspacio`
+> dejó de filtrar y ordenar por su cuenta. Tres cosas que el usuario ve y antes no veía: el resumen
+> se escribe **siempre** —antes faltaba justo *"y queda 1 más sin mostrar"* cuando había filtro, que
+> es lo que hacía creer que el análisis se dejó cosas—; buscar `foto[1].jpg` **encuentra
+> `foto[1].jpg`** y no `foto1.jpg`; y hay un `-Orden` cuya cabecera dice el orden que de verdad se
+> aplicó.
+>
+> *La capa de consulta:* `src/Core/VistaArchivos.ps1`. Búsqueda por comodines **sin usar `-like`**,
 > que interpreta también los corchetes y devolvía resultados absurdos para un nombre como
 > `foto[1].jpg`; orden por bytes y nunca por el texto formateado; y un resumen que distingue las
 > tres situaciones que hoy se ven como el mismo hueco —nada por encima del umbral, nada que case con
@@ -1670,7 +1710,22 @@ sí, y la interfaz tendrá que decirlo en vez de fallar en silencio al analizar.
 
 ### `VIS-05` · Enseñar qué está comprimido con NTFS · Pequeña
 
-> 🟡 **La mitad de núcleo está hecha y probada:** `src/Core/Compresion.ps1`. `Get-EspacioRecuperable`
+> ✅ **ENGANCHADO DE PUNTA A PUNTA el 1 de septiembre de 2026.** El recorrido lee el bit de
+> comprimido —que viene gratis en la enumeración— y **solo entonces** pregunta el tamaño en disco;
+> `New-Candidato` lleva un `TamanoEnDisco` **anulable** y `Bytes` **ya nace siendo la promesa**, así
+> que los ocho sitios que suman bytes heredan la cifra correcta sin tocar una línea y **solo hay un
+> sitio que decide**. Cuatro módulos lo piden ya: archivos grandes, descargas, temporales y
+> WSL/Docker.
+>
+> **Faltan dos, con su motivo:** `55-Duplicados` es delicado —arrastra la corrección de `COR-03` y
+> compara contenido—, y `45-AccesosRotos` trabaja sobre `.lnk` de un kilobyte, donde la compresión
+> no cambia nada que el usuario vaya a leer.
+>
+> **Y el criterio de aceptación solo se ve en tu Windows:** `GetCompressedFileSize` no se ha
+> ejecutado nunca. Hay un cebo nuevo en el banco (`08-comprimido`) y un paso 4.1 en
+> `docs/BANCO-PRUEBAS.md` que lo comprime con `compact /C`.
+>
+> *La mitad de núcleo:* `src/Core/Compresion.ps1`. `Get-EspacioRecuperable`
 > decide cuánto se puede prometer —lo que ocupa en disco cuando se sabe, el tamaño lógico cuando
 > no— y **ante la duda nunca promete de más**. `Format-DetalleCompresion` da el texto con las dos
 > cifras. El criterio de aceptación de abajo está cubierto por una prueba literal.
