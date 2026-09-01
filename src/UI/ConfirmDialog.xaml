@@ -44,17 +44,29 @@
                     BorderBrush="{DynamicResource Borde}" BorderThickness="1">
                 <StackPanel>
                     <Grid>
-                        <TextBlock Text="Elementos marcados" Foreground="{DynamicResource TextoTenue}" FontSize="12"/>
-                        <TextBlock x:Name="TxtElementos" HorizontalAlignment="Right" FontWeight="SemiBold"/>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="Elementos marcados" TextWrapping="Wrap" Foreground="{DynamicResource TextoTenue}" FontSize="12"/>
+                        <TextBlock x:Name="TxtElementos" Grid.Column="1" HorizontalAlignment="Right" FontWeight="SemiBold"/>
                     </Grid>
                     <Grid Margin="0,10,0,0">
-                        <TextBlock Text="Espacio que se recuperaria" Foreground="{DynamicResource TextoTenue}" FontSize="12"/>
-                        <TextBlock x:Name="TxtEspacio" HorizontalAlignment="Right" FontWeight="SemiBold"
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="Espacio que se recuperaria" TextWrapping="Wrap" Foreground="{DynamicResource TextoTenue}" FontSize="12"/>
+                        <TextBlock x:Name="TxtEspacio" Grid.Column="1" HorizontalAlignment="Right" FontWeight="SemiBold"
                                    Foreground="{DynamicResource Exito}"/>
                     </Grid>
                     <Grid Margin="0,10,0,0">
-                        <TextBlock Text="Destino de lo borrado" Foreground="{DynamicResource TextoTenue}" FontSize="12"/>
-                        <TextBlock x:Name="TxtDestino" HorizontalAlignment="Right" FontWeight="SemiBold"/>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="Destino de lo borrado" TextWrapping="Wrap" Foreground="{DynamicResource TextoTenue}" FontSize="12"/>
+                        <TextBlock x:Name="TxtDestino" Grid.Column="1" HorizontalAlignment="Right" FontWeight="SemiBold"/>
                     </Grid>
                 </StackPanel>
             </Border>

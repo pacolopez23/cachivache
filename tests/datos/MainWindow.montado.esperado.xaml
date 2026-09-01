@@ -330,8 +330,14 @@
 
                                 <!-- Módulos -->
                                 <Grid Margin="0,30,0,0">
-                                    <TextBlock Text="MÓDULOS A ANALIZAR" Style="{StaticResource Seccion}"/>
-                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,-6,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="MÓDULOS A ANALIZAR"
+                                               TextTrimming="CharacterEllipsis" Style="{StaticResource Seccion}"/>
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal"
+                                                HorizontalAlignment="Right" Margin="0,-6,0,0">
                                         <Button x:Name="BtnModulosTodos"  Style="{StaticResource BotonTexto}" Content="Marcar todos"/>
                                         <Button x:Name="BtnModulosNinguno" Style="{StaticResource BotonTexto}" Content="Desmarcar todos"/>
                                     </StackPanel>
@@ -403,13 +409,22 @@
                         <!-- Pie de acción -->
                         <Border Grid.Row="2" Background="{DynamicResource FondoBarra}"
                                 BorderBrush="{DynamicResource Borde}" BorderThickness="0,1,0,0" Padding="32,16">
+                            <!-- Dos columnas: ver el comentario de la barra de abajo
+                                 de Panel.Resultados.xaml. Sin ellas, el texto de
+                                 estado y los botones se superponen al estrechar. -->
                             <Grid>
-                                <StackPanel VerticalAlignment="Center">
-                                    <TextBlock x:Name="TxtEstadoInicio" FontSize="13" Text="Listo para analizar."/>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                                    <TextBlock x:Name="TxtEstadoInicio" FontSize="13"
+                                               TextTrimming="CharacterEllipsis" Text="Listo para analizar."/>
                                     <ProgressBar x:Name="BarraInicio" Width="420" Margin="0,12,0,0"
                                                  HorizontalAlignment="Left" Visibility="Collapsed"/>
                                 </StackPanel>
-                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right"
+                                            VerticalAlignment="Center">
                                     <Button x:Name="BtnCancelar" Style="{StaticResource BotonSecundario}"
                                             Content="Cancelar" Margin="0,0,10,0" Visibility="Collapsed"/>
                                     <Button x:Name="BtnAnalizar" Style="{StaticResource BotonPrimario}"
@@ -486,10 +501,39 @@
                             </Border>
                         </StackPanel>
 
-                        <!-- Barra de herramientas -->
+                        <!--
+                            Barra de herramientas.
+
+                            LAS DOS COLUMNAS NO SON DECORACIÓN: sin ellas los dos
+                            grupos caían en la MISMA celda del Grid y, en cuanto la
+                            suma de sus anchos pasaba del ancho disponible, se
+                            pintaban UNO ENCIMA DEL OTRO. No se recortaban ni se
+                            desplazaban: se superponían, con los rótulos
+                            entremezclados y las tres primeras acciones ilegibles.
+
+                            Pasó de verdad. La casilla de [USO-13] añadió unos
+                            170 px a un grupo izquierdo que ya iba justo, y a
+                            1013 px de panel -una ventana de 1233 px menos la barra
+                            lateral- "Marcar todo", "Desmarcar todo" y "Ocultar lo
+                            ya eliminado" se cruzaron. Se vio la primera vez que
+                            alguien miró la ventana, el 1 de septiembre de 2026, y
+                            estaba anotado como sospecha en docs/PRUEBA-MANUAL.md
+                            desde el 30 de agosto sin que nadie lo comprobara.
+
+                            Ahora la columna de la derecha es Auto -reserva lo que
+                            necesitan sus botones ANTES de repartir- y la izquierda
+                            se queda con el resto. Y el grupo izquierdo es un
+                            WrapPanel, no un StackPanel: cuando no cabe, la casilla
+                            baja a una segunda línea en vez de recortarse. La fila
+                            es de alto Auto, asi que crece con ella.
+                        -->
                         <Grid Grid.Row="1" Margin="32,20,32,16">
-                            <StackPanel Orientation="Horizontal">
-                                <Grid Width="270">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <WrapPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Grid Width="270" Margin="0,0,0,6">
                                     <!--
                                         El unico rotulo de este campo es el marcador de
                                         posicion de abajo, y un marcador de posicion NO es
@@ -516,7 +560,8 @@
                                         </TextBlock.Style>
                                     </TextBlock>
                                 </Grid>
-                                <ComboBox x:Name="FiltroRiesgo" Width="150" Margin="10,0,0,0"
+                                <ComboBox x:Name="FiltroRiesgo" Width="150" Margin="10,0,0,6"
+                                          VerticalAlignment="Center"
                                           AutomationProperties.Name="Filtrar por nivel de riesgo">
                                     <ComboBoxItem Content="Todos los riesgos" IsSelected="True"/>
                                     <ComboBoxItem Content="Solo riesgo bajo"/>
@@ -548,12 +593,13 @@
                                     en el predicado del filtro, en PowerShell, no
                                     en un disparador del XAML.
                                 -->
-                                <CheckBox x:Name="ChkOcultarHechos" Margin="12,0,0,0"
+                                <CheckBox x:Name="ChkOcultarHechos" Margin="12,0,0,6"
                                           VerticalAlignment="Center"
                                           Content="Ocultar lo ya eliminado"
                                           ToolTip="Esconde las filas que se borraron bien. Lo que falló sigue viéndose siempre, en rojo, para que puedas reintentarlo."/>
-                            </StackPanel>
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            </WrapPanel>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal"
+                                        HorizontalAlignment="Right" VerticalAlignment="Center">
                                 <Button x:Name="BtnMarcarTodo"   Style="{StaticResource BotonTexto}" Content="Marcar todo"/>
                                 <Button x:Name="BtnDesmarcarTodo" Style="{StaticResource BotonTexto}" Content="Desmarcar todo"/>
                                 <Button x:Name="BtnSoloSeguros"  Style="{StaticResource BotonTexto}" Content="Solo lo seguro"/>
@@ -1015,16 +1061,37 @@
                         <!-- Pie con el resumen y el boton de eliminar -->
                         <Border Grid.Row="3" Background="{DynamicResource FondoBarra}"
                                 BorderBrush="{DynamicResource Borde}" BorderThickness="0,1,0,0" Padding="32,16">
+                            <!--
+                                Dos columnas, por lo mismo que la barra de
+                                herramientas de arriba: sin ellas el texto de la
+                                izquierda y los botones de la derecha caian en la
+                                MISMA celda y se pintaban uno encima del otro en
+                                cuanto la ventana se estrechaba. Se vio el 1 de
+                                septiembre de 2026: "32 elementos marcados" y la
+                                casilla "Solo simular" superpuestas.
+
+                                El TextTrimming del texto no es adorno: con la
+                                columna estrecha, sin el se recorta a media palabra;
+                                con el, acaba en puntos suspensivos y se entiende
+                                que hay mas.
+                            -->
                             <Grid>
-                                <StackPanel VerticalAlignment="Center">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
                                     <TextBlock x:Name="TxtSeleccion" FontSize="13" FontWeight="SemiBold"
+                                               TextTrimming="CharacterEllipsis"
                                                Text="Nada marcado."/>
                                     <TextBlock x:Name="TxtProyeccion" FontSize="12" Margin="0,4,0,0"
+                                               TextTrimming="CharacterEllipsis"
                                                Foreground="{DynamicResource TextoTenue}" Text=""/>
                                     <ProgressBar x:Name="BarraBorrado" Width="420" Margin="0,12,0,0"
                                                  HorizontalAlignment="Left" Visibility="Collapsed"/>
                                 </StackPanel>
-                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right"
+                                            VerticalAlignment="Center">
                                     <!--
                                         La casilla de simulacion va AQUI, pegada al boton que
                                         borra, y no en Ajustes. Una opcion que cambia lo que hace
@@ -1082,13 +1149,22 @@
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
+                        <!-- Dos columnas: ver el comentario de la barra de abajo de
+                             Panel.Resultados.xaml. Aqui importa mas que en ningun
+                             otro sitio, porque el parrafo de la izquierda es largo
+                             y se comeria los dos botones. -->
                         <Grid Grid.Row="0" Margin="32,28,32,0">
-                            <StackPanel>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Margin="0,0,16,0">
                                 <TextBlock Text="Registro de la sesión" Style="{StaticResource Titulo}"/>
-                                <TextBlock Style="{StaticResource Subtitulo}" Margin="0,4,0,0"
+                                <TextBlock Style="{StaticResource Subtitulo}" Margin="0,4,0,0" TextWrapping="Wrap"
                                            Text="Cada línea que el programa escribe en su archivo de registro aparece aquí, palabra por palabra. En pantalla se conservan las 2.000 últimas; en el archivo están todas."/>
                             </StackPanel>
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom">
+                            <StackPanel Grid.Column="1" Orientation="Horizontal"
+                                        HorizontalAlignment="Right" VerticalAlignment="Bottom">
                                 <Button x:Name="BtnCopiarRegistro" Style="{StaticResource BotonSecundario}" Content="Copiar"/>
                                 <Button x:Name="BtnAbrirRegistro"  Style="{StaticResource BotonSecundario}"
                                         Content="Abrir carpeta" Margin="10,0,0,0"/>
@@ -1220,9 +1296,17 @@
                                     <StackPanel>
                                         <TextBlock Text="Umbrales de detección" FontWeight="SemiBold" FontSize="15"/>
 
+                                        <!-- Dos columnas: ver el comentario de la barra de abajo de
+                                             Panel.Resultados.xaml. El deslizador mide 260 px fijos y
+                                             el rotulo crece con el idioma; sin columnas se cruzan. -->
                                         <Grid Margin="0,18,0,0">
-                                            <StackPanel>
-                                                <TextBlock Text="Tamano mínimo para proponer un elemento"/>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                                <TextBlock Text="Tamano mínimo para proponer un elemento"
+                                                           TextTrimming="CharacterEllipsis"/>
                                                 <TextBlock x:Name="TxtMinimoMB" Style="{StaticResource Subtitulo}" Text="10 MB"/>
                                             </StackPanel>
                                             <!--
@@ -1233,7 +1317,7 @@
                                                 "control deslizante, 10" y el usuario no sabe si
                                                 son megabytes o dias. Ver [A11Y-01].
                                             -->
-                                            <Slider x:Name="SliderMinimoMB" Width="260" Minimum="1" Maximum="500"
+                                            <Slider x:Name="SliderMinimoMB" Grid.Column="1" Width="260" Minimum="1" Maximum="500"
                                                     AutomationProperties.Name="Tamaño mínimo en megabytes"
                                                     Value="10" TickFrequency="1" IsSnapToTickEnabled="True"
                                                     HorizontalAlignment="Right" VerticalAlignment="Center"/>
@@ -1242,11 +1326,16 @@
                                         <Border Style="{StaticResource Separador}"/>
 
                                         <Grid>
-                                            <StackPanel>
-                                                <TextBlock Text="Días sin usar para considerar algo abandonado"/>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                                <TextBlock Text="Días sin usar para considerar algo abandonado"
+                                                           TextTrimming="CharacterEllipsis"/>
                                                 <TextBlock x:Name="TxtDiasSinUso" Style="{StaticResource Subtitulo}" Text="180 días"/>
                                             </StackPanel>
-                                            <Slider x:Name="SliderDias" Width="260" Minimum="30" Maximum="730"
+                                            <Slider x:Name="SliderDias" Grid.Column="1" Width="260" Minimum="30" Maximum="730"
                                                     AutomationProperties.Name="Días sin usar"
                                                     Value="180" TickFrequency="10" IsSnapToTickEnabled="True"
                                                     HorizontalAlignment="Right" VerticalAlignment="Center"/>

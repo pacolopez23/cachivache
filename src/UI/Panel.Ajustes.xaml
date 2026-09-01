@@ -37,9 +37,17 @@
                                     <StackPanel>
                                         <TextBlock Text="Umbrales de detección" FontWeight="SemiBold" FontSize="15"/>
 
+                                        <!-- Dos columnas: ver el comentario de la barra de abajo de
+                                             Panel.Resultados.xaml. El deslizador mide 260 px fijos y
+                                             el rotulo crece con el idioma; sin columnas se cruzan. -->
                                         <Grid Margin="0,18,0,0">
-                                            <StackPanel>
-                                                <TextBlock Text="Tamano mínimo para proponer un elemento"/>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                                <TextBlock Text="Tamano mínimo para proponer un elemento"
+                                                           TextTrimming="CharacterEllipsis"/>
                                                 <TextBlock x:Name="TxtMinimoMB" Style="{StaticResource Subtitulo}" Text="10 MB"/>
                                             </StackPanel>
                                             <!--
@@ -50,7 +58,7 @@
                                                 "control deslizante, 10" y el usuario no sabe si
                                                 son megabytes o dias. Ver [A11Y-01].
                                             -->
-                                            <Slider x:Name="SliderMinimoMB" Width="260" Minimum="1" Maximum="500"
+                                            <Slider x:Name="SliderMinimoMB" Grid.Column="1" Width="260" Minimum="1" Maximum="500"
                                                     AutomationProperties.Name="Tamaño mínimo en megabytes"
                                                     Value="10" TickFrequency="1" IsSnapToTickEnabled="True"
                                                     HorizontalAlignment="Right" VerticalAlignment="Center"/>
@@ -59,11 +67,16 @@
                                         <Border Style="{StaticResource Separador}"/>
 
                                         <Grid>
-                                            <StackPanel>
-                                                <TextBlock Text="Días sin usar para considerar algo abandonado"/>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                                <TextBlock Text="Días sin usar para considerar algo abandonado"
+                                                           TextTrimming="CharacterEllipsis"/>
                                                 <TextBlock x:Name="TxtDiasSinUso" Style="{StaticResource Subtitulo}" Text="180 días"/>
                                             </StackPanel>
-                                            <Slider x:Name="SliderDias" Width="260" Minimum="30" Maximum="730"
+                                            <Slider x:Name="SliderDias" Grid.Column="1" Width="260" Minimum="30" Maximum="730"
                                                     AutomationProperties.Name="Días sin usar"
                                                     Value="180" TickFrequency="10" IsSnapToTickEnabled="True"
                                                     HorizontalAlignment="Right" VerticalAlignment="Center"/>

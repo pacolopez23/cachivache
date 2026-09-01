@@ -1118,6 +1118,103 @@ Describe 'COR-07: ninguna lista generica se crea con New-Object' {
             'hay que usar [Collections.Generic.X[...]]::new(); ver el comentario de Candidatos en Window.ps1')
     }
 
+    It 'ningun Grid coloca cosas a la derecha sin declarar columnas' {
+        # LA SEGUNDA VERSION DE ESTA PRUEBA, Y POR QUE HIZO FALTA.
+        #
+        # La primera exigia DOS GRUPOS HORIZONTALES en el mismo Grid, que
+        # era el caso que se acababa de arreglar en la barra de
+        # herramientas. Cazaba ese y ninguno mas.
+        #
+        # Media hora despues, la misma captura de pantalla enseñaba el
+        # MISMO fallo en la barra de abajo: "32 elementos marcados" y la
+        # casilla "Solo simular" superpuestas. Alli el grupo de la
+        # izquierda era un StackPanel VERTICAL -sin atributo Orientation-,
+        # asi que la prueba no lo miraba siquiera. Estaba escrita sobre el
+        # ejemplo que tenia delante en vez de sobre la regla, que es
+        # exactamente el error de la regla 8 del relevo cometido otra vez
+        # y el mismo dia.
+        #
+        # LA REGLA DE VERDAD no habla de orientaciones: en un Grid sin
+        # columnas todos los hijos ocupan LA MISMA CELDA. Poner uno con
+        # HorizontalAlignment="Right" es fingir dos columnas con la
+        # alineacion, y funciona exactamente hasta que el contenido crece:
+        # entonces se pintan uno encima del otro, sin recortarse, sin
+        # desplazarse y sin avisar.
+        #
+        # Con columnas declaradas la de Auto reserva su ancho ANTES de
+        # repartir, y el solape deja de poder ocurrir. Nueve sitios en
+        # cinco paneles seguian el patron; dos se solapaban ya.
+        #
+        # Aqui no hay WPF y no se puede medir un pixel. Se prohibe la
+        # ESTRUCTURA, que es lo unico comprobable desde una prueba.
+        $malos = @()
+        foreach ($archivo in @(Get-ChildItem -LiteralPath (Join-Path $script:Raiz 'src') `
+                                             -Filter '*.xaml' -Recurse)) {
+            $texto = [IO.File]::ReadAllText($archivo.FullName)
+            # Grids HOJA: los que no contienen otro Grid dentro. Son donde
+            # se colocan los controles de verdad.
+            foreach ($m in [regex]::Matches($texto, '(?s)<Grid(?<attr>[^>]*)>(?<cuerpo>((?!<Grid[\s>]).)*?)</Grid>')) {
+                $cuerpo = $m.Groups['cuerpo'].Value
+                if ($cuerpo -notmatch 'HorizontalAlignment="Right"') { continue }
+                if ($cuerpo -match '<Grid\.ColumnDefinitions>')      { continue }
+                # Un solo hijo alineado a la derecha no se solapa con nada.
+                $hijos = @([regex]::Matches($cuerpo,
+                    '<(StackPanel|WrapPanel|DockPanel|Border|Button|TextBlock|CheckBox|ComboBox|Slider|ProgressBar|Image)[\s>]')).Count
+                if ($hijos -lt 2) { continue }
+                $linea = ($texto.Substring(0, $m.Index) -split "`n").Count
+                $malos += ('{0}:{1}' -f $archivo.Name, $linea)
+            }
+        }
+        $malos -join ', ' | Should -BeNullOrEmpty -Because (
+            'sin columnas, todos los hijos comparten celda y se PINTAN ENCIMA cuando no caben')
+    }
+
+    It 'ningun Grid apila DOS grupos horizontales en la misma celda' {
+        # EL FALLO QUE ENCONTRO ESTA PRUEBA, y lo encontro un ojo humano
+        # antes que ella.
+        #
+        # La barra de herramientas de Panel.Resultados.xaml era un Grid SIN
+        # columnas con dos hijos dentro: un grupo horizontal alineado a la
+        # izquierda y otro alineado a la derecha. En un Grid sin columnas
+        # los dos hijos ocupan LA MISMA CELDA, asi que en cuanto la suma de
+        # sus anchos pasa del ancho disponible se pintan UNO ENCIMA DEL
+        # OTRO. No se recortan, no se desplazan, no avisan: se superponen,
+        # con los rotulos entremezclados e ilegibles.
+        #
+        # La casilla de [USO-13] anyadio unos 170 px al grupo izquierdo y
+        # los cruzo. Se vio el 1 de septiembre de 2026, la primera vez que
+        # alguien miro la ventana ejecutandose, y llevaba anotado como
+        # SOSPECHA en docs/PRUEBA-MANUAL.md desde el 30 de agosto.
+        #
+        # Ninguna prueba de este proyecto puede medir un pixel: aqui no hay
+        # WPF. Lo que si se puede es prohibir la ESTRUCTURA que lo hace
+        # posible, que es lo que hace esta prueba. Un Grid con dos grupos
+        # horizontales tiene que declarar columnas; con ellas, la de Auto
+        # reserva su ancho antes de repartir y el solape deja de poder
+        # ocurrir.
+        $malos = @()
+        foreach ($archivo in @(Get-ChildItem -LiteralPath (Join-Path $script:Raiz 'src') `
+                                             -Filter '*.xaml' -Recurse)) {
+            $texto = [IO.File]::ReadAllText($archivo.FullName)
+            # Un Grid, lo que hay dentro, y su cierre. Sin anidar: basta con
+            # los que no contienen otro Grid dentro, que son las hojas donde
+            # de verdad se colocan los controles.
+            foreach ($m in [regex]::Matches($texto, '(?s)<Grid(?<attr>[^>]*)>(?<cuerpo>((?!<Grid[\s>]).)*?)</Grid>')) {
+                $cuerpo = $m.Groups['cuerpo'].Value
+                $grupos = @([regex]::Matches($cuerpo, '<(StackPanel|WrapPanel)[^>]*Orientation="Horizontal"'))
+                if ($grupos.Count -lt 2) { continue }
+                # Con columnas declaradas, o con cada grupo en su fila, el
+                # solape no puede darse.
+                if ($cuerpo -match '<Grid\.ColumnDefinitions>') { continue }
+                if ($m.Groups['attr'].Value -match 'ColumnDefinitions') { continue }
+                $malos += ('{0}: un Grid con {1} grupos horizontales y sin columnas' -f
+                           $archivo.Name, $grupos.Count)
+            }
+        }
+        $malos -join ' // ' | Should -BeNullOrEmpty -Because (
+            'dos grupos horizontales en la misma celda se PINTAN ENCIMA cuando no caben')
+    }
+
     It 'ningun archivo usa un acelerador de tipos que 5.1 no tiene' {
         # EL FALLO QUE ENCONTRO ESTA PRUEBA, y es el peor de su clase.
         #

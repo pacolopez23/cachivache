@@ -23,13 +23,22 @@
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
+                        <!-- Dos columnas: ver el comentario de la barra de abajo de
+                             Panel.Resultados.xaml. Aqui importa mas que en ningun
+                             otro sitio, porque el parrafo de la izquierda es largo
+                             y se comeria los dos botones. -->
                         <Grid Grid.Row="0" Margin="32,28,32,0">
-                            <StackPanel>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Margin="0,0,16,0">
                                 <TextBlock Text="Registro de la sesión" Style="{StaticResource Titulo}"/>
-                                <TextBlock Style="{StaticResource Subtitulo}" Margin="0,4,0,0"
+                                <TextBlock Style="{StaticResource Subtitulo}" Margin="0,4,0,0" TextWrapping="Wrap"
                                            Text="Cada línea que el programa escribe en su archivo de registro aparece aquí, palabra por palabra. En pantalla se conservan las 2.000 últimas; en el archivo están todas."/>
                             </StackPanel>
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom">
+                            <StackPanel Grid.Column="1" Orientation="Horizontal"
+                                        HorizontalAlignment="Right" VerticalAlignment="Bottom">
                                 <Button x:Name="BtnCopiarRegistro" Style="{StaticResource BotonSecundario}" Content="Copiar"/>
                                 <Button x:Name="BtnAbrirRegistro"  Style="{StaticResource BotonSecundario}"
                                         Content="Abrir carpeta" Margin="10,0,0,0"/>

@@ -173,6 +173,56 @@ que se hace una vez a un hábito después de cada tanda de cambios.
   de la guardia son lógica de seguridad, no texto de interfaz: si alguien se las lleva a un archivo
   de idioma, rompe la guardia en silencio. `[I18N-02]`
 
+### Nueve rejillas fingían dos columnas con la alineación, y dos ya se solapaban
+
+Se vio a simple vista en cuanto alguien abrió la ventana. En la barra de herramientas de Resultados,
+*Marcar todo*, *Desmarcar todo* y *Ocultar lo ya eliminado* aparecían **superpuestos e ilegibles**; y
+al estrechar la ventana, *«32 elementos marcados»* se pintaba encima de la casilla *Solo simular*.
+
+La causa es la misma en los dos sitios y en otros siete: **un `Grid` sin columnas donde alguien pone
+un hijo con `HorizontalAlignment="Right"`**. Eso finge dos columnas con la alineación, pero en un
+`Grid` sin columnas **todos los hijos ocupan la misma celda**: funciona exactamente hasta que el
+contenido crece, y entonces se pintan uno encima del otro. No se recortan, no se desplazan, no
+avisan. La casilla de `USO-13` añadió unos 170 px a una fila que ya iba justa y la cruzó.
+
+Corregidos los nueve —en `Resultados`, `Inicio`, `Ajustes`, `Registro` y el diálogo de
+confirmación— con una columna `*` y una `Auto`: la `Auto` reserva lo que necesita **antes** de
+repartir, y el solape deja de poder ocurrir. Donde el texto puede quedarse sin sitio, ahora acaba en
+puntos suspensivos o se ajusta a la línea siguiente en vez de recortarse a media palabra.
+
+**La invariante hizo falta dos veces, y la primera estuvo mal.** Se escribió exigiendo *dos grupos
+horizontales* en el mismo `Grid`, que era el caso que se acababa de arreglar. Media hora después la
+misma captura enseñaba el fallo en la barra de abajo, donde el grupo de la izquierda es un
+`StackPanel` **vertical**: la prueba ni lo miraba. Estaba escrita sobre el ejemplo que tenía delante
+en vez de sobre la regla — el error de la regla 8 del relevo, cometido el mismo día que se escribió
+esa regla. La segunda versión pregunta lo que hay que preguntar: *¿hay algo alineado a la derecha en
+un `Grid` que no declara columnas?*
+
+Y una tercera cosa que salió de rebote: al añadir puntos suspensivos al diálogo de confirmación,
+**`USO-08` lo rechazó**. Ese diálogo tiene prohibido recortar texto —`SECURITY.md` exige que los
+comandos externos se vean enteros— y la invariante lo paró en el acto. Se cambió por ajuste de línea.
+
+### La barra de Resultados se pintaba encima de sí misma
+
+*Marcar todo*, *Desmarcar todo* y *Ocultar lo ya eliminado* aparecían **superpuestos e ilegibles**.
+La barra de herramientas era un `Grid` **sin columnas** con dos grupos horizontales dentro, uno
+alineado a la izquierda y otro a la derecha: en un `Grid` sin columnas los dos hijos ocupan la misma
+celda, así que en cuanto la suma de sus anchos pasa del disponible **se pintan uno encima del otro**.
+No se recortan ni se desplazan. La casilla de `USO-13` añadió unos 170 px a un grupo que ya iba justo
+y los cruzó.
+
+Ahora la columna derecha es `Auto` —reserva lo que necesitan sus botones antes de repartir— y el
+grupo izquierdo es un `WrapPanel`, así que cuando no cabe la casilla baja a una segunda línea en vez
+de recortarse.
+
+**Lo que este fallo dice del proyecto es más interesante que el fallo.** Estaba escrito como
+sospecha en `docs/PRUEBA-MANUAL.md` desde el 30 de agosto —*«a 1020 px de ancho, ¿se solapan los
+filtros con los botones de la derecha?»*— y se confirmó a los dos días, en cuanto alguien abrió la
+ventana y miró. Dos días de una pregunta ya formulada esperando a que alguien la mirase. Aquí no hay
+WPF: ninguna de las 2288 pruebas puede medir un píxel. Lo que sí se puede es prohibir la
+**estructura** que lo hace posible, y eso es la invariante nueva: ningún `Grid` puede llevar dos
+grupos horizontales sin declarar columnas.
+
 ### `VEL-02` estaba muerto en Windows, y la suite de Linux no podía verlo
 
 `src/Core/IndiceIncremental.ps1` comprobaba `$Valor -is [short]`. **`[short]` es un acelerador de

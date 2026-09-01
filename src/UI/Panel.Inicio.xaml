@@ -104,8 +104,14 @@
 
                                 <!-- Módulos -->
                                 <Grid Margin="0,30,0,0">
-                                    <TextBlock Text="MÓDULOS A ANALIZAR" Style="{StaticResource Seccion}"/>
-                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,-6,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="MÓDULOS A ANALIZAR"
+                                               TextTrimming="CharacterEllipsis" Style="{StaticResource Seccion}"/>
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal"
+                                                HorizontalAlignment="Right" Margin="0,-6,0,0">
                                         <Button x:Name="BtnModulosTodos"  Style="{StaticResource BotonTexto}" Content="Marcar todos"/>
                                         <Button x:Name="BtnModulosNinguno" Style="{StaticResource BotonTexto}" Content="Desmarcar todos"/>
                                     </StackPanel>
@@ -177,13 +183,22 @@
                         <!-- Pie de acción -->
                         <Border Grid.Row="2" Background="{DynamicResource FondoBarra}"
                                 BorderBrush="{DynamicResource Borde}" BorderThickness="0,1,0,0" Padding="32,16">
+                            <!-- Dos columnas: ver el comentario de la barra de abajo
+                                 de Panel.Resultados.xaml. Sin ellas, el texto de
+                                 estado y los botones se superponen al estrechar. -->
                             <Grid>
-                                <StackPanel VerticalAlignment="Center">
-                                    <TextBlock x:Name="TxtEstadoInicio" FontSize="13" Text="Listo para analizar."/>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                                    <TextBlock x:Name="TxtEstadoInicio" FontSize="13"
+                                               TextTrimming="CharacterEllipsis" Text="Listo para analizar."/>
                                     <ProgressBar x:Name="BarraInicio" Width="420" Margin="0,12,0,0"
                                                  HorizontalAlignment="Left" Visibility="Collapsed"/>
                                 </StackPanel>
-                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right"
+                                            VerticalAlignment="Center">
                                     <Button x:Name="BtnCancelar" Style="{StaticResource BotonSecundario}"
                                             Content="Cancelar" Margin="0,0,10,0" Visibility="Collapsed"/>
                                     <Button x:Name="BtnAnalizar" Style="{StaticResource BotonPrimario}"

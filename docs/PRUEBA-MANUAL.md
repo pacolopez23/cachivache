@@ -47,6 +47,74 @@ Si sale **5.1**, tu ejecución vale doble: las pruebas automáticas corren en Po
 
 ---
 
+## Bloque 0 ter · Lo del 1 de septiembre — **cuatro puntos que nadie ha visto nunca**
+
+Esto es más nuevo que el bloque 0 bis y está **menos verificado que nada en este documento**: se
+escribió, se probó con 2288 pruebas automáticas, y no lo ha mirado un ser humano ni una vez. Toca
+el análisis en sí —lo que se mide y lo que se propone—, así que un fallo aquí sale en la primera
+pantalla.
+
+**Hazlo antes que el 0 bis.** Son cinco minutos y despeja lo más caro de arreglar si va mal.
+
+### 0t.1 · El discriminador de esta versión
+
+Antes de nada, en **Acerca de** (`Ctrl+6`) mira la versión. Y en **Inicio** (`Ctrl+1`), la lista de
+discos de la izquierda tiene que enseñar **todas** tus unidades, no solo las internas. Si el USB no
+aparece, estás en la versión anterior a `VIS-04` y el resto del bloque no significa nada.
+
+### 0t.2 · Los discos extraíbles se analizan y NO se borra en ellos — `VIS-04`
+
+Es el punto con más riesgo de los cuatro, porque cambia **qué se propone borrar**.
+
+Enchufa el USB o el disco externo **antes de abrir el programa**.
+
+| | Qué hacer | Qué tiene que pasar |
+|---|---|---|
+| ☐ | **Inicio** (`Ctrl+1`), lista de discos | El USB **aparece**, con su espacio libre y su barra |
+| ☐ | Déjalo marcado y pulsa **Analizar el equipo** | Termina sin franja de aviso |
+| ☐ | **Resultados** (`Ctrl+2`), filtra por la letra del USB | Si sale algo suyo, mira la columna *qué pasa si se borra* |
+| ☐ | Lee ese texto | Tiene que decir **«Se ha medido, pero no se borra nada en…: es una unidad extraíble y se puede desconectar en mitad del borrado»** |
+| ☐ | Intenta marcar esa fila y pulsar **Eliminar lo marcado** | **No se borra.** Si desaparece algo del USB, para y dímelo: es lo único de hoy que destruiría datos |
+
+**Y la pregunta que llevo días sin poder responder.** Abre PowerShell y ejecuta esto con el USB
+conectado:
+
+```powershell
+[IO.DriveInfo]::GetDrives() | Select-Object Name, DriveType
+```
+
+Dime qué dice de la letra del USB. Si pone `Removable`, todo lo de arriba funciona. **Si pone
+`Fixed`** —y pasa con muchos discos externos por USB—, Windows no lo distingue de un disco interno,
+`VIS-04` no puede protegerlo y hay que buscar otra señal. Eso no es un fallo del programa, es un
+límite del sistema, pero cambia lo que hay que hacer.
+
+### 0t.3 · Lo comprimido ya no promete espacio que no existe — `VIS-05`
+
+Un archivo comprimido por NTFS dice ocupar 100 MB y en el disco ocupa 30. Antes se prometían los
+100.
+
+Para tener uno: clic derecho en una carpeta grande → *Propiedades* → *Opciones avanzadas* →
+**Comprimir contenido para ahorrar espacio en disco**. Su nombre se pone en azul en el Explorador.
+
+| | Qué hacer | Qué tiene que pasar |
+|---|---|---|
+| ☐ | Analiza y busca algo dentro de esa carpeta comprimida | En *qué pasa si se borra* aparecen **las dos cifras**: lo que ocupa y lo que se libera |
+| ☐ | Compara con lo que dice el Explorador (*Tamaño* y *Tamaño en disco*) | La cifra que **promete liberar** es la segunda, la pequeña |
+| ☐ | Mira el total del pie de Resultados | No promete más de lo que hay |
+
+### 0t.4 · Lo que más me preocupa: que el análisis no se haya vuelto lento
+
+Cuatro módulos preguntan ahora al sistema cuánto ocupa cada cosa **de verdad**. Se pregunta solo
+cuando el archivo lleva la marca de comprimido, precisamente para no pagarlo siempre — pero eso no
+se ha medido nunca en Windows.
+
+| | Qué hacer | Qué tiene que pasar |
+|---|---|---|
+| ☐ | Cronometra un análisis con perfil **Equilibrado** | Parecido a lo que tardaba antes |
+| ☐ | Si notas que va bastante más lento, **dilo** | Se arregla en una función; lo caro es no enterarse |
+
+---
+
 ## Bloque 0 bis · La tanda del 30 de agosto — **dieciocho puntos sin ver**
 
 Esta es la lista de esta subida. Todo lo de aquí es **XAML o cableado de ventana**, o sea lo único
@@ -153,8 +221,16 @@ Es lo más molesto de todo lo que había, y **hace falta un análisis largo para
 - [ ] **El resumen del análisis compara con el anterior** (`CNF-06`): al terminar el segundo análisis
       debe decir algo como *«(hace 4 días eran 890 elementos y 3,20 GB)»*. En el primero no dice nada,
       que es lo correcto.
-- [ ] **El ancho de la barra de Resultados**: la casilla nueva suma unos 170 px a la fila de filtros,
-      que ya iba justa. A 1020 px de ancho, ¿se solapan los filtros con los botones de la derecha?
+- [x] ~~**El ancho de la barra de Resultados**: la casilla nueva suma unos 170 px a la fila de
+      filtros, que ya iba justa. A 1020 px de ancho, ¿se solapan los filtros con los botones de la
+      derecha?~~ **SÍ SE SOLAPABAN.** Confirmado el 1 de septiembre de 2026, la primera vez que
+      alguien miró la ventana: *Marcar todo*, *Desmarcar todo* y *Ocultar lo ya eliminado* se
+      pintaban unos encima de otros e ilegibles. La barra era un `Grid` sin columnas con los dos
+      grupos en la misma celda. Arreglado, y con invariante en `tests/Invariantes.Tests.ps1`.
+- [ ] **Vuelve a mirar esa fila**, que el arreglo no lo ha visto nadie: los cinco botones de la
+      derecha (*Marcar todo* … *Abrir ubicación*) se leen enteros y separados, y el filtro, el
+      desplegable y la casilla no se cruzan con ellos. **Estrecha la ventana** hasta que no quepan:
+      la casilla debe **bajar a una segunda línea**, no recortarse ni superponerse.
 - [ ] **`COR-08`, y esto es medible:** cronometra un análisis con perfil **Exhaustivo** y compáralo con
       lo que tardaba antes. El recorrido cambió de motor y en PowerShell 5.1 se espera empate o mejora,
       pero no se ha podido medir en Windows. Si se nota lento, dilo: el arreglo es de una sola función.
@@ -243,6 +319,40 @@ Es el bloque más importante y el que menos hay que forzar. **No actives el borr
 | ☐ | Comprueba que lo que lleva aviso sale **en rojo y sin marcar** | Es una invariante del programa: nada arriesgado viene marcado de fábrica |
 | ☐ | Cancela un análisis a mitad | Se detiene y la ventana responde |
 | ☐ | Mira `%LOCALAPPDATA%\Cachivache\registros` | Hay una línea por acción, con el identificador de sesión |
+
+### 3.1 · Los enlaces duros — `VIS-03`. **Esto SOLO lo puede comprobar tu equipo**
+
+La unidad de los ejecutores de GitHub no admite enlaces duros, así que en la
+integración continua estas cuatro pruebas **se saltan** con el motivo *"el
+sistema no admite enlaces duros"*. Se saltan limpiamente y la pasada sale
+verde: es decir, `VIS-03` **no lo verifica nadie salvo tú**. Se descubrió
+leyendo el registro de la CI del 1 de septiembre de 2026, no porque algo
+fallara.
+
+Dos enlaces duros al mismo contenido son **un solo archivo** ocupando espacio
+una sola vez. Si el programa los cuenta dos veces, promete liberar el doble de
+lo que hay; y si propone borrar uno como si fuera un duplicado, el usuario
+pierde un nombre creyendo que conserva el otro.
+
+Desde una consola en una carpeta temporal tuya:
+
+```
+mkdir %TEMP%\cachivache-enlaces
+cd /d %TEMP%\cachivache-enlaces
+fsutil file createnew original.bin 10000000
+mklink /H copia.bin original.bin
+```
+
+| | Qué hacer | Qué tiene que pasar |
+|---|---|---|
+| ☐ | Analiza esa carpeta y mira lo que dice ocupar | **10 MB, no 20**: el contenido se cuenta una sola vez |
+| ☐ | Mira si el módulo de duplicados propone borrar `copia.bin` | **NO lo propone.** No es una copia, es el mismo archivo con otro nombre |
+| ☐ | Borra la carpeta entera cuando termines | `rmdir /s /q %TEMP%\cachivache-enlaces` |
+
+Si el primer punto dice 20 MB, es la degradación conocida de PowerShell 7
+(`COR-09`): en 5.1 el enlace duro se detecta y en 7 no. El programa arranca en
+5.1, así que **la respuesta que cuenta es la de la ventana**, no la de una
+consola de `pwsh`.
 
 ---
 
