@@ -1,4 +1,4 @@
-# Funciones de src/ que ninguna prueba nombra todavia.
+﻿# Funciones de src/ que ninguna prueba nombra todavia.
 #
 # NO ES UNA LISTA DE EXCEPCIONES PERMANENTES: es lo que queda por hacer, y
 # SOLO PUEDE ENCOGER. tests/Inventario.Tests.ps1 falla si aparece una
@@ -52,7 +52,6 @@ Import-Xaml
 Initialize-InteropVentana
 Initialize-MotorBorrado
 Invoke-BusquedaPorLista
-New-EntradaCarpeta
 Register-LimiteMaximizado
 Resolve-EjecutableDeSistema
 Set-Progreso

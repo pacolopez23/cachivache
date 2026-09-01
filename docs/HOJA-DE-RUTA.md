@@ -1233,6 +1233,27 @@ completo en algo que se ejecuta sin pensárselo.
 >    con `FSCTL_READ_USN_JOURNAL`, y no se ha ejecutado nunca. En PowerShell 5.1 el punto de
 >    equilibrio cae a ~13.000 archivos, que sigue siendo cómodo.
 >
+> **🟡 La mitad que se puede escribir aquí ya está hecha y probada** (1 de septiembre de 2026):
+> `src/Core/IndicePersistente.ps1` guarda y lee en binario con escritura atómica, y
+> `src/Core/IndiceIncremental.ps1` decide si lo leído se puede creer —con **diez motivos de
+> rechazo distintos, cada uno con su frase**— y le aplica los cambios propagando los totales.
+>
+> **Falta la mitad de Windows:** leer el diario con `FSCTL_READ_USN_JOURNAL`, y quién llama a todo
+> esto. Hasta entonces el programa se comporta igual que antes.
+>
+> **Y una lección de escribir las dos mitades en paralelo, que merece quedarse.** Las dos estaban en
+> verde —55 y 82 pruebas— **el día que no encajaban**. Coincidían en la cabecera, que estaba
+> acordada, y discrepaban en dos cosas que nadie había acordado: una devolvía la tabla de archivos
+> como array y la otra necesitaba buscar rutas sueltas; y ya con las dos usando diccionario, seguían
+> discrepando en qué guardar dentro. El síntoma era que **se descartaban todas las bajas**. Ninguna
+> prueba de una sola mitad podía verlo. De ahí `tests/IndiceCostura.Tests.ps1`, que recorre el camino
+> entero: guardar → cabecera → validar → leer → aplicar, y exige que **una baja de 2 MB deje el total
+> en 4 MB**.
+>
+> Y de paso apareció un rechazo mudo: `Update-IndiceConCambios` devolvía *"no te fíes"* con el motivo
+> **vacío**, así que quien llamara no podía saber si se habían caído cambios, si el índice ya venía
+> descuadrado o si el programa se había roto.
+>
 > **Y la decisión de diseño que se deriva, que es la que protege al programa:** el índice guardado
 > puede estar obsoleto o corrupto —cambios con el diario apagado, o desde otro sistema—, y un índice
 > que miente enseñaría espacio que ya no existe. La respuesta es la misma en los cinco casos que se

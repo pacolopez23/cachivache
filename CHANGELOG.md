@@ -196,6 +196,23 @@ que se hace una vez a un hábito después de cada tanda de cambios.
   se haya ejecutado no dice que haga lo correcto. Los dos fallos de más abajo vivían en líneas
   perfectamente cubiertas.
 
+### `VEL-02`: la mitad que se puede escribir sin Windows, hecha y probada
+
+`src/Core/IndicePersistente.ps1` guarda y lee el índice en binario con escritura atómica.
+`src/Core/IndiceIncremental.ps1` decide si un índice guardado se puede creer —**diez motivos de
+rechazo, cada uno con su frase**: otro disco que heredó la letra, el diario recreado, el diario que
+dio la vuelta, el cuerpo truncado, caducidad…— y le aplica los cambios propagando los totales.
+
+**Lo que enseñó escribir las dos mitades en paralelo:** las dos estaban en verde —55 y 82 pruebas—
+**el día que no encajaban**. Coincidían en la cabecera, que estaba acordada, y discrepaban en dos
+cosas que nadie había acordado. El síntoma era que se descartaban **todas** las bajas. Ninguna
+prueba de una sola mitad podía verlo, y de ahí `tests/IndiceCostura.Tests.ps1`: recorre el camino
+entero y exige que una baja de 2 MB deje el total en 4 MB. De paso apareció un **rechazo mudo** —
+*"no te fíes"* con el motivo vacío—, que es indistinguible de un fallo del programa.
+
+Falta la mitad de Windows: leer el diario de cambios. Hasta entonces el programa se comporta igual
+que antes.
+
 ### `VIS-04`: los discos externos y las llaves USB ya se analizan, y nunca se borran en ellos
 
 Hasta hoy un disco externo o una llave USB **no se analizaban en absoluto**: el descubrimiento

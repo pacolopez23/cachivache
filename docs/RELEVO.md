@@ -15,7 +15,7 @@ importa tanto como que funcione.
 - Se ejecuta con `Cachivache.exe`, que lanza `powershell.exe` (5.1) sin consola visible.
 - Las pruebas se ejecutan con PowerShell 7 + Pester.
 
-**Estado hoy: 1910 pruebas en verde, analizador limpio, 62,6 % de cobertura, 50 puntos de la hoja
+**Estado hoy: 2055 pruebas en verde, analizador limpio, 50 puntos de la hoja
 de ruta cerrados. La suite pasa también en Windows, en PowerShell 5.1 y en 7**, y los seis trabajos
 de la integración continua están en verde — nada de eso había pasado nunca hasta el 1 de septiembre
 de 2026.
@@ -45,19 +45,24 @@ de 2026.
    construida en el cuerpo de un `Describe` se evalúa en el DESCUBRIMIENTO de Pester y llega
    **vacía** a los `It`. La suite se queda en verde diciendo lo contrario de la verdad, y solo se
    ve mutando. Regla: **si un `It` lo lee, se construye en un `BeforeAll`.** Ha mordido tres veces.
-4. **Si el arnés de pruebas necesita un apaño que el programa no tiene, el apaño es el síntoma.**
+4. **Dos mitades escritas en paralelo pueden estar las dos en verde y no encajar.** Pasó con
+   `VEL-02`: 55 y 82 pruebas, todas pasando, y las dos partes discrepaban en la forma de la tabla
+   que se pasaban. Coincidían en lo que estaba *acordado* y discrepaban en lo que nadie había
+   acordado. **Cuando dos trabajos van a tocarse, escribe la prueba que recorre el camino entero
+   antes de darlos por buenos** — una costura solo se ve desde los dos lados.
+5. **Si el arnés de pruebas necesita un apaño que el programa no tiene, el apaño es el síntoma.**
    Al escribir las pruebas del modo consola, la que borra de verdad falló con *"el término
    `Invoke-VaciarColaRegistro` no se reconoce"*. Se dio por hecho que era una rareza de Pester y se
    rodeó cargando el núcleo como módulo, que hace globales las funciones y hace desaparecer el
    error. **Era un fallo del programa**, y siguió vivo hasta que una limpieza real en la CI murió
    con ese mismo mensaje. Carga, invoca y resuelve **igual que `Cachivache.ps1`**; cuando no puedas,
    para y pregunta por qué el programa no lo necesita.
-5. **Los comentarios explican el PORQUÉ, no el qué.** El repositorio está lleno de comentarios que
+6. **Los comentarios explican el PORQUÉ, no el qué.** El repositorio está lleno de comentarios que
    cuentan qué fallaba antes y por qué la solución es esa. Mantén ese nivel: es media nota del
    portfolio. Comentarios en ASCII sin tildes; el texto que lee el usuario, con tildes y eñes.
-6. **Todo archivo `.ps1` y `.xaml` va en UTF-8 CON BOM.** Hay una prueba que lo comprueba.
-7. **Se borra el código muerto.** No se deja "por si acaso".
-8. **Documentar al cerrar cada punto**: banner `> ✅ **RESUELTO.**` en `docs/HOJA-DE-RUTA.md`
+7. **Todo archivo `.ps1` y `.xaml` va en UTF-8 CON BOM.** Hay una prueba que lo comprueba.
+8. **Se borra el código muerto.** No se deja "por si acaso".
+9. **Documentar al cerrar cada punto**: banner `> ✅ **RESUELTO.**` en `docs/HOJA-DE-RUTA.md`
    (conservando el análisis original debajo, porque explica el porqué) y entrada en `CHANGELOG.md`.
 
 ---
