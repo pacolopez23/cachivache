@@ -1572,8 +1572,20 @@ function Get-CarpetaConocida {
             $guid  = '{374DE290-123F-4565-9164-39C4925E467B}'
             $clave = 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders'
             $valor = (Get-ItemProperty -Path $clave -Name $guid -ErrorAction SilentlyContinue).$guid
-            if ($valor) { $ruta = [Environment]::ExpandEnvironmentVariables($valor) }
-            else        { $ruta = Join-Path $env:USERPROFILE 'Downloads' }
+            if ($valor) {
+                $ruta = [Environment]::ExpandEnvironmentVariables($valor)
+            }
+            elseif (-not [string]::IsNullOrWhiteSpace($env:USERPROFILE)) {
+                $ruta = Join-Path $env:USERPROFILE 'Downloads'
+            }
+            # Sin USERPROFILE se cae al $null de abajo, que es lo que esta
+            # funcion promete devolver cuando no sabe. Antes se llamaba a
+            # Join-Path con $null y LANZABA, que es lo contrario de lo que
+            # hace el resto de la funcion. En Windows la variable existe
+            # siempre, asi que el programa no lo notaba nunca; lo veia
+            # cualquier otra cosa que cargue el nucleo -las pruebas de la
+            # CI, sin ir mas lejos-, y una funcion que revienta segun
+            # donde se ejecute no se puede llamar desde un catch.
         }
     }
 

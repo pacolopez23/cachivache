@@ -19,10 +19,25 @@
 
     # Guardar preferencias en un solo sitio: lo usan el cierre de la
     # ventana, el boton de restablecer y el reinicio como administrador.
+    # El resultado de Export-Preferencias se recoge SIEMPRE, por dos
+    # motivos independientes:
+    #
+    #   1. Si no se guardaron, hay que decirlo. Antes esta llamada no
+    #      devolvia nada y el fallo era mudo: el usuario cerraba la
+    #      ventana, volvia a abrirla al dia siguiente y se encontraba sus
+    #      ajustes por defecto sin ninguna explicacion en ningun sitio.
+    #   2. Y aunque no hubiera que avisar, el valor no puede quedarse
+    #      suelto: este es el CUERPO DE UN CIERRE, asi que un booleano sin
+    #      recoger se va a la salida del cierre y contamina a quien lo
+    #      invoque esperando otra cosa.
     $guardarPreferencias = {
         $estado.Preferencias.ModulosActivos =
             @($estado.ModulosVista | Where-Object { $_.Seleccionado } | ForEach-Object { $_.Id })
-        Export-Preferencias -Preferencias $estado.Preferencias -Confirm:$false
+        $guardadas = Export-Preferencias -Preferencias $estado.Preferencias -Confirm:$false
+        if (-not $guardadas) {
+            Write-Registro -Sync $estado.Sync -Nivel 'AVISO' -Mensaje (
+                'No se han podido guardar las preferencias en "{0}". Los ajustes de esta sesión no se conservarán.' -f (Get-RutaPreferencias))
+        }
     }
 
     # ---- Barra de titulo ----

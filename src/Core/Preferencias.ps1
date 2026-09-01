@@ -218,16 +218,37 @@ function Export-Preferencias {
     <#
     .SYNOPSIS
         Guarda las preferencias para la próxima sesión.
+    .DESCRIPTION
+        Devuelve $true solo si las preferencias estan de verdad en el
+        disco. Quien llama TIENE que mirar ese valor.
+
+        El -ErrorAction Stop no es adorno, y esta funcion es la quinta vez
+        que hace falta escribirlo. Set-Content falla de forma NO TERMINANTE
+        cuando el destino no se puede escribir -carpeta que no existe,
+        permisos, disco lleno-, asi que sin el, el catch de aqui abajo no
+        se dispara NUNCA: la funcion volvia sin decir nada, el archivo no
+        existia, y en la siguiente sesion el usuario se encontraba sus
+        ajustes en los valores por defecto sin que nadie le hubiera
+        avisado de nada.
+
+        Es la misma familia que [COR-01] y que los cuatro exportadores de
+        informes: el programa dando por hecho algo que no hizo. La
+        invariante que protegia a aquellos cuatro no vio este porque
+        preguntaba por dos archivos con nombre y apellidos en vez de
+        preguntar por todo src/. Ahora pregunta por todo src/.
     #>
     [CmdletBinding(SupportsShouldProcess)]
+    [OutputType([bool])]
     param([Parameter(Mandatory)] [hashtable] $Preferencias)
 
     $ruta = Get-RutaPreferencias
-    if (-not $PSCmdlet.ShouldProcess($ruta, 'Guardar preferencias')) { return }
+    if (-not $PSCmdlet.ShouldProcess($ruta, 'Guardar preferencias')) { return $false }
     try {
         $Preferencias | ConvertTo-Json -Depth 5 |
-            Set-Content -LiteralPath $ruta -Encoding UTF8
+            Set-Content -LiteralPath $ruta -Encoding UTF8 -ErrorAction Stop
+        return $true
     } catch {
         Write-Verbose "No se han podido guardar las preferencias: $($_.Exception.Message)"
+        return $false
     }
 }

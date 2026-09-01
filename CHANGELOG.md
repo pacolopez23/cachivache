@@ -173,6 +173,50 @@ que se hace una vez a un hábito después de cada tanda de cambios.
   de la guardia son lógica de seguridad, no texto de interfaz: si alguien se las lleva a un archivo
   de idioma, rompe la guardia en silencio. `[I18N-02]`
 
+### La deuda de pruebas, pagada entera: dos fallos vivos que llevaban meses escondidos
+
+`tests\datos\deuda-de-pruebas.txt` nombraba **31 funciones que ninguna prueba tocaba**. Quedan 8, y
+las 8 son WPF: necesitan una ventana de verdad y no se pueden cubrir aquí por mucho que se quiera.
+La lista dejó de ser deuda que se pueda pagar escribiendo código; ahora es el límite de lo que una
+prueba automática alcanza en este proyecto, y así está escrito en su cabecera.
+
+Se escribieron **227 pruebas nuevas** en cinco archivos, y aparecieron dos fallos de verdad:
+
+- **Las preferencias se perdían en silencio.** `Export-Preferencias` escribía con `Set-Content` sin
+  `-ErrorAction Stop`. Ese fallo no es terminante, así que el `catch` de la propia función **no se
+  disparaba nunca**: volvía sin decir nada y sin archivo. El usuario cerraba la ventana, la abría al
+  día siguiente y se encontraba sus ajustes por defecto sin una sola línea que lo explicara. Ahora
+  devuelve un booleano, y el cierre que la llama —el cierre de la ventana, el botón de restablecer y
+  el reinicio como administrador— **avisa en el Registro** cuando no se ha podido guardar.
+- **Y un sexto sitio igual, en el historial.** `Set-Content` sobre el archivo temporal, también sin
+  `-ErrorAction Stop`: un disco lleno dejaba un temporal truncado que el `Move-Item` de la línea
+  siguiente instalaba tan tranquilo encima del historial bueno. El JSON inválido resultante hace que
+  `Get-Historial` devuelva vacío, o sea que se pierde el registro entero. La escritura atómica
+  protegía contra el corte de luz pero no contra el disco lleno, que produce el mismo estropicio.
+
+**Los dos estaban delante de una prueba en verde.** La invariante que persigue exactamente este
+fallo —"un informe que no se puede escribir NO se anuncia como guardado"— nombraba `Report.ps1` y
+`ReportEspacio.ps1` y exigía cuatro escrituras. Preguntaba *"¿lo hacen bien estos cuatro?"* en vez
+de *"¿hay alguno mal?"*, así que era una lista de fallos pasados disfrazada de invariante. Ahora
+barre **todo `src\`** y lleva una guarda de cordura: si el barrido no encuentra escrituras, es el
+barrido lo que está roto. Verificado plantando una escritura mala en `src\UI` y otra en
+`src\Modules`; las caza las dos. Es la regla 6 nueva de `docs\RELEVO.md`.
+
+Otros dos arreglos menores, los dos de la misma familia —una función que revienta donde prometía
+decir que no—: `Get-CarpetaConocida` llamaba a `Join-Path` con `$env:USERPROFILE` sin comprobar que
+existiera, y `Test-CadenaSinEnlaces` —la que impide que un *junction* haga pasar por "dentro" lo que
+está fuera— rechazaba la cadena vacía **lanzando** desde el enlazador de parámetros, de modo que su
+propia guarda de "falla cerrado" era inalcanzable. Una función de seguridad que lanza obliga a
+envolverla en un `try`, y un `try` es justo donde un rechazo se convierte por descuido en un permiso.
+
+Cobertura del **64,9 % al 66,1 %**; `src/Core`, del 86,4 % al 88,6 %. 2283 pruebas.
+
+Los suelos de cobertura **no se han subido**, y no es un olvido: se miden en dos sistemas y el suelo
+es el del peor. De Windows solo hay la medida del 31 de agosto, o sea de antes de estas pruebas.
+Subirlos con la medida de Linux es exactamente lo que ya tumbó un trabajo una vez. Cuando la
+integración continua publique la medida de Windows, se cogen el menor de los dos y un punto de
+margen; si confirma números parecidos, el total va a 65 y `Core` a 87.
+
 ### Una sola pasada lo prueba todo, y dice qué no está probado
 
 - **`tools\Probar.ps1`**: un comando ejecuta la suite, el analizador y el suelo de cobertura, y deja

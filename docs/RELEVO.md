@@ -15,7 +15,7 @@ importa tanto como que funcione.
 - Se ejecuta con `Cachivache.exe`, que lanza `powershell.exe` (5.1) sin consola visible.
 - Las pruebas se ejecutan con PowerShell 7 + Pester.
 
-**Estado hoy: 2055 pruebas en verde, analizador limpio, 50 puntos de la hoja
+**Estado hoy: 2283 pruebas en verde, analizador limpio, 50 puntos de la hoja
 de ruta cerrados. La suite pasa también en Windows, en PowerShell 5.1 y en 7**, y los seis trabajos
 de la integración continua están en verde — nada de eso había pasado nunca hasta el 1 de septiembre
 de 2026.
@@ -57,12 +57,31 @@ de 2026.
    error. **Era un fallo del programa**, y siguió vivo hasta que una limpieza real en la CI murió
    con ese mismo mensaje. Carga, invoca y resuelve **igual que `Cachivache.ps1`**; cuando no puedas,
    para y pregunta por qué el programa no lo necesita.
-6. **Los comentarios explican el PORQUÉ, no el qué.** El repositorio está lleno de comentarios que
+6. **Una invariante que enumera sitios no es una invariante: es una lista de fallos pasados.**
+   La que vigilaba que los informes no se anunciaran como guardados sin estarlo nombraba
+   `Report.ps1` y `ReportEspacio.ps1` y exigía exactamente cuatro escrituras. Llevaba meses en
+   verde. El 1 de septiembre de 2026, al escribir pruebas para `Export-Preferencias`, apareció un
+   **quinto** sitio con el fallo idéntico —las preferencias del usuario se perdían en silencio al
+   cerrar la ventana— y al barrer de verdad, un **sexto** en `Historial.ps1`, donde un temporal
+   truncado se instalaba encima del historial bueno. Los dos llevaban ahí desde siempre, delante
+   de una prueba verde que miraba a otro lado.
+
+   La pregunta estaba mal formulada. No es *"¿lo hacen bien estos cuatro?"* sino **"¿hay alguno
+   mal?"**. Cuando escribas una invariante, barre la carpeta entera y pon una guarda de cordura
+   («si el barrido no encuentra nada, es el barrido lo que está roto»), en vez de escribir la
+   lista de los sitios donde ya sabes que hubo un problema.
+7. **Los comentarios explican el PORQUÉ, no el qué.** El repositorio está lleno de comentarios que
    cuentan qué fallaba antes y por qué la solución es esa. Mantén ese nivel: es media nota del
    portfolio. Comentarios en ASCII sin tildes; el texto que lee el usuario, con tildes y eñes.
-7. **Todo archivo `.ps1` y `.xaml` va en UTF-8 CON BOM.** Hay una prueba que lo comprueba.
-8. **Se borra el código muerto.** No se deja "por si acaso".
-9. **Documentar al cerrar cada punto**: banner `> ✅ **RESUELTO.**` en `docs/HOJA-DE-RUTA.md`
+8. **Todo archivo `.ps1` y `.xaml` va en UTF-8 CON BOM.** Hay una prueba que lo comprueba.
+
+   Y si escribes un guion de usar y tirar que toque archivos, **usa `tools/Mutar.ps1` y no
+   `[IO.File]::WriteAllText` a pelo**: `ReadAllText` se come el BOM al leer y `WriteAllText` no lo
+   repone al escribir, así que un "restaurado por si acaso" detrás de la herramienta deja cuatro
+   archivos sin BOM. Pasó. La red de seguridad de más era menos cuidadosa que aquello que
+   respaldaba, y por eso lo rompió. `Invoke-Mutacion` sí detecta el BOM y lo conserva.
+9. **Se borra el código muerto.** No se deja "por si acaso".
+10. **Documentar al cerrar cada punto**: banner `> ✅ **RESUELTO.**` en `docs/HOJA-DE-RUTA.md`
    (conservando el análisis original debajo, porque explica el porqué) y entrada en `CHANGELOG.md`.
 
 ---
@@ -124,8 +143,15 @@ sin ejecutar nunca, como le pasó a `src/Cli` durante toda su vida.
 
 Y `tests/datos/deuda-de-pruebas.txt` lista **las funciones de `src/` que ninguna prueba nombra**.
 La lista solo puede encoger: `tests/Inventario.Tests.ps1` falla si aparece una función sin probar
-que no esté ahí, y falla también si un nombre de ahí ya está probado o ya no existe. Es la mejor
-lista de "qué hacer ahora" que tiene el proyecto.
+que no esté ahí, y falla también si un nombre de ahí ya está probado o ya no existe.
+
+**Ya no es una lista de "qué hacer ahora": está pagada.** Empezó con 31 nombres y quedan 8, todos
+de `src/UI`. Son WPF: necesitan una ventana de verdad, y aquí no hay ninguna. O sea que esos 8 no
+son pereza acumulada, son el límite de lo que una prueba automática alcanza en este proyecto — se
+cubren en `docs/PRUEBA-MANUAL.md`, con una persona delante. Que no se confunda una cosa con la otra.
+
+Pagar los otros 23 encontró **dos fallos vivos** que llevaban meses delante de una suite en verde,
+los dos de la familia "el programa dice haber hecho algo que no hizo". Están en el CHANGELOG.
 
 **Si tocas cualquier `src/UI/*.xaml`, regenera el oráculo de la ventana antes de ejecutar:**
 
@@ -269,7 +295,7 @@ tres estados de `USO-04`, `VEL-01` (tabla maestra de NTFS), `DIS-01` (firma, nec
 ## Lo primero que deberías hacer
 
 1. Leer `docs/HOJA-DE-RUTA.md` entero. Es largo y merece la pena: explica el porqué de todo.
-2. Ejecutar las pruebas y confirmar **960 en verde y analizador a cero**. Si no cuadra, eso es lo
+2. Ejecutar `tools/Probar.ps1` y confirmar **2283 en verde y analizador a cero**. Si no cuadra, eso es lo
    primero, antes que cualquier punto nuevo.
 3. Preguntarle con qué punto quiere seguir, ofreciéndole las opciones de la tabla de arriba con una
    frase de porqué cada una. No empieces por tu cuenta.

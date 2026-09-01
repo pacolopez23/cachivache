@@ -708,11 +708,19 @@ function Test-CadenaSinEnlaces {
     [CmdletBinding()]
     [OutputType([bool])]
     param(
-        [Parameter(Mandatory)] [string] $Ruta,
-        [Parameter(Mandatory)] [string] $Raiz
+        [Parameter(Mandatory)] [AllowEmptyString()] [string] $Ruta,
+        [Parameter(Mandatory)] [AllowEmptyString()] [string] $Raiz
     )
 
+    # El AllowEmptyString no es una relajacion, es lo que hace ALCANZABLE
+    # la linea de abajo. Con el Mandatory a secas, una cadena vacia la
+    # rechazaba el enlazador de parametros LANZANDO, asi que la guarda de
+    # "falla cerrado" solo se ejecutaba con espacios en blanco y nunca con
+    # "". Una funcion de seguridad que lanza en vez de decir "no" obliga a
+    # quien la llama a envolverla en un try, y un try es justo donde un
+    # rechazo se convierte por descuido en un permiso.
     if ([string]::IsNullOrWhiteSpace($Raiz)) { return $false }
+    if ([string]::IsNullOrWhiteSpace($Ruta)) { return $false }
     $tope = ConvertTo-RutaNormalizada $Raiz
 
     $item = Get-Item -LiteralPath $Ruta -Force -ErrorAction SilentlyContinue

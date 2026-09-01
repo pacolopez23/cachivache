@@ -177,7 +177,16 @@ function Add-EntradaHistorial {
     # comprueban- vale mucho mas que un .tmp huerfano en el caso raro.
     $temporal = "$ruta.$PID.tmp"
     try {
-        $historial | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $temporal -Encoding UTF8
+        # El -ErrorAction Stop de esta linea protege justo lo que el
+        # comentario de arriba dice proteger. Sin el, un Set-Content que
+        # falla a mitad -disco lleno- deja un temporal TRUNCADO y no lanza
+        # nada; el Move-Item de la linea siguiente lo instala tan contento
+        # encima del historial bueno, y el JSON invalido resultante hace
+        # que Get-Historial devuelva vacio. O sea: la escritura atomica
+        # protegia contra el corte de luz pero no contra el disco lleno,
+        # que produce exactamente el mismo estropicio.
+        $historial | ConvertTo-Json -Depth 5 |
+            Set-Content -LiteralPath $temporal -Encoding UTF8 -ErrorAction Stop
         Move-Item -LiteralPath $temporal -Destination $ruta -Force -ErrorAction Stop
     } catch {
         Write-Verbose "No se ha podido guardar el historial: $($_.Exception.Message)"

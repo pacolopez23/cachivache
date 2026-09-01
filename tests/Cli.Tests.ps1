@@ -429,7 +429,7 @@ Describe 'invariante: un informe que no se puede escribir NO se anuncia como gua
     }
 
 
-    It 'los cuatro exportadores escriben con -ErrorAction Stop' {
+    It 'NINGUNA escritura a disco de src/ se hace sin -ErrorAction Stop' {
         # EL FALLO QUE ENCONTRO ESTA PRUEBA, y merece leerse entero.
         #
         # Set-Content y Export-Csv sobre una carpeta que no existe dan un
@@ -444,24 +444,55 @@ Describe 'invariante: un informe que no se puede escribir NO se anuncia como gua
         # Es la misma familia que [COR-01]: el programa afirmando haber
         # hecho algo que no hizo. Se ata por texto porque lo que falla es
         # una AUSENCIA, y una ausencia no lanza nada que se pueda capturar.
+        #
+        # POR QUE ESTA PRUEBA MIRA AHORA TODO src/ Y NO DOS ARCHIVOS.
+        #
+        # Nacio nombrando Report.ps1 y ReportEspacio.ps1 y exigiendo
+        # exactamente cuatro escrituras. Con eso protegia los cuatro
+        # exportadores que la motivaron... y a nadie mas. El dia que se
+        # fue a probar Export-Preferencias aparecio un QUINTO sitio con
+        # el mismo fallo exacto -las preferencias se perdian en silencio
+        # al cerrar la ventana- y un SEXTO en Historial.ps1, donde un
+        # temporal truncado se instalaba encima del historial bueno.
+        # Los dos llevaban ahi desde siempre, delante de una invariante
+        # verde.
+        #
+        # La leccion, que esta en docs/RELEVO.md: una invariante que
+        # enumera los sitios donde ya sabemos que hubo un fallo no es una
+        # invariante, es una lista de fallos pasados. La pregunta correcta
+        # no era "hacen bien estos cuatro?" sino "hay alguno mal?".
+        $cmdlets = 'Set-Content|Export-Csv|Out-File|Add-Content|Export-Clixml'
+        $carpeta = Join-Path $script:Raiz 'src'
         $escrituras = @()
-        foreach ($nombre in @('Report.ps1', 'ReportEspacio.ps1')) {
-            $ruta   = Join-Path (Join-Path (Join-Path $script:Raiz 'src') 'Core') $nombre
-            $lineas = @([IO.File]::ReadAllText($ruta) -split "`r?`n" |
-                        Where-Object { $_ -notmatch '^\s*#' })
-            $escrituras += @($lineas | Where-Object {
-                $_ -match '(Set-Content|Export-Csv)\s+-LiteralPath\s+\$Ruta'
-            })
+        foreach ($archivo in @(Get-ChildItem -LiteralPath $carpeta -Recurse -Force |
+                               Where-Object { -not $_.PSIsContainer -and $_.Extension -eq '.ps1' })) {
+            $n = 0
+            foreach ($linea in @([IO.File]::ReadAllText($archivo.FullName) -split "`r?`n")) {
+                $n++
+                if ($linea -match '^\s*#')       { continue }
+                if ($linea -notmatch $cmdlets)   { continue }
+                # Solo cuentan las que escriben a un archivo. Un
+                # Set-Content sin destino no existe, pero un Out-File
+                # dentro de una cadena de texto de ayuda si.
+                if ($linea -notmatch '-(LiteralPath|Path|FilePath)\s') { continue }
+                $escrituras += [pscustomobject]@{
+                    Donde = '{0}:{1}' -f $archivo.Name, $n
+                    Linea = $linea.Trim()
+                }
+            }
         }
 
-        # Guarda: si no encuentro las cuatro escrituras, esta prueba no
-        # esta comprobando nada y tiene que decirlo.
-        $escrituras.Count | Should -Be 4 -Because 'son cuatro exportadores: HTML, CSV, JSON y el mapa de espacio'
+        # Guarda: si no encuentro escrituras, esta prueba no esta
+        # comprobando nada y tiene que decirlo. Son seis a dia de hoy;
+        # el suelo esta en cinco para que anyadir una no obligue a tocar
+        # la prueba, pero quitar media docena si.
+        @($escrituras).Count | Should -BeGreaterOrEqual 5 -Because (
+            'si el barrido no encuentra las escrituras conocidas es que el barrido esta roto')
 
-        $sinParar = @($escrituras | Where-Object { $_ -notmatch '-ErrorAction\s+Stop' })
-        ($sinParar -join ' // ') | Should -BeNullOrEmpty -Because (
+        $sinParar = @($escrituras | Where-Object { $_.Linea -notmatch '-ErrorAction\s+Stop' })
+        (($sinParar | ForEach-Object { $_.Donde }) -join ', ') | Should -BeNullOrEmpty -Because (
             'sin -ErrorAction Stop el fallo es no terminante, el catch de quien llama ' +
-            'no se entera y se anuncia un informe que no existe')
+            'no se entera y el programa anuncia como guardado algo que no existe')
     }
 
     It 'y el modo consola dice la verdad cuando el informe no se puede escribir' {

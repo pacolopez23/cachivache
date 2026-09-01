@@ -102,12 +102,19 @@ Describe 'El suelo de cobertura' {
         # Las dos mediciones reales: la de aqui y la de la integracion
         # continua en Windows. El suelo tiene que aguantar LAS DOS, que es
         # la leccion que costo un trabajo en rojo.
+        #
+        # OJO CON LA ASIMETRIA DE LAS FECHAS. La de Linux es del 1 de
+        # septiembre de 2026, con la deuda de pruebas ya pagada. La de
+        # Windows es del 31 de agosto, o sea de ANTES de esas 227 pruebas
+        # nuevas: nadie ha medido Windows desde entonces. Por eso los
+        # suelos no subieron ese dia, aunque Linux diera de sobra para
+        # subirlos. Ver el comentario largo de Get-SueloCobertura.
         @(Test-CoberturaSuficiente -Medido @{
-            'total' = 62.2; 'Core' = 85.4; 'Modules' = 64.7; 'Cli' = 87.7; 'UI' = 5.1
-        }) | Should -BeNullOrEmpty -Because 'medido en Linux'
+            'total' = 66.1; 'Core' = 88.6; 'Modules' = 65.4; 'Cli' = 89.4; 'UI' = 5.1
+        }) | Should -BeNullOrEmpty -Because 'medido en Linux el 1 de septiembre de 2026'
         @(Test-CoberturaSuficiente -Medido @{
             'total' = 60.1; 'Core' = 86.1; 'Modules' = 61.1; 'Cli' = 87.5; 'UI' = 5.1
-        }) | Should -BeNullOrEmpty -Because 'medido en Windows por la integracion continua'
+        }) | Should -BeNullOrEmpty -Because 'medido en Windows el 31 de agosto, sin las pruebas nuevas'
     }
 
     It 'una carpeta que baja de su suelo se nombra' {
