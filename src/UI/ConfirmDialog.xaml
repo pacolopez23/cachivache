@@ -145,8 +145,31 @@
                 -->
                 <Button x:Name="BtnNo" Style="{StaticResource BotonSecundario}" Content="Cancelar"
                         IsCancel="True"/>
+                <!--
+                    El rotulo de verdad lo pone Dialogs.ps1 desde
+                    Get-TextosDestinoBorrado, junto con el texto de la fila
+                    "Destino de lo borrado", para que los dos no puedan
+                    discrepar.
+
+                    Aqui ponia "Eliminar definitivamente" fijo, y no cambiaba
+                    nunca: el dialogo llamaba definitivo a un borrado que iba
+                    a la papelera y del que se podia rescatar todo. Se vio el
+                    2 de septiembre de 2026, mirando el dialogo en pantalla.
+
+                    El Content que queda es DELIBERADAMENTE NEUTRO, y no
+                    sobra por dos motivos. Uno: un boton sin texto se queda
+                    mudo para un lector de pantalla, y la invariante de
+                    [A11Y-01] lo prohibe con razon. Dos: es la reserva si
+                    algun dia esa linea de Dialogs.ps1 no llega a
+                    ejecutarse; entonces el boton dira algo cierto en los
+                    dos casos en vez de mentir en uno.
+
+                    Por eso la prueba no exige que no haya Content: exige que
+                    el Content NO HABLE DE SER DEFINITIVO. Ver
+                    tests/Papelera.Tests.ps1.
+                -->
                 <Button x:Name="BtnSi" Style="{StaticResource BotonPeligro}" Margin="10,0,0,0"
-                        Content="Eliminar definitivamente" IsEnabled="False"/>
+                        Content="Eliminar lo marcado" IsEnabled="False"/>
             </StackPanel>
         </StackPanel>
     </Border>

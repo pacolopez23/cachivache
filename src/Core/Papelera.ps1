@@ -307,3 +307,54 @@ function Test-IraAPapelera {
 
     return Test-CabeEnPapelera -Bytes $Bytes -Estado (Get-EstadoPapelera -Unidad $unidad)
 }
+
+function Get-TextosDestinoBorrado {
+    <#
+    .SYNOPSIS
+        Como se llama el destino de un borrado, y como se llama el boton que
+        lo lanza. Las DOS cosas juntas, a proposito.
+
+    .DESCRIPTION
+        EL FALLO QUE ESTA FUNCION VIENE A IMPEDIR.
+
+        El dialogo de confirmacion enseñaba dos frases que se contradecian:
+
+            Destino de lo borrado      Papelera de reciclaje
+            [ boton ]                  Eliminar definitivamente
+
+        La primera se calculaba. La segunda estaba escrita a mano en
+        ConfirmDialog.xaml y no cambiaba nunca. O sea que el programa
+        llamaba "definitivo" a un borrado que iba a la papelera y del que
+        el usuario podia rescatarlo todo.
+
+        Es la misma familia que [COR-01] -el programa afirmando algo que no
+        es verdad- y ademas empuja en la direccion equivocada: pinta de
+        irreversible el camino que SI tiene red de seguridad, que es
+        justamente el que el programa quiere que la gente use.
+
+        Por eso las dos cadenas salen de aqui y no de dos sitios: no es
+        que hoy coincidan, es que no pueden dejar de coincidir. Es el
+        patron central del proyecto, el mismo de Get-MotivoNoSeBorra y
+        Test-DebeVenirMarcado.
+
+        El subtitulo del dialogo -"Esta accion no la puede deshacer el
+        programa"- se queda como esta y es correcto: el programa no puede,
+        el usuario si, desde la papelera. Ver [CNF-03].
+    #>
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param([switch] $Permanente)
+
+    if ($Permanente) {
+        return [pscustomobject]@{
+            Destino = 'Borrado permanente'
+            Boton   = 'Eliminar definitivamente'
+            Palabra = 'ELIMINAR'
+        }
+    }
+    return [pscustomobject]@{
+        Destino = 'Papelera de reciclaje'
+        Boton   = 'Enviar a la papelera'
+        Palabra = 'SI'
+    }
+}

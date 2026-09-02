@@ -109,7 +109,17 @@ function Show-Confirmacion {
     $dialogo.Owner = $Propietario
 
     $lista = @($Arriesgados)
-    $palabra = if ($lista.Count -gt 0 -or $Permanente) { 'ELIMINAR' } else { 'SI' }
+
+    # Las tres cadenas del destino salen de UNA funcion, no de tres sitios.
+    # Antes el rotulo del boton estaba escrito a mano en ConfirmDialog.xaml
+    # y decia "Eliminar definitivamente" SIEMPRE, incluso cuando la fila de
+    # justo encima decia "Papelera de reciclaje". Ver Get-TextosDestinoBorrado.
+    $textos = Get-TextosDestinoBorrado -Permanente:$Permanente
+
+    # La palabra a escribir sube a ELIMINAR tambien cuando hay elementos
+    # que piden criterio, aunque el destino sea la papelera: ahi la friccion
+    # no la pide el destino sino lo que se esta borrando.
+    $palabra = if ($lista.Count -gt 0) { 'ELIMINAR' } else { $textos.Palabra }
 
     $txtSubtitulo = $dialogo.FindName('TxtSubtitulo')
     $txtElementos = $dialogo.FindName('TxtElementos')
@@ -127,7 +137,8 @@ function Show-Confirmacion {
     $txtSubtitulo.Text = 'Esta acción no la puede deshacer el programa.'
     $txtElementos.Text = '{0}' -f $Elementos
     $txtEspacio.Text   = Format-Tamano $Bytes
-    $txtDestino.Text   = if ($Permanente) { 'Borrado permanente' } else { 'Papelera de reciclaje' }
+    $txtDestino.Text   = $textos.Destino
+    $btnSi.Content     = $textos.Boton
     $txtInstruccion.Text = "Para continuar, escribe $palabra tal cual:"
 
     if ($lista.Count -gt 0) {

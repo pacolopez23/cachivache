@@ -437,3 +437,83 @@ Describe 'CNF-03: la ventana ofrece la papelera solo cuando hay algo dentro' {
         $rescate | Should -BeGreaterThan $corte
     }
 }
+
+Describe 'El boton de confirmar no puede llamar definitivo a lo que va a la papelera' {
+
+    # EL FALLO, y se vio mirando el dialogo en pantalla el 2 de septiembre
+    # de 2026, no con una prueba.
+    #
+    # El dialogo enseñaba dos frases que se contradecian:
+    #
+    #     Destino de lo borrado      Papelera de reciclaje
+    #     [ boton ]                  Eliminar definitivamente
+    #
+    # La primera se calculaba; la segunda estaba escrita a mano en el XAML
+    # y no cambiaba nunca. Es la familia de [COR-01] -el programa afirmando
+    # algo que no es verdad- y ademas empuja al reves: pinta de
+    # irreversible el camino que SI tiene red de seguridad.
+
+    It 'con la papelera, ni el destino ni el boton dicen que sea definitivo' {
+        $t = Get-TextosDestinoBorrado
+        $t.Destino | Should -Be 'Papelera de reciclaje'
+        $t.Boton   | Should -Not -Match 'definitiv'
+        $t.Boton   | Should -Match 'papelera'
+    }
+
+    It 'con borrado permanente, los dos lo dicen' {
+        $t = Get-TextosDestinoBorrado -Permanente
+        $t.Destino | Should -Be 'Borrado permanente'
+        $t.Boton   | Should -Match 'definitiv'
+    }
+
+    It 'INVARIANTE: "definitivo" en el boton solo si el destino es permanente' {
+        foreach ($permanente in @($true, $false)) {
+            $t = Get-TextosDestinoBorrado -Permanente:$permanente
+            $diceDefinitivo = $t.Boton -match 'definitiv|para siempre|irreversible'
+            $diceDefinitivo | Should -Be $permanente -Because (
+                'el rotulo del boton y el destino son la misma decision')
+        }
+    }
+
+    It 'la palabra de confirmacion es mas dura cuando no hay vuelta atras' {
+        (Get-TextosDestinoBorrado).Palabra             | Should -Be 'SI'
+        (Get-TextosDestinoBorrado -Permanente).Palabra | Should -Be 'ELIMINAR'
+    }
+
+    It 'el rotulo de reserva del XAML existe y es NEUTRO' {
+        # La mitad que importa, y tiene dos caras que se contradicen solo en
+        # apariencia:
+        #
+        #   - El boton NECESITA texto en el XAML. Sin el se queda mudo para
+        #     un lector de pantalla, y la invariante de [A11Y-01] lo prohibe.
+        #     Se intento dejarlo vacio y esa prueba lo paro en el acto.
+        #   - Pero ese texto NO puede prometer que el borrado sea definitivo,
+        #     porque no lo sabe: eso depende de una preferencia que se lee
+        #     en tiempo de ejecucion.
+        #
+        # Asi que la regla no es "sin Content", es "Content que sea cierto
+        # en los dos casos". El rotulo de verdad lo pone Dialogs.ps1.
+        $raiz = Split-Path $PSScriptRoot -Parent
+        $xaml = [IO.File]::ReadAllText((Join-Path (Join-Path (Join-Path $raiz 'src') 'UI') 'ConfirmDialog.xaml'))
+        $sinComentarios = [regex]::Replace($xaml, '(?s)<!--.*?-->', '')
+
+        $m = [regex]::Match($sinComentarios, '(?s)<Button[^>]*x:Name="BtnSi".*?/>')
+        $m.Success | Should -BeTrue -Because 'si no se encuentra el boton, esta prueba no mira nada'
+
+        $contenido = [regex]::Match($m.Value, 'Content="(?<t>[^"]*)"')
+        $contenido.Success | Should -BeTrue -Because (
+            'un boton sin texto se queda mudo para un lector de pantalla: lo exige [A11Y-01]')
+        $contenido.Groups['t'].Value | Should -Not -Match 'definitiv|para siempre|irreversible' -Because (
+            'el XAML no sabe si el borrado sera permanente; decirlo aqui es mentir la mitad de las veces')
+    }
+
+    It 'y Dialogs.ps1 lo toma de esa funcion, no de un if suyo' {
+        $raiz = Split-Path $PSScriptRoot -Parent
+        $ps = [IO.File]::ReadAllText((Join-Path (Join-Path (Join-Path $raiz 'src') 'UI') 'Dialogs.ps1'))
+        $codigo = ($ps -split "`r?`n" | Where-Object { $_ -notmatch '^\s*#' }) -join "`n"
+        $codigo | Should -Match 'Get-TextosDestinoBorrado'
+        $codigo | Should -Match '\$btnSi\.Content\s*=\s*\$textos\.Boton'
+        # Y que no se haya quedado un segundo sitio decidiendo lo mismo.
+        $codigo | Should -Not -Match "Destino\.Text\s*=\s*if"
+    }
+}

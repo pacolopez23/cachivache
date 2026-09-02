@@ -47,6 +47,62 @@ Si sale **5.1**, tu ejecución vale doble: las pruebas automáticas corren en Po
 
 ---
 
+## Sesión de verificación · 2 de septiembre de 2026
+
+Guion en orden para hacerlo de una sentada. **Las fases van de más urgente a menos**: si te quedas
+sin tiempo, para donde estés — lo de arriba es lo que más falta hace.
+
+**Reglas de la sesión, las tres:**
+
+1. **No actives *Solo simular* salvo donde se diga**, y **no marques nunca el borrado permanente**.
+   Todo tiene que poder rescatarse de la papelera.
+2. Cuando algo no cuadre, manda **captura** y, si hubo error, el registro de
+   `%LOCALAPPDATA%\Cachivache\registros\`. Desde `COR-06` lleva dentro el tipo de excepción y la
+   línea exacta.
+3. Si algo se ve raro pero no está en esta lista, **dilo igual**. Los dos fallos del 1 de septiembre
+   los encontró un ojo mirando, no una casilla de este documento.
+
+---
+
+### Fase A · Las nueve rejillas — **lo único que nadie ha visto** (5 min)
+
+El 1 de septiembre se arreglaron nueve `Grid` que colocaban cosas a la derecha sin declarar
+columnas. Dos se solapaban de verdad; los otros siete eran la misma bomba sin estallar. **Aquí no
+hay WPF: ninguna prueba puede mirar un píxel de esto.** Es la fase que de verdad hace falta.
+
+Cierra el programa y vuelve a abrirlo antes de empezar.
+
+| Paso | Dónde | Qué mirar | 📸 |
+|---|---|---|---|
+| A1 | **Resultados**, ventana ancha | Los cinco botones de la derecha se leen enteros y separados: *Marcar todo · Desmarcar todo · Solo lo seguro · Ver contenido · Abrir ubicación* | ✅ |
+| A2 | **Resultados**, arrastra el borde derecho hasta que no quepa | *Ocultar lo ya eliminado* **baja de línea**. Nada se cruza | ✅ |
+| A3 | **Resultados**, barra de abajo, con la ventana estrecha | *«N elementos marcados»* y la casilla *Solo simular* **no se pisan** | ✅ |
+| A4 | **Inicio**, barra de abajo | *«Listo para analizar.»* y el botón *Analizar el equipo* separados | ✅ |
+| A5 | **Registro** (`Ctrl+3`) | El párrafo de la izquierda y los botones *Copiar* / *Abrir carpeta* no se cruzan | ✅ |
+| A6 | **Ajustes** (`Ctrl+5`) | Los dos deslizadores y sus rótulos, separados | ✅ |
+| A7 | Marca **una sola cosa de riesgo Bajo** y pulsa *Eliminar lo marcado*. **Lee el diálogo y CANCELA** | Las tres filas del resumen (*Elementos marcados*, *Espacio*, *Destino*) con su valor a la derecha, sin pisarse | ✅ |
+
+En A2 y A3 estrecha de verdad: hasta unos 1000 px, que es donde salió el fallo.
+
+---
+
+### Fase B · Lo del 1 de septiembre en el núcleo (5 min)
+
+Es el **bloque 0 ter** de más abajo. Hazlo entero salvo el punto del USB, que ya está descartado
+por no haber unidad extraíble.
+
+Resumen: analiza `C:`, comprueba que termina sin franja de aviso, y **cronometra** un análisis con
+perfil *Equilibrado* para ver si se ha vuelto lento.
+
+---
+
+### Fase C · Los dieciocho puntos de interfaz (15 min)
+
+Es el **bloque 0 bis**. Llevan sin mirarse desde el 30 de agosto. Empieza por su discriminador de
+versión y ve bajando.
+
+---
+
 ## Bloque 0 ter · Lo del 1 de septiembre — **cuatro puntos que nadie ha visto nunca**
 
 Esto es más nuevo que el bloque 0 bis y está **menos verificado que nada en este documento**: se
@@ -76,17 +132,26 @@ Enchufa el USB o el disco externo **antes de abrir el programa**.
 | ☐ | Lee ese texto | Tiene que decir **«Se ha medido, pero no se borra nada en…: es una unidad extraíble y se puede desconectar en mitad del borrado»** |
 | ☐ | Intenta marcar esa fila y pulsar **Eliminar lo marcado** | **No se borra.** Si desaparece algo del USB, para y dímelo: es lo único de hoy que destruiría datos |
 
-**Y la pregunta que llevo días sin poder responder.** Abre PowerShell y ejecuta esto con el USB
-conectado:
+**Estado a 1 de septiembre de 2026: SIN VERIFICAR, y no por olvido.** En el equipo de desarrollo no
+hay ninguna unidad extraíble. Medido:
 
 ```powershell
 [IO.DriveInfo]::GetDrives() | Select-Object Name, DriveType
+# C:\  Fixed
+# D:\  Fixed   <- la particion reservada de 50 MB; por eso sale en la lista de discos
 ```
 
-Dime qué dice de la letra del USB. Si pone `Removable`, todo lo de arriba funciona. **Si pone
-`Fixed`** —y pasa con muchos discos externos por USB—, Windows no lo distingue de un disco interno,
-`VIS-04` no puede protegerlo y hay que buscar otra señal. Eso no es un fallo del programa, es un
-límite del sistema, pero cambia lo que hay que hacer.
+O sea que `VIS-04` está probado por 2288 pruebas automáticas y **no lo ha visto funcionar nadie con
+un disco extraíble de verdad enchufado**. El embudo es defensivo —si no sabe de qué clase es la
+unidad, no borra— pero eso es un argumento, no una comprobación. Queda como deuda, no como punto
+cerrado.
+
+**Cuando haya un pendrive o una tarjeta SD a mano**, son dos minutos: la tabla de arriba, entera.
+
+Y un aviso para ese día: un **pendrive** suele declararse `Removable` y `VIS-04` lo protege; un
+**disco duro externo por USB** muchas veces se declara `Fixed`, y entonces Windows no lo distingue
+de un disco interno y el programa tampoco puede. Eso no sería un fallo nuestro sino un límite del
+sistema, pero cambiaría lo que hay que construir.
 
 ### 0t.3 · Lo comprimido ya no promete espacio que no existe — `VIS-05`
 

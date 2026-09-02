@@ -173,6 +173,35 @@ que se hace una vez a un hábito después de cada tanda de cambios.
   de la guardia son lógica de seguridad, no texto de interfaz: si alguien se las lleva a un archivo
   de idioma, rompe la guardia en silencio. `[I18N-02]`
 
+### El botón llamaba «definitivo» a un borrado que iba a la papelera
+
+El diálogo de confirmación enseñaba dos frases que se contradecían:
+
+```
+Destino de lo borrado      Papelera de reciclaje
+[ botón ]                  Eliminar definitivamente
+```
+
+La primera se calculaba. La segunda estaba escrita a mano en `ConfirmDialog.xaml` y **no cambiaba
+nunca**. Es la familia de `COR-01` —el programa afirmando algo que no es verdad— y empuja además en
+la dirección equivocada: pintaba de irreversible el único camino que **sí** tiene red de seguridad,
+que es justo el que el programa quiere que la gente use.
+
+Las tres cadenas del destino —el nombre del destino, el rótulo del botón y la palabra que hay que
+escribir para confirmar— salen ahora de **una sola función**, `Get-TextosDestinoBorrado`. No es que
+hoy coincidan: es que no pueden dejar de coincidir. Con la papelera el botón dice *«Enviar a la
+papelera»*; solo con el borrado permanente dice *«Eliminar definitivamente»*.
+
+**Y arreglarlo destapó una tensión real entre dos invariantes.** Al quitar el rótulo fijo del XAML,
+`A11Y-01` lo rechazó al instante: un botón sin texto se queda **mudo** para un lector de pantalla.
+Las dos reglas tenían razón, así que la solución no era ceder en ninguna — el XAML conserva un
+rótulo **deliberadamente neutro** (*«Eliminar lo marcado»*), cierto en los dos casos, que además
+sirve de reserva si algún día esa línea no llega a ejecutarse. La prueba no exige que no haya
+rótulo: exige que el rótulo **no hable de ser definitivo**.
+
+Se vio mirando el diálogo en pantalla. Ninguna de las 2288 pruebas lo habría encontrado, porque
+ninguna puede leer lo que dice un botón dibujado.
+
 ### Nueve rejillas fingían dos columnas con la alineación, y dos ya se solapaban
 
 Se vio a simple vista en cuanto alguien abrió la ventana. En la barra de herramientas de Resultados,
