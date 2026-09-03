@@ -173,6 +173,29 @@ que se hace una vez a un hábito después de cada tanda de cambios.
   de la guardia son lógica de seguridad, no texto de interfaz: si alguien se las lleva a un archivo
   de idioma, rompe la guardia en silencio. `[I18N-02]`
 
+### El paquete que se le entrega al usuario llevaba dentro el banco de pruebas
+
+Ensayando el empaquetado en local **antes** de etiquetar la primera versión —el canal de
+distribución está escrito desde hace días y no se había ejecutado nunca— salió que `publicar.yml`
+copiaba **`tools/` entera** al `.zip`. Iban dentro los cinco bancos, `Mutar.ps1` y el ejecutor de
+pruebas: 14 archivos que nadie necesita para ejecutar el programa.
+
+Y no es solo desorden. **`Banco-Pruebas.ps1` crea y borra árboles de archivos** —su propia cabecera
+dice *«EJECUTAR SOLO EN UNA MÁQUINA VIRTUAL CON INSTANTÁNEA»*— y `Mutar.ps1` reescribe archivos
+fuente a propósito. Eso viajaba a cualquiera que se bajase un limpiador de disco.
+
+Lo mejor del hallazgo es dónde estaba: **justo debajo de un comentario que decía *«ni pruebas, ni
+herramientas de desarrollo, ni el `.github`»***. El comentario declaraba la intención correcta y la
+línea siguiente hacía lo contrario, y llevaban así desde que se escribió el flujo.
+
+La invariante nueva no prohíbe `tools` por su nombre —eso sería escribir la lista de los fallos que
+ya conocemos, que es la regla 8— sino que exige que **cada elemento del paquete esté declarado con
+su motivo**: qué es y por qué lo necesita quien lo descarga. Añadir algo obliga a justificarlo, y
+quitar algo sin quitar su motivo también se ve. Además comprueba lo que hay **dentro** de cada
+carpeta entregada, no su nombre.
+
+El paquete pasa de 105 a 91 entradas y de 594 a 528 KB, con cero herramientas de desarrollo dentro.
+
 ### `VEL-02`, la mitad de Windows: leer el diario de cambios de NTFS
 
 Tres archivos nuevos y una prueba de costura. `src/Core/DiarioUsn.ps1` convierte los bytes de un

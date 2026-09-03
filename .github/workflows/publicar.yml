@@ -82,7 +82,24 @@ jobs:
 
           # Lo que necesita un usuario para ejecutarlo, y nada mas: ni
           # pruebas, ni herramientas de desarrollo, ni el .github.
-          foreach ($elemento in @('src', 'assets', 'tools', 'Cachivache.ps1', 'Cachivache.bat',
+          #
+          # ESTA LISTA LLEVABA 'tools' Y ESO ERA UN FALLO. El comentario de
+          # arriba decia "ni herramientas de desarrollo" mientras la linea
+          # de abajo las copiaba todas: los cinco bancos, el mutador y el
+          # ejecutor de pruebas. Ninguna hace falta para ejecutar el
+          # programa -se comprobo: nada de src/ ni de Cachivache.ps1
+          # referencia tools/-, y dos son peligrosas en manos de quien se
+          # baja un limpiador: Banco-Pruebas.ps1 crea y borra arboles de
+          # archivos y su propia cabecera dice "EJECUTAR SOLO EN UNA
+          # MAQUINA VIRTUAL CON INSTANTANEA", y Mutar.ps1 reescribe
+          # archivos fuente a proposito.
+          #
+          # Se vio ensayando el empaquetado en local antes de etiquetar la
+          # primera version, que es justo para lo que sirve un ensayo. Hay
+          # invariante en tests/Paquetes.Tests.ps1: cada elemento de esta
+          # lista tiene que estar declarado ahi con su motivo, asi que
+          # anyadir uno nuevo obliga a justificarlo.
+          foreach ($elemento in @('src', 'assets', 'Cachivache.ps1', 'Cachivache.bat',
                                   'Cachivache.exe', 'README.md', 'LICENSE', 'SECURITY.md')) {
               Copy-Item -Path $elemento -Destination $carpeta -Recurse
           }

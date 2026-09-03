@@ -625,3 +625,96 @@ Describe 'El README cuenta las dos formas nuevas de instalar' {
         $script:Lectura | Should -Match 'packaging/README\.md|packaging\\README\.md'
     }
 }
+
+Describe 'Lo que se le entrega al usuario: cada cosa, con su motivo' {
+
+    # EL FALLO QUE ENCONTRO ESTA PRUEBA, ensayando el empaquetado en local
+    # antes de etiquetar la primera version.
+    #
+    # publicar.yml copiaba 'tools' al paquete, justo debajo de un
+    # comentario que decia "ni pruebas, ni herramientas de desarrollo".
+    # Iban dentro los cinco bancos, Mutar.ps1 y el ejecutor de pruebas.
+    # Ninguno hace falta para ejecutar el programa, y dos son peligrosos
+    # en manos de quien se baja un limpiador de disco: Banco-Pruebas.ps1
+    # crea y borra arboles enteros -su cabecera dice "EJECUTAR SOLO EN UNA
+    # MAQUINA VIRTUAL CON INSTANTANEA"- y Mutar.ps1 reescribe archivos
+    # fuente a proposito.
+    #
+    # LA FORMA DE LA PRUEBA IMPORTA, y viene de la regla 8 del relevo. No
+    # se prohibe 'tools' por su nombre: eso seria escribir la lista de los
+    # fallos que ya conocemos. Se exige que CADA elemento del paquete este
+    # declarado aqui con su motivo, asi que meter uno nuevo obliga a
+    # justificarlo, y meter uno que sobra se ve al no encontrarle motivo.
+
+    BeforeAll {
+        $script:RaizPaq = Split-Path $PSScriptRoot -Parent
+        $script:Publicar = [IO.File]::ReadAllText(
+            (Join-Path (Join-Path (Join-Path $script:RaizPaq '.github') 'workflows') 'publicar.yml'))
+
+        # Lo que se entrega, y por que. Si anyades algo al flujo, anyadelo
+        # aqui con su motivo o la prueba se pone roja.
+        $script:MotivoDeCadaCosa = @{
+            'src'             = 'el programa entero: sin esto no hay nada que ejecutar'
+            'assets'          = 'los iconos que carga la ventana al abrirse'
+            'Cachivache.ps1'  = 'el punto de entrada, en modo ventana y en modo consola'
+            'Cachivache.bat'  = 'el arranque para quien no quiera usar el .exe'
+            'Cachivache.exe'  = 'el lanzador sin consola negra detras; lo compila el paso anterior'
+            'README.md'       = 'que es esto y como se usa'
+            'LICENSE'         = 'la licencia; distribuir sin ella no es legal'
+            'SECURITY.md'     = 'que hace el programa con tus archivos, que es lo que el proyecto promete que se puede leer'
+        }
+    }
+
+    It 'la prueba encuentra la lista de verdad: si no, no comprueba nada' {
+        $script:Publicar | Should -Match "foreach \(\`$elemento in @\("
+    }
+
+    It 'todo lo que se empaqueta esta declarado con su motivo' {
+        $m = [regex]::Match($script:Publicar, "(?s)foreach \(\`$elemento in @\((?<lista>.*?)\)\) \{")
+        $m.Success | Should -BeTrue
+        $entregado = @([regex]::Matches($m.Groups['lista'].Value, "'(?<e>[^']+)'") |
+                       ForEach-Object { $_.Groups['e'].Value })
+        @($entregado).Count | Should -BeGreaterThan 4 -Because 'si la lista sale vacia, esto no mira nada'
+
+        $sinMotivo = @($entregado | Where-Object { -not $script:MotivoDeCadaCosa.ContainsKey($_) })
+        ($sinMotivo -join ', ') | Should -BeNullOrEmpty -Because (
+            'lo que se le entrega a un usuario se justifica una por una, o acaba viajando algo que nadie decidio mandar')
+
+        # Y al reves: un motivo escrito para algo que ya no se entrega es
+        # una lista que ha dejado de describir la realidad.
+        $sinEntregar = @($script:MotivoDeCadaCosa.Keys | Where-Object { $entregado -notcontains $_ })
+        ($sinEntregar -join ', ') | Should -BeNullOrEmpty
+    }
+
+    It 'no viaja NADA que cree, borre o reescriba archivos por su cuenta' {
+        # La comprobacion de verdad: se mira lo que hay DENTRO de cada
+        # carpeta entregada, no su nombre. Una carpeta puede llamarse
+        # inofensiva y traer dentro un banco de pruebas.
+        $m = [regex]::Match($script:Publicar, "(?s)foreach \(\`$elemento in @\((?<lista>.*?)\)\) \{")
+        $entregado = @([regex]::Matches($m.Groups['lista'].Value, "'(?<e>[^']+)'") |
+                       ForEach-Object { $_.Groups['e'].Value })
+
+        $peligrosos = @()
+        foreach ($e in $entregado) {
+            $ruta = Join-Path $script:RaizPaq $e
+            if (-not (Test-Path -LiteralPath $ruta)) { continue }
+            if (-not (Get-Item -LiteralPath $ruta).PSIsContainer) { continue }
+            foreach ($f in @(Get-ChildItem -LiteralPath $ruta -Recurse -File)) {
+                if ($f.Name -match '\.Tests\.ps1$' -or $f.Name -match '^(Banco-|Mutar|Probar|Cobertura)') {
+                    $peligrosos += ('{0} trae {1}' -f $e, $f.Name)
+                }
+            }
+        }
+        ($peligrosos -join ' // ') | Should -BeNullOrEmpty -Because (
+            'quien se baja un limpiador no debe recibir bancos de pruebas ni el mutador')
+    }
+
+    It 'y tampoco viajan las pruebas ni la configuracion del repositorio' {
+        $m = [regex]::Match($script:Publicar, "(?s)foreach \(\`$elemento in @\((?<lista>.*?)\)\) \{")
+        $entregado = @([regex]::Matches($m.Groups['lista'].Value, "'(?<e>[^']+)'") |
+                       ForEach-Object { $_.Groups['e'].Value })
+        foreach ($prohibido in @('tests', '.github', 'pruebas', 'docs')) {
+            $entregado | Should -Not -Contain $prohibido
+        }
+    }
+}

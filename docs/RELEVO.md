@@ -15,7 +15,7 @@ importa tanto como que funcione.
 - Se ejecuta con `Cachivache.exe`, que lanza `powershell.exe` (5.1) sin consola visible.
 - Las pruebas se ejecutan con PowerShell 7 + Pester.
 
-**Estado hoy: 2431 pruebas en verde, analizador limpio, 50 puntos de la hoja
+**Estado hoy: 2435 pruebas en verde, analizador limpio, 50 puntos de la hoja
 de ruta cerrados. La suite pasa también en Windows, en PowerShell 5.1 y en 7**, y los seis trabajos
 de la integración continua están en verde — nada de eso había pasado nunca hasta el 1 de septiembre
 de 2026.
@@ -100,8 +100,24 @@ de 2026.
     repone al escribir, así que un "restaurado por si acaso" detrás de la herramienta deja cuatro
     archivos sin BOM. Pasó. La red de seguridad de más era menos cuidadosa que aquello que
     respaldaba, y por eso lo rompió. `Invoke-Mutacion` sí detecta el BOM y lo conserva.
-11. **Se borra el código muerto.** No se deja "por si acaso".
-12. **Documentar al cerrar cada punto**: banner `> ✅ **RESUELTO.**` en `docs/HOJA-DE-RUTA.md`
+11. **La CI se mira sola: el repositorio es público.** No le pidas al usuario que pegue registros de
+    3.000 líneas. Desde el shell se llega a `api.github.com` sin ninguna credencial:
+
+    ```bash
+    curl -sS "https://api.github.com/repos/pacolopez23/cachivache/actions/runs?per_page=3"
+    curl -sS "https://api.github.com/repos/pacolopez23/cachivache/actions/runs/<id>/jobs"
+    ```
+
+    Eso da el estado de cada trabajo y **qué paso concreto ha fallado**. Lo único que no se alcanza
+    es el texto del registro (`HTTP 403`, pide autenticarse); cuando haga falta de verdad, se pide.
+
+    **Y empujar sigue siendo suyo, a propósito.** Se puede hacer el `git commit` por él —el mensaje
+    largo es la parte pesada— pero el `git push` lo da él. La clave privada vive en su Windows y ahí
+    se queda, y un token pegado en la conversación queda escrito para siempre y puede hacer mucho
+    más que empujar. El reparto es: aquí se escribe, se prueba, se commitea y se comprueba la CI;
+    él empuja.
+12. **Se borra el código muerto.** No se deja "por si acaso".
+13. **Documentar al cerrar cada punto**: banner `> ✅ **RESUELTO.**` en `docs/HOJA-DE-RUTA.md`
     (conservando el análisis original debajo, porque explica el porqué) y entrada en `CHANGELOG.md`.
 
 ---
@@ -315,7 +331,7 @@ tres estados de `USO-04`, `VEL-01` (tabla maestra de NTFS), `DIS-01` (firma, nec
 ## Lo primero que deberías hacer
 
 1. Leer `docs/HOJA-DE-RUTA.md` entero. Es largo y merece la pena: explica el porqué de todo.
-2. Ejecutar `tools/Probar.ps1` y confirmar **2431 en verde y analizador a cero**. Si no cuadra, eso es lo
+2. Ejecutar `tools/Probar.ps1` y confirmar **2435 en verde y analizador a cero**. Si no cuadra, eso es lo
    primero, antes que cualquier punto nuevo.
 3. Preguntarle con qué punto quiere seguir, ofreciéndole las opciones de la tabla de arriba con una
    frase de porqué cada una. No empieces por tu cuenta.
