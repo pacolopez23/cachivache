@@ -1,7 +1,8 @@
 ﻿<#
 .SYNOPSIS
-    Que desplazamiento y que seleccion se recuperan cuando la tabla de
-    resultados se desengancha y se vuelve a enganchar. Calculo puro.
+    Decisiones puras de geometria de la ventana: que desplazamiento y que
+    seleccion se recuperan al reenganchar la tabla ([USO-10]), y hasta
+    donde puede crecer un dialogo sin salirse de la pantalla ([A11Y-02]).
 
 .DESCRIPTION
     Vive aparte por el mismo motivo que Atajos.ps1 vive aparte de

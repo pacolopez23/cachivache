@@ -173,6 +173,33 @@ que se hace una vez a un hábito después de cada tanda de cambios.
   de la guardia son lógica de seguridad, no texto de interfaz: si alguien se las lleva a un archivo
   de idioma, rompe la guardia en silencio. `[I18N-02]`
 
+### Marcar 5.000 filas ya no deja la ventana colgada
+
+`VEL-03`. *Marcar todo*, *Desmarcar todo* y *Solo lo seguro* recorrían la lista entera de un tirón en
+el hilo de la interfaz. Con 119 elementos no se nota; con 5.000 —un disco con muchos duplicados— la
+ventana se quedaba congelada varios segundos, sin repintar y sin responder, hasta que Windows podía
+llegar a ofrecer cerrarla. El usuario no veía un programa trabajando: veía un programa roto.
+
+Ahora, por encima de 2.000 filas se trocea en tandas de 500 y entre tanda y tanda se deja repintar.
+Por debajo del umbral se hace de un tirón, **igual que antes**: respirar cuesta una vuelta por
+trozo, y con pocas filas eso solo añade lentitud y parpadeo donde no había ninguno.
+
+**Y arreglarlo abrió un agujero que no estaba en el enunciado.** Una ventana que responde también
+**acepta clics**: mientras se marcan 5.000 filas, el botón de eliminar sigue ahí, y se podría pulsar
+con la mitad de las filas marcadas creyendo que están todas. Congelada, la ventana estaba protegida
+*por accidente*. Así que el arreglo apaga los cuatro botones que pueden hacer daño mientras dura y
+los vuelve a encender en un `finally`.
+
+La decisión vive en `Get-PlanMarcadoEnLote` (`src/UI/Lotes.ps1`), cálculo puro y sin un solo tipo de
+WPF, porque aquí no hay interfaz gráfica que mirar. La invariante no mide el rendimiento —eso no se
+puede desde aquí— sino que **los trozos cubran exactamente las filas**: se recorre el plan sobre
+5.001 posiciones y se exige que cada una se toque una sola vez. Trocear es la forma clásica de perder
+la última fila.
+
+De propina, una prueba se cazó a sí misma: *«Lotes.ps1 no menciona ningún tipo de `System.Windows`»*
+salía roja porque **la cabecera del archivo promete justamente eso**, con esas palabras. Ahora mira
+el código y no los comentarios, como ya hacía la prueba equivalente de `Posicion.ps1`.
+
 ### El paquete que se le entrega al usuario llevaba dentro el banco de pruebas
 
 Ensayando el empaquetado en local **antes** de etiquetar la primera versión —el canal de

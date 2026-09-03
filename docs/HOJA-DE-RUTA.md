@@ -1323,6 +1323,33 @@ otro, no los dos.
 
 ### `VEL-03` · Marcar 5.000 filas bloquea la ventana · Media
 
+> ✅ **RESUELTO.** Por encima de 2.000 filas el marcado se trocea en tandas de 500, y entre tanda y
+> tanda se le da una vuelta al despachador de WPF para que repinte. Por debajo del umbral se hace
+> de un tirón, exactamente como antes: **el caso normal no cambia en nada**, porque dejar respirar
+> a la ventana cuesta una vuelta por trozo y con 119 filas eso solo añade lentitud y parpadeo.
+>
+> **El reparto lo decide `Get-PlanMarcadoEnLote`** (`src/UI/Lotes.ps1`), que es cálculo puro y no
+> toca WPF — aquí no hay interfaz gráfica, así que la decisión se saca fuera para poder probarla.
+> La invariante que de verdad importa no es el rendimiento, que aquí no se puede medir, sino que
+> **los trozos cubran exactamente las filas que hay**: se recorre el plan sobre una lista de 5.001
+> posiciones y se exige que cada una se toque **una sola vez**. Trocear es la forma clásica de
+> perder la última fila, y una fila sin marcar que el usuario cree marcada es justo la clase de
+> mentira que este programa no se puede permitir.
+>
+> **Y lo que trocear ROMPE, que no estaba en el enunciado.** Una ventana que responde también
+> acepta clics: mientras se marcan 5.000 filas, *Eliminar lo marcado* sigue ahí, y el usuario
+> podría pulsarlo con la mitad de las filas marcadas creyendo que están todas. Congelada, la
+> ventana estaba protegida **por accidente**; respondiendo, hay que protegerla a propósito. Por eso
+> el cierre apaga los cuatro botones que pueden hacer daño mientras dura y los vuelve a encender en
+> un `finally` — si el criterio lanza a mitad, dejarlos apagados haría la ventana inservible sin
+> decir por qué.
+>
+> Seis mutaciones, las seis cazadas: el último trozo perdido por redondear hacia abajo, el tramo
+> final sin recortar, el tamaño cero que sería un bucle infinito, trocear siempre, dejar de apagar
+> los botones y dejar de respirar entre trozos.
+>
+> *El análisis de abajo se conserva porque explica el porqué, que no caduca.*
+
 El recorrido es síncrono en el hilo de la interfaz. → Trocear por encima de unas 2.000 filas.
 
 ---

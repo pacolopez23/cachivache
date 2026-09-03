@@ -26,9 +26,14 @@ Add-Type -AssemblyName System.Xaml
 # las pruebas puedan recorrer las combinaciones sin interfaz grafica.
 . (Join-Path $PSScriptRoot 'Atajos.ps1')
 
-# Que posicion y que seleccion se recuperan al reenganchar la tabla. Otra
-# vez aparte y otra vez sin WPF dentro, por el mismo motivo. Ver [USO-10].
+# Que posicion y que seleccion se recuperan al reenganchar la tabla, y
+# hasta donde puede crecer un dialogo sin salirse de la pantalla. Otra vez
+# aparte y otra vez sin WPF dentro. Ver [USO-10] y [A11Y-02].
 . (Join-Path $PSScriptRoot 'Posicion.ps1')
+
+# Como se recorre una lista larga de filas sin dejar la ventana colgada.
+# Lo mismo: aqui se decide, la ventana ejecuta. Ver [VEL-03].
+. (Join-Path $PSScriptRoot 'Lotes.ps1')
 
 # =====================================================================
 #  CARGA DE XAML

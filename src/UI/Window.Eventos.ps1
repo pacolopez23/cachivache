@@ -310,12 +310,53 @@
     $marcarEnLote = {
         param([scriptblock] $Criterio)
         if ($null -eq $estado.Vista) { return }
+
+        # Se materializa con @() antes de tocar nada: modificar los
+        # elementos mientras se enumera una CollectionView con filtro
+        # es pedirle problemas al enumerador.
+        $filas = @($estado.Vista)
+        $plan = Get-PlanMarcadoEnLote -Total $filas.Count
+        if ($plan.Total -le 0) { return }
+
         $estado.SuprimirResumen = $true
         try {
-            # Se materializa con @() antes de tocar nada: modificar los
-            # elementos mientras se enumera una CollectionView con filtro
-            # es pedirle problemas al enumerador.
-            foreach ($item in @($estado.Vista)) { $item.Seleccionado = [bool](& $Criterio $item) }
+            if (-not $plan.PorTrozos) {
+                # El caso de siempre, sin cambiar nada: de un tiron.
+                foreach ($item in $filas) { $item.Seleccionado = [bool](& $Criterio $item) }
+            }
+            else {
+                # [VEL-03]. Por encima del umbral se trocea y se deja
+                # respirar a la ventana entre trozo y trozo, para que
+                # repinte y no parezca colgada.
+                #
+                # Y AQUI ESTA EL FILO: dejarla respirar significa que
+                # tambien atiende clics. Congelada estaba protegida por
+                # accidente; respondiendo, hay que protegerla a proposito,
+                # o el usuario puede pulsar "Eliminar lo marcado" con la
+                # mitad de las filas marcadas y creyendo que estan todas.
+                # Por eso se apagan los botones que pueden hacer danyo
+                # mientras dura, y se vuelven a encender pase lo que pase.
+                $botones = @($c.BtnEliminar, $c.BtnMarcarTodo, $c.BtnDesmarcarTodo, $c.BtnSoloSeguros)
+                $antes = @($botones | ForEach-Object { $_.IsEnabled })
+                foreach ($b in $botones) { $b.IsEnabled = $false }
+                $cursorPrevio = $ventana.Cursor
+                $ventana.Cursor = [Windows.Input.Cursors]::Wait
+                try {
+                    foreach ($tramo in @(Get-RangosDeLote -Plan $plan)) {
+                        for ($i = 0; $i -lt $tramo.Cuantas; $i++) {
+                            $item = $filas[$tramo.Desde + $i]
+                            $item.Seleccionado = [bool](& $Criterio $item)
+                        }
+                        # Una vuelta al despachador en prioridad de fondo:
+                        # WPF repinta lo pendiente y vuelve aqui. Es lo
+                        # unico que separa "trabajando" de "colgado".
+                        $ventana.Dispatcher.Invoke([action]{}, [Windows.Threading.DispatcherPriority]::Background)
+                    }
+                } finally {
+                    for ($i = 0; $i -lt $botones.Count; $i++) { $botones[$i].IsEnabled = $antes[$i] }
+                    $ventana.Cursor = $cursorPrevio
+                }
+            }
         } finally {
             $estado.SuprimirResumen = $false
         }
