@@ -108,6 +108,26 @@ function Show-Confirmacion {
     $dialogo = Import-Xaml (Join-Path $CarpetaUi 'ConfirmDialog.xaml')
     $dialogo.Owner = $Propietario
 
+    # El tope de altura, CON LA PANTALLA DE ESTE EQUIPO DELANTE.
+    #
+    # El XAML trae 760 de reserva, pero 760 es la altura util de un portatil
+    # de 768 px SIN ESCALADO. Al 150% esa misma pantalla mide 512 puntos, y
+    # entonces el tope queda por encima del escritorio entero: el dialogo
+    # vuelve a crecer hasta sacar sus botones de la pantalla, que es
+    # exactamente lo que [A11Y-03] vino a impedir. Ver [A11Y-02].
+    #
+    # WorkArea ya viene en puntos y ya descuenta la barra de tareas. La
+    # decision de cuanto margen dejar es de Get-AlturaMaximaDialogo, que es
+    # calculo puro y se prueba sin abrir ninguna ventana.
+    try {
+        $dialogo.MaxHeight = Get-AlturaMaximaDialogo `
+            -AltoAreaUtil ([System.Windows.SystemParameters]::WorkArea.Height)
+    } catch {
+        # Si el escritorio no se deja preguntar, se queda el 760 del XAML.
+        # Un dialogo demasiado alto es malo; no tenerlo es peor.
+        Write-Verbose "No se ha podido ajustar la altura del dialogo: $($_.Exception.Message)"
+    }
+
     $lista = @($Arriesgados)
 
     # Las tres cadenas del destino salen de UNA funcion, no de tres sitios.

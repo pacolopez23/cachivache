@@ -453,3 +453,66 @@ las dos vueltas a pisar aquí:
   archivo, el redondeo se saltaba combinaciones y salían archivos colgando de carpetas que no
   existían — con lo que la propagación medía un árbol distinto del que se creía. Se ve enseguida
   porque el número de carpetas no cuadra; si el banco no lo hubiera impreso, no se habría visto.
+
+---
+
+## Segunda parte · 2 de septiembre de 2026 — la mitad de Windows, escrita y sin ejecutar
+
+El párrafo de arriba que dice *«no se ha implementado el índice incremental»* ha caducado. Desde el
+1 de septiembre existen `IndicePersistente.ps1` e `IndiceIncremental.ps1` (guardar, leer, decidir si
+se puede creer, aplicar cambios), y desde hoy existe **la lectura del diario**:
+
+| Archivo | Qué hace | Probado |
+|---|---|---|
+| `src/Core/DiarioUsn.ps1` · `Get-RegistroUsn`, `Get-RegistrosUsn` | bytes `USN_RECORD_V2` → registros | **64 pruebas**, byte a byte, 16 mutaciones cazadas |
+| `src/Core/DiarioUsnCambios.ps1` · `Get-CambioDesdeRazonUsn`, `ConvertTo-CambiosIndice` | registros → `Alta`/`Baja`/`Cambio` colapsados por archivo, con renombrados y orden por USN | **43 pruebas**, 12 mutaciones cazadas |
+| `src/Core/DiarioUsn.ps1` · `Test-PuedeLeerDiarioUsn` | si se puede leer y, si no, por qué | 7 pruebas |
+| `tests/DiarioUsnCostura.Tests.ps1` | **el camino entero**: bytes → registros → cambios → índice guardado → leído → actualizado, y el total cuadra al byte | 17 pruebas, 4 mutaciones cazadas en las tres juntas |
+| `src/Core/DiarioUsn.ps1` · `Get-DatosDiarioUsn`, `Read-DiarioUsn` | abrir el volumen y pedirle el diario con `DeviceIoControl` | **NUNCA EJECUTADO** |
+
+Las dos mitades puras se escribieron **en paralelo**, cada una por un agente, con el contrato de en
+medio dictado por escrito. Es la situación de la regla 4 del relevo, y la prueba de costura existe
+por eso: es la única que recorre las tres juntas seguidas, y cada junta se rompió a propósito para
+ver que la costura lo nota.
+
+### Lo que sigue siendo una hipótesis
+
+`Get-DatosDiarioUsn` y `Read-DiarioUsn` están en la misma situación que `Read-TablaMaestra` en
+`VEL-01`: escritas donde no hay NTFS, contra la documentación del formato, y sin haberse ejecutado
+ni una vez. Hasta que alguien las corra en un Windows real son PowerShell con forma de función.
+
+**`tools/Banco-VEL02-Diario.ps1` existe para eso.** Se ejecuta como administrador, no toca nada, y
+mide cuatro cosas en orden: si el diario responde, cuánto tarda en leerse, cuánto de lo leído se
+entiende, y cuántas altas/bajas/cambios salen de la última hora. Si el punto 1 falla siendo
+administrador, el fallo está en el `DeviceIoControl` y se mira con `-Verbose`.
+
+### Las dos cosas que este trabajo ha dejado claras, y que cambian el punto
+
+**1. El camino rápido es solo para administradores.** Leer el diario exige abrir `\\.\C:` en crudo,
+igual que la tabla maestra, y eso sin elevación falla con acceso denegado. El programa arranca sin
+privilegios. O sea que **en el uso normal el segundo análisis NO va a ser más rápido**: lo será
+cuando el usuario reinicie como administrador, que es cuando ya se ejecutan los módulos que lo
+piden. `Test-PuedeLeerDiarioUsn` lo dice con esas palabras. No es un fallo de diseño —es el precio
+de no pedir permisos que el usuario no ha dado— pero hay que decirlo al vender el punto.
+
+**2. Falta una pieza, y es la que decide el diseño.** El diario no da rutas: da la **referencia** de
+la carpeta padre y el nombre del archivo. Convertir esa referencia en una ruta es cosa de Windows —
+`OpenFileById` + `GetFinalPathNameByHandle`, una llamada al sistema por carpeta— o cosa del índice,
+si al recorrer se guarda la referencia de cada carpeta y la resolución se vuelve una búsqueda en
+diccionario. **Cuál de las dos conviene lo dice un número que solo el banco puede dar:** cuántas
+carpetas padre distintas aparecen en una hora de uso. Si son cientos, se resuelve al vuelo; si son
+decenas de miles, se guarda en el índice y hay que subir la versión del formato.
+
+`ConvertTo-CambiosIndice` ya está preparada: recibe el resolutor como un bloque, así que da igual
+cuál de las dos formas gane. Lo que no existe todavía es ninguna de las dos.
+
+### Qué hay que hacer para cerrar `VEL-02`
+
+1. Ejecutar `tools/Banco-VEL02-Diario.ps1` **como administrador** y pegar la salida.
+2. Con el número de carpetas padre, elegir el resolutor y escribirlo.
+3. Enganchar el camino en `Invoke-Analisis`: guardar el índice al terminar un recorrido, y al
+   siguiente análisis pasar por `Test-PuedeLeerDiarioUsn` → `Get-DatosDiarioUsn` →
+   `Test-IndiceUtilizable` → `Read-DiarioUsn` → `ConvertTo-CambiosIndice` → `Update-IndiceConCambios`,
+   con el recorrido completo como salida de cualquier «no» por el camino.
+4. Medir en `C:` de verdad los dos caminos, y contrastar con el punto de equilibrio de la primera
+   parte (~30.000 cambios).

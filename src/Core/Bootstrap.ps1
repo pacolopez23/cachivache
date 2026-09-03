@@ -55,7 +55,9 @@ $OrdenNucleoCachivache = @(
     'VistaArchivos.ps1'   # la capa de consulta del indice: todos los archivos por tamano, con comodines
     'IndicePersistente.ps1' # guardar y leer el indice en binario: ver docs/VEL-02-MEDICION.md
     'IndiceIncremental.ps1' # si el indice guardado se puede creer, y como se le aplican los cambios
-    'Mft.ps1'             # tabla maestra de NTFS. MEDIDO Y DESCARTADO como camino rapido: ver docs/VEL-01-MEDICION.md
+    'Mft.ps1'             # tabla maestra de NTFS. MEDIDO Y DESCARTADO como camino rapido: ver docs/VEL-01-MEDICION.md. Sigue aqui porque DiarioUsn reutiliza sus lectores de bytes
+    'DiarioUsn.ps1'       # el diario USN de NTFS, de bytes a registros: lo que cambio desde el ultimo analisis
+    'DiarioUsnCambios.ps1' # de registros del diario a los cambios que entiende IndiceIncremental
     'Mapa.ps1'            # disposicion del mapa de arbol (calculo puro)
     'Report.ps1'          # informes HTML, CSV y JSON
     'ReportEspacio.ps1'   # informe de espacio con mapa de arbol en SVG

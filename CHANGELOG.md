@@ -173,6 +173,66 @@ que se hace una vez a un hábito después de cada tanda de cambios.
   de la guardia son lógica de seguridad, no texto de interfaz: si alguien se las lleva a un archivo
   de idioma, rompe la guardia en silencio. `[I18N-02]`
 
+### `VEL-02`, la mitad de Windows: leer el diario de cambios de NTFS
+
+Tres archivos nuevos y una prueba de costura. `src/Core/DiarioUsn.ps1` convierte los bytes de un
+registro `USN_RECORD_V2` en un objeto —**64 pruebas byte a byte**, 16 mutaciones cazadas—;
+`src/Core/DiarioUsnCambios.ps1` convierte la lluvia de registros del diario —el sistema emite crear,
+extender y cerrar como tres— en la lista limpia de altas, bajas y cambios que `Update-IndiceConCambios`
+ya sabe aplicar, colapsando por archivo, respetando el orden por USN y tratando el renombrado como
+baja + alta (**43 pruebas**, 12 mutaciones cazadas). Y `Test-PuedeLeerDiarioUsn` decide si se puede
+leer el diario y, si no, por qué — reutilizando las tres condiciones de `Test-PuedeLeerTablaMaestra`,
+que era código muerto desde `VEL-01` y vuelve a tener quien lo llame.
+
+**Las dos mitades puras se escribieron en paralelo, con el contrato de en medio dictado por
+escrito** — la lección de `VEL-02` del día anterior, aplicada a propósito esta vez. Y
+`tests/DiarioUsnCostura.Tests.ps1` recorre las tres juntas seguidas: bytes → registros → cambios →
+índice guardado → leído → actualizado, y exige que **6 MB menos 2 más 3 más 2 sean 9 MB al byte**.
+Cada junta se rompió a propósito para comprobar que la costura lo nota.
+
+**Lo que sigue sin ejecutarse**, y está escrito con esas palabras: `Get-DatosDiarioUsn` y
+`Read-DiarioUsn`, que abren el volumen y le piden el diario con `DeviceIoControl`. Están donde estaba
+`Read-TablaMaestra` en `VEL-01`: escritas contra la documentación del formato, sin un NTFS delante.
+`tools/Banco-VEL02-Diario.ps1` se ejecuta como administrador, no toca nada, y dice si responden.
+
+**Y dos cosas que rebajan la promesa del punto, y hay que decirlas.** Leer el diario exige abrir
+`\\.\C:` en crudo, así que **el camino rápido es solo para administradores** — en el uso normal el
+segundo análisis no va a ser más rápido. Y el diario no da rutas sino referencias de carpeta, y
+**resolverlas a rutas es la pieza que falta**; qué forma tomar lo dice un número que solo el banco
+puede dar.
+
+De limpiar el terreno salió un huérfano: dos archivos de un intento anterior que definían **otra**
+`ConvertTo-CambiosIndice` con otro contrato. Si las dos hubieran entrado en `Bootstrap`, habría
+ganado la que cargase última, en silencio. Borrados.
+
+### La ventana ya cabe en un portátil normal, y el diálogo también
+
+`A11Y-02`. **El mínimo baja de 1020×620 a 880×460.** Un portátil corriente de 1366×768 con el
+escalado de Windows al 150 % mide **910×512 puntos** —WPF trabaja en puntos, no en píxeles—, así que
+la ventana no podía encogerse lo suficiente: se salía de la pantalla y el botón de eliminar quedaba
+fuera, sin forma de alcanzarlo.
+
+Hay invariante, y ata el número **por los dos lados**: no puede subir hasta no caber, y tampoco
+bajar hasta volverse inútil. Arreglar esto poniendo 300×200 también «cabría».
+
+**Bajarlo solo es seguro gracias a lo de ayer.** Las nueve rejillas que se pintaban unas encima de
+otras al estrechar eran justo lo que habría convertido *«no cabe»* en *«cabe y no se entiende»*.
+
+**Y apareció un agujero dentro de un arreglo anterior.** `A11Y-03` había puesto `MaxHeight="760"` en
+el diálogo de confirmación para que sus botones no quedaran fuera de la pantalla, con un comentario
+que decía *«es la altura útil de un portátil de 768 px»*. En ese mismo portátil al 150 % la pantalla
+mide 512 puntos: **760 es más alto que el escritorio entero y el tope no topaba nada**. El arreglo de
+`A11Y-03` no funcionaba precisamente en la máquina de la que habla `A11Y-02`.
+
+El comentario acertaba en una cosa —el XAML no sabe cuánta pantalla hay— pero la conclusión era
+otra: no había que elegir mejor el número fijo, había que no fijarlo. Ahora sale de
+`Get-AlturaMaximaDialogo`, cálculo puro que se prueba sin abrir ninguna ventana, alimentado con
+`SystemParameters.WorkArea`, que ya viene en puntos y ya descuenta la barra de tareas.
+
+**Falta la otra mitad**, y está escrita como tal: la barra lateral sigue ocupando 228 puntos fijos,
+que a 880 de ancho son la cuarta parte de la ventana. Plegarla pide verla en una pantalla escalada
+de verdad.
+
 ### El botón llamaba «definitivo» a un borrado que iba a la papelera
 
 El diálogo de confirmación enseñaba dos frases que se contradecían:

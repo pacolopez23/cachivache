@@ -152,3 +152,69 @@ function Get-PlanRestauracionTabla {
         HayQueHacerAlgo    = ($desplazamiento -gt 0) -or $restaurarSeleccion
     }
 }
+
+function Get-AlturaMaximaDialogo {
+    <#
+    .SYNOPSIS
+        Hasta donde puede crecer un dialogo sin salirse de la pantalla.
+        Calculo puro: entra el alto util del escritorio, sale un maximo.
+
+    .DESCRIPTION
+        EL AGUJERO QUE TAPA, y es un agujero DENTRO de un arreglo anterior.
+
+        [A11Y-03] arreglo que el dialogo de confirmacion creciera hasta
+        dejar sus botones fuera de la pantalla, y lo hizo poniendo
+        MaxHeight="760" en el XAML. El comentario que acompanya ese numero
+        dice: "es la altura util de un portatil de 768 px, que es el caso
+        peor comun".
+
+        Y ahi esta el fallo. En un portatil de 1366x768 AL 150% -que es
+        justo la maquina de la que habla [A11Y-02]- la pantalla no mide
+        768 puntos: mide 512. WPF trabaja en puntos independientes del
+        dispositivo, no en pixeles. Asi que 760 es mas alto que la
+        pantalla entera y el tope no topa nada: el arreglo de [A11Y-03] no
+        funciona precisamente en la maquina que [A11Y-02] describe.
+
+        El comentario del XAML tenia razon en una cosa: el XAML no sabe
+        cuanta pantalla hay. Pero PowerShell si -SystemParameters.WorkArea
+        ya viene en puntos y ya descuenta la barra de tareas-, asi que la
+        respuesta no era elegir mejor el numero fijo, era no fijarlo.
+
+        El margen no es adorno: WorkArea descuenta la barra de tareas pero
+        no los bordes de la ventana ni la sombra, y un dialogo que llega
+        justo al borde parece cortado aunque quepa.
+
+    .PARAMETER AltoAreaUtil
+        Alto del area de trabajo del escritorio, en puntos. Lo da
+        [System.Windows.SystemParameters]::WorkArea.Height.
+
+    .PARAMETER Margen
+        Lo que se deja libre arriba y abajo entre los dos.
+    #>
+    [CmdletBinding()]
+    [OutputType([double])]
+    param(
+        [Parameter(Mandatory)] [double] $AltoAreaUtil,
+        [double] $Margen = 48
+    )
+
+    # Ante un dato imposible se devuelve el minimo util y NO se lanza: esto
+    # se llama justo antes de enseñar el dialogo que frena un borrado, y
+    # que ese dialogo no aparezca es peor que cualquier tamanyo raro.
+    if ([double]::IsNaN($AltoAreaUtil) -or [double]::IsInfinity($AltoAreaUtil) -or
+        $AltoAreaUtil -le 0) {
+        return 320.0
+    }
+
+    $alto = $AltoAreaUtil - $Margen
+
+    # Suelo: por debajo de esto el dialogo no puede enseñar ni el resumen
+    # ni los botones, y mas vale que se salga un poco a que sea inutil.
+    if ($alto -lt 320) { return 320.0 }
+
+    # Techo: en un monitor de 4K un dialogo de 2000 puntos de alto es
+    # ilegible. Lo que crece dentro es una lista que ya se desplaza sola.
+    if ($alto -gt 760) { return 760.0 }
+
+    return [double] $alto
+}

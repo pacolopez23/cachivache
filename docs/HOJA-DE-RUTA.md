@@ -922,6 +922,36 @@ casillas de fila —con el nombre del elemento—, casillas de módulo y de disc
 
 ### `A11Y-02` · La ventana no cabe con escalado del 150% · **Alta**
 
+> 🟡 **HECHO A MEDIAS, y la mitad que falta necesita una pantalla escalada de verdad.**
+>
+> **El mínimo baja de 1020×620 a 880×460**, que cabe en los 910×512 puntos de un portátil de
+> 1366×768 al 150 % dejando sitio para la barra de tareas. Hay invariante que ata ese número a la
+> pantalla más pequeña que el proyecto dice soportar, y **por los dos lados**: no puede subir hasta
+> no caber, y no puede bajar hasta volverse inútil — arreglar el punto poniendo 300×200 también
+> habría pasado la primera mitad de la prueba.
+>
+> **Bajarlo solo es seguro por lo que se arregló el día antes.** El 1 de septiembre aparecieron
+> nueve rejillas que fingían dos columnas con la alineación y se pintaban unas encima de otras al
+> estrechar la ventana; dos ya se solapaban. Sin aquello, bajar este número habría cambiado *«no
+> cabe»* por *«cabe y no se entiende»*.
+>
+> **Y aquí salió un agujero dentro del arreglo de `A11Y-03`.** Aquel puso `MaxHeight="760"` en el
+> diálogo de confirmación, con un comentario que decía *«es la altura útil de un portátil de 768 px»*.
+> Pero WPF trabaja en puntos, no en píxeles: ese mismo portátil al 150 % mide **512 puntos**, así
+> que 760 es más alto que la pantalla entera y el tope no topaba nada. **El arreglo de `A11Y-03` no
+> funcionaba precisamente en la máquina de la que habla este punto.** El XAML no sabe cuánta
+> pantalla hay, pero PowerShell sí: ahora el tope se calcula con `Get-AlturaMaximaDialogo` desde
+> `SystemParameters.WorkArea`, que ya viene en puntos y ya descuenta la barra de tareas. El 760 se
+> queda de reserva por si el escritorio no se deja preguntar.
+>
+> **Lo que falta:** la barra lateral sigue ocupando **228 puntos fijos**, que a 880 de ancho son la
+> cuarta parte de la ventana. La hoja de ruta pide que se pueda plegar, y también la sección de
+> discos. No se ha hecho porque no se puede mirar desde donde se escribe esto — hace falta
+> ejecutarlo en una pantalla escalada, ver cuánto molesta de verdad y decidir si se pliega sola o
+> con un botón.
+>
+> *El análisis de abajo se conserva porque explica el porqué, que no caduca.*
+
 El mínimo es 1020×620. Un portátil de 1366×768 al 150% son 910×512 puntos: **la ventana no puede
 reducirse por debajo del mínimo**, se sale de la pantalla y el botón de eliminar queda fuera. El
 panel lateral es de ancho fijo. → Bajar el mínimo, panel lateral plegable, sección de discos
@@ -1238,8 +1268,34 @@ completo en algo que se ejecuta sin pensárselo.
 > `src/Core/IndiceIncremental.ps1` decide si lo leído se puede creer —con **diez motivos de
 > rechazo distintos, cada uno con su frase**— y le aplica los cambios propagando los totales.
 >
-> **Falta la mitad de Windows:** leer el diario con `FSCTL_READ_USN_JOURNAL`, y quién llama a todo
-> esto. Hasta entonces el programa se comporta igual que antes.
+> **🟡 La mitad de Windows, escrita el 2 de septiembre y SIN EJECUTAR.** Tres capas, de más a
+> menos probada: `DiarioUsn.ps1` convierte los bytes del diario en registros (64 pruebas, byte a
+> byte); `DiarioUsnCambios.ps1` convierte registros en altas, bajas y cambios colapsados por archivo,
+> con renombrados y orden por USN (43 pruebas); y `tests/DiarioUsnCostura.Tests.ps1` recorre las
+> tres juntas seguidas —bytes → registros → cambios → índice guardado → leído → actualizado— y exige
+> que el total cuadre al byte. Las dos mitades puras se escribieron **en paralelo con el contrato
+> dictado por escrito**, que es la lección de abajo aplicada a propósito, y la costura se rompió en
+> las tres juntas para ver que lo nota.
+>
+> Lo que **no** se ha ejecutado nunca: `Get-DatosDiarioUsn` y `Read-DiarioUsn`, que abren el volumen
+> y le piden el diario con `DeviceIoControl`. Están en la misma situación que `Read-TablaMaestra` en
+> `VEL-01`. **`tools/Banco-VEL02-Diario.ps1`** existe para sacarlas de ahí: se ejecuta como
+> administrador, no toca nada, y dice si el diario responde, cuánto tarda, cuánto se entiende, y
+> **cuántas carpetas padre distintas aparecen en una hora** — el número que decide la pieza que falta.
+>
+> **Y dos cosas que este trabajo ha dejado claras, y que rebajan la promesa del punto:**
+>
+> 1. **El camino rápido es solo para administradores.** Leer el diario exige abrir `\\.\C:` en
+>    crudo, igual que la tabla maestra. El programa arranca sin privilegios, así que **en el uso
+>    normal el segundo análisis no va a ser más rápido** — lo será al reiniciar como administrador.
+>    `Test-PuedeLeerDiarioUsn` lo dice con esas palabras. Hay que contarlo así.
+> 2. **Falta resolver referencias a rutas.** El diario no da rutas: da la referencia de la carpeta
+>    padre y el nombre. Convertirla exige una llamada al sistema por carpeta, o guardar la referencia
+>    de cada carpeta en el índice al recorrer. Cuál de las dos conviene lo dice el banco.
+>    `ConvertTo-CambiosIndice` ya recibe el resolutor como un bloque, así que el resto no cambia.
+>
+> Hasta que las dos cosas de arriba estén, el programa se comporta igual que antes. Ver la segunda
+> parte de [`docs/VEL-02-MEDICION.md`](VEL-02-MEDICION.md).
 >
 > **Y una lección de escribir las dos mitades en paralelo, que merece quedarse.** Las dos estaban en
 > verde —55 y 82 pruebas— **el día que no encajaban**. Coincidían en la cabecera, que estaba

@@ -1,10 +1,32 @@
 ﻿<!--
     Ventana principal. Sin x:Class ni manejadores en línea: se carga con
     XamlReader y todo se conecta desde Window.ps1 buscando por x:Name.
+
+    EL MÍNIMO ES 880x460, Y NO ES UN NÚMERO CUALQUIERA. Ver [A11Y-02].
+
+    Era 1020x620. El caso que lo rompía es un portátil corriente de
+    1366x768 con el escalado de Windows al 150 %: WPF trabaja en puntos
+    independientes del dispositivo, así que esa pantalla mide **910x512
+    puntos**, no 1366x768. La ventana no podía encogerse por debajo de
+    1020x620, o sea que **no cabía**, se salía por abajo y a la derecha, y
+    el botón de eliminar quedaba fuera de la pantalla sin forma de
+    alcanzarlo.
+
+    880x460 cabe en 910x512 dejando sitio para la barra de tareas. Y cabe
+    de verdad, no a costa de recortar: el 1 de septiembre de 2026 se
+    arreglaron nueve rejillas que fingían dos columnas con la alineación y
+    se pintaban unas encima de otras al estrechar. Sin aquello, bajar este
+    número habría cambiado "no cabe" por "cabe y no se entiende".
+
+    LO QUE FALTA, y se dice aquí para que no se dé por cerrado: la barra
+    lateral sigue ocupando 228 puntos fijos, que a 880 de ancho son la
+    cuarta parte de la ventana. La hoja de ruta pide que se pueda plegar,
+    y eso no se ha hecho porque no se puede mirar desde donde se escribe
+    esto: hace falta ejecutarlo en una pantalla escalada de verdad.
 -->
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Cachivache" Height="760" Width="1240" MinHeight="620" MinWidth="1020"
+        Title="Cachivache" Height="760" Width="1240" MinHeight="460" MinWidth="880"
         WindowStartupLocation="CenterScreen" WindowStyle="None"
         Background="{DynamicResource FondoVentana}" AllowsTransparency="False"
         TextOptions.TextFormattingMode="Ideal" UseLayoutRounding="True">

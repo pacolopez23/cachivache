@@ -265,3 +265,103 @@ Describe 'invariante: desenganchar la tabla obliga a guardar y restaurar el siti
         $ventana | Should -Match 'DesplazadorTabla\s*=\s*\$null'
     }
 }
+
+Describe 'Get-AlturaMaximaDialogo: el dialogo no puede salirse de la pantalla' {
+
+    # [A11Y-02]. El MaxHeight="760" que puso [A11Y-03] esta en PIXELES de un
+    # portatil sin escalar. En ese mismo portatil al 150% la pantalla mide
+    # 512 PUNTOS, que es en lo que trabaja WPF, asi que el tope quedaba por
+    # encima del escritorio entero y no topaba nada.
+
+    It 'en el caso que motivo el punto -1366x768 al 150%- cabe de sobra' {
+        # 768 px / 1,5 = 512 puntos de alto.
+        $alto = Get-AlturaMaximaDialogo -AltoAreaUtil 512
+        $alto | Should -BeLessThan 512
+        $alto | Should -BeGreaterOrEqual 320
+    }
+
+    It 'y en esa pantalla NO devuelve los 760 de antes' {
+        Get-AlturaMaximaDialogo -AltoAreaUtil 512 | Should -Not -Be 760 -Because (
+            'es mas alto que la pantalla entera: era el fallo')
+    }
+
+    It 'deja margen: nunca devuelve el area util entera' {
+        foreach ($util in @(512, 700, 900, 1040)) {
+            Get-AlturaMaximaDialogo -AltoAreaUtil $util | Should -BeLessThan $util
+        }
+    }
+
+    It 'en una pantalla grande se queda en 760, que ya es legible' {
+        Get-AlturaMaximaDialogo -AltoAreaUtil 1400 | Should -Be 760
+    }
+
+    It 'en una pantalla absurdamente pequenya devuelve un suelo utilizable' {
+        # Mas vale que se salga un poco a que no quepan ni los botones.
+        Get-AlturaMaximaDialogo -AltoAreaUtil 200 | Should -Be 320
+    }
+
+    It 'con datos imposibles NO lanza: este dialogo es el que frena un borrado' {
+        foreach ($malo in @(0, -100, [double]::NaN, [double]::PositiveInfinity)) {
+            { Get-AlturaMaximaDialogo -AltoAreaUtil $malo } | Should -Not -Throw
+            Get-AlturaMaximaDialogo -AltoAreaUtil $malo | Should -BeGreaterOrEqual 320
+        }
+    }
+
+    It 'siempre devuelve un numero utilizable, sea cual sea la pantalla' {
+        foreach ($util in @(100, 320, 512, 600, 768, 900, 1080, 1440, 2160)) {
+            $alto = Get-AlturaMaximaDialogo -AltoAreaUtil $util
+            $alto | Should -BeGreaterOrEqual 320
+            $alto | Should -BeLessOrEqual 760
+        }
+    }
+}
+
+Describe 'A11Y-02: la ventana cabe en la pantalla mas pequenya que se soporta' {
+
+    BeforeAll {
+        $script:RaizA11y2 = Split-Path $PSScriptRoot -Parent
+        $script:XamlVentana = [IO.File]::ReadAllText(
+            (Join-Path (Join-Path (Join-Path $script:RaizA11y2 'src') 'UI') 'MainWindow.xaml'))
+
+        # El caso peor que el proyecto dice soportar: un portatil corriente
+        # de 1366x768 con el escalado de Windows al 150%. WPF trabaja en
+        # puntos, asi que son 910x512.
+        $script:AnchoMinimoPantalla = 1366 / 1.5
+        $script:AltoMinimoPantalla  = 768 / 1.5
+        # La barra de tareas de Windows 11, en puntos.
+        $script:BarraTareas = 48
+    }
+
+    It 'la prueba encuentra el minimo declarado: si no, no comprueba nada' {
+        $script:XamlVentana | Should -Match 'MinWidth="\d+"'
+        $script:XamlVentana | Should -Match 'MinHeight="\d+"'
+    }
+
+    It 'el minimo declarado CABE en 1366x768 al 150%' {
+        $ancho = [double][regex]::Match($script:XamlVentana, 'MinWidth="(\d+)"').Groups[1].Value
+        $alto  = [double][regex]::Match($script:XamlVentana, 'MinHeight="(\d+)"').Groups[1].Value
+
+        $ancho | Should -BeLessOrEqual $script:AnchoMinimoPantalla -Because (
+            'si el minimo es mayor que la pantalla, la ventana no puede encogerse y se sale')
+        $alto  | Should -BeLessOrEqual ($script:AltoMinimoPantalla - $script:BarraTareas) -Because (
+            'tiene que caber ADEMAS de la barra de tareas, o el boton de eliminar queda debajo')
+    }
+
+    It 'pero sigue siendo un tamanyo con el que se puede trabajar' {
+        # El otro lado: bajar el minimo a 200x200 tambien "cabria" y seria
+        # inutil. Esto impide arreglar el punto haciendolo absurdo.
+        $ancho = [double][regex]::Match($script:XamlVentana, 'MinWidth="(\d+)"').Groups[1].Value
+        $alto  = [double][regex]::Match($script:XamlVentana, 'MinHeight="(\d+)"').Groups[1].Value
+        $ancho | Should -BeGreaterOrEqual 800
+        $alto  | Should -BeGreaterOrEqual 440
+    }
+
+    It 'y el dialogo de confirmacion se ajusta a la pantalla, no a un numero fijo' {
+        $ps = [IO.File]::ReadAllText(
+            (Join-Path (Join-Path (Join-Path $script:RaizA11y2 'src') 'UI') 'Dialogs.ps1'))
+        $codigo = ($ps -split "`r?`n" | Where-Object { $_ -notmatch '^\s*#' }) -join "`n"
+        $codigo | Should -Match 'Get-AlturaMaximaDialogo'
+        $codigo | Should -Match 'WorkArea'
+        $codigo | Should -Match 'MaxHeight'
+    }
+}
