@@ -222,6 +222,19 @@ En este orden, y las tres primeras antes que ninguna otra cosa:
 
 ## Qué queda escrito, y para qué sirve
 
+> **Corregido el 5 de septiembre de 2026: `src/Core/Mft.ps1` y `tests/Mft.Tests.ps1` ya no están.**
+>
+> Este apartado defendía conservarlos porque eran «el respaldo de esta medición». El razonamiento se
+> sostuvo mientras el archivo tuvo un lector: al escribir `VEL-02`, `Test-PuedeLeerDiarioUsn` reusó
+> `Test-PuedeLeerTablaMaestra` y `Get-RegistroUsn` reusó `Get-ReferenciaMft`. Al descartarse también
+> `VEL-02` y borrarse el diario, **`Mft.ps1` se quedó sin un solo consumidor en todo el programa**, y
+> un núcleo que carga en cada arranque 627 líneas que nadie llama es justo lo que este proyecto
+> critica en voz alta.
+>
+> El respaldo de la medición no era el archivo: es este documento, `tools/Banco-VEL01.ps1` y el
+> historial de git, donde el código sigue entero y recuperable con su mensaje de commit. Lo que sigue
+> se conserva porque explica **por qué** se descartó, que es lo que no caduca.
+
 `src/Core/Mft.ps1` se queda en el repositorio aunque el punto esté descartado, y no «por si acaso»
 —que el proyecto no hace—, sino porque **es el respaldo de esta medición**. Sin él, este documento
 sería una opinión sobre un código que nadie escribió. Con él, cualquiera puede volver a ejecutar el

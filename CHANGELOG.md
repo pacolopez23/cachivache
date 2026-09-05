@@ -173,6 +173,32 @@ que se hace una vez a un hábito después de cada tanda de cambios.
   de la guardia son lógica de seguridad, no texto de interfaz: si alguien se las lleva a un archivo
   de idioma, rompe la guardia en silencio. `[I18N-02]`
 
+### Fuera 4.600 líneas que ya no llevaban a ninguna parte
+
+Al descartarse `VEL-01` (leer la tabla maestra de NTFS) y `VEL-02` (leer el diario de cambios), el
+código que los implementaba se queda sin ningún consumidor. Se va: `Mft.ps1`, `DiarioUsn.ps1`,
+`DiarioUsnCambios.ps1`, sus pruebas y los tres bancos de medición. Unas **4.600 líneas**.
+
+**Por qué se borra en vez de dejarlo «por si acaso».** `VEL-01` se había conservado con el argumento
+de ser «el respaldo de su medición», y era razonable mientras alguien lo llamaba: al escribir
+`VEL-02`, el diario reutilizó dos funciones de la tabla maestra. Al caer también `VEL-02`, la cadena
+se quedó sin nadie en el otro extremo. Y el núcleo se carga **entero en cada arranque**: sostener 1.750
+líneas que ningún camino recorre es exactamente lo que este proyecto le critica a los demás.
+
+El respaldo de una medición nunca fue el código: son `docs/VEL-01-MEDICION.md`,
+`docs/VEL-02-MEDICION.md` y el historial de git, donde todo sigue entero y recuperable.
+
+De paso, la cobertura de `src/Core` **sube del 87,6 % al 89,3 %** sin escribir una sola prueba: lo que
+se ha ido incluía las funciones que abrían el volumen en crudo y que no se ejecutaban nunca.
+
+Y el borrado destapó un fallo en una invariante escrita el día anterior. Comprobaba que no queden
+literales hexadecimales con el bit de signo puesto, y su guarda de cordura exigía **encontrar al menos
+un ejemplo bien escrito** — razonando que si no ve ni esos, no está mirando el código. Los dos únicos
+ejemplos estaban justo en los archivos borrados, así que la prueba se habría puesto roja acusando al
+barrido de estar ciego cuando el barrido estaba perfecto. Ahora el detector **se demuestra contra sí
+mismo**, con texto fabricado en la propia prueba: no depende de lo que el repositorio contenga hoy, y
+comprueba las dos mitades — que ve lo malo y que no marca lo bueno.
+
 ### El programa ya sabe qué acaba de borrar: falta que se lo diga al índice
 
 `VEL-04`, rescatado de las ruinas de `VEL-02`. Después de limpiar, el usuario vuelve a analizar para

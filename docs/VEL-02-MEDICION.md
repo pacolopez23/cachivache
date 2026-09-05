@@ -544,9 +544,16 @@ cuál de las dos formas gane. Lo que no existe todavía es ninguna de las dos.
 ## Tercera parte · 5 de septiembre de 2026 — ejecutado en Windows real. El veredicto se invierte.
 
 Todo lo anterior daba por bueno un supuesto que el propio documento marcaba como no comprobado.
-Se comprobó, en la máquina del autor, Windows 11, PowerShell 5.1, como administrador, con
-[`tools/Diagnostico-DiarioUsn.ps1`](../tools/Diagnostico-DiarioUsn.ps1) y
-[`tools/Banco-VEL02-Retencion.ps1`](../tools/Banco-VEL02-Retencion.ps1).
+Se comprobó, en la máquina del autor, Windows 11, PowerShell 5.1, como administrador, con dos
+instrumentos escritos para esto: `tools/Diagnostico-DiarioUsn.ps1`, que prueba seis variantes de la
+petición aislando una hipótesis cada una e imprime el código Win32, y `tools/Banco-VEL02-Retencion.ps1`,
+que mide con reloj cuánta historia guarda el diario.
+
+> **Los dos guiones ya no están en el repositorio, y tampoco el código que medían.** Se borraron el
+> mismo día, junto con `src/Core/DiarioUsn.ps1`, `src/Core/DiarioUsnCambios.ps1` y `src/Core/Mft.ps1`
+> —unas 4.600 líneas entre código, pruebas e instrumentos—, porque medir algo para descartarlo y
+> luego conservarlo cargándose en cada arranque es quedarse con lo peor de las dos decisiones. Todo
+> sigue entero en el historial de git, y lo que había que aprender está en este documento.
 
 ### Lo que sí funciona, y no es poco
 

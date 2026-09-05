@@ -1299,28 +1299,30 @@ Describe 'COR-07: ninguna lista generica se crea con New-Object' {
             $t = [IO.File]::ReadAllText($Ruta)
             # Los bloques <# #> ANTES que las lineas de #. Al reves, el
             # primer paso se lleva la linea del "#>" y el bloque se queda
-            # sin cerrar. Aqui importa de verdad: las cabeceras de
-            # DiarioUsn.ps1 y Mft.ps1 explican la trampa CITANDO el literal
-            # sin L, asi que leer los comentarios haria que esta prueba se
-            # pusiera roja por su propia documentacion.
+            # sin cerrar. Aqui importa de verdad: los comentarios de este
+            # repositorio CITAN el literal sin L para explicar la trampa,
+            # asi que leerlos pondria esta prueba roja por su propia
+            # documentacion. Ya paso, y no una sola vez.
             $t = [regex]::Replace($t, '(?s)<#.*?#>', '')
             return (@($t -split "`r?`n" | Where-Object { $_ -notmatch '^\s*#' }) -join "`n")
         }
 
-        $aBarrer = @($script:Fuentes) +
-                   @(Get-ChildItem -Path (Join-Path $script:RaizProy 'tools') -Filter '*.ps1' -Recurse)
-
-        $culpables = @()
-        $buenos    = 0
-        foreach ($archivo in $aBarrer) {
+        # EL DETECTOR, APARTE, PARA PODER APUNTARLO CONTRA SI MISMO. Ver la
+        # guarda de cordura del final: si esto viviera pegado al bucle de
+        # abajo, la unica forma de comprobar que detecta algo seria que el
+        # repositorio contuviera un ejemplo, y eso es una dependencia que no
+        # se controla.
+        function script:Get-LiteralesPeligrosos {
+            param([string] $Texto)
+            $malos = @()
             $n = 0
-            foreach ($linea in (script:Get-SinComentariosHex $archivo.FullName) -split "`n") {
+            foreach ($linea in ($Texto -split "`n")) {
                 $n++
                 # Ocho digitos justos, el primero de 8 a F, y lo que venga
                 # detras. El (?![0-9A-Fa-f]) impide que un literal de nueve
                 # o mas digitos entre por aqui partido por la mitad.
                 foreach ($m in [regex]::Matches($linea, '0x(?<d>[89A-Fa-f][0-9A-Fa-f]{7})(?![0-9A-Fa-f])(?<suf>[Ll]?)')) {
-                    if ($m.Groups['suf'].Value) { $buenos++; continue }
+                    if ($m.Groups['suf'].Value) { continue }
                     # EL VALOR SE SACA POR LOS BYTES Y NO CON [int]. La
                     # primera version de esta linea decia
                     # [int][Convert]::ToUInt32(...), y eso LANZA con
@@ -1333,32 +1335,53 @@ Describe 'COR-07: ninguna lista generica se crea con New-Object' {
                     # PowerShell, asi que ademas es el numero de verdad.
                     $valor = [BitConverter]::ToInt32(
                                  [BitConverter]::GetBytes([Convert]::ToUInt32($m.Groups['d'].Value, 16)), 0)
-                    $culpables += ('{0}:{1} escribe 0x{2} sin la L (es un Int32 que vale {3})' -f
-                                   $archivo.Name, $n, $m.Groups['d'].Value, $valor)
+                    $malos += ('linea {0}: 0x{1} sin la L (es un Int32 que vale {2})' -f
+                               $n, $m.Groups['d'].Value, $valor)
                 }
                 foreach ($m in [regex]::Matches($linea, '0x(?<d>[89A-Fa-f][0-9A-Fa-f]{15})(?![0-9A-Fa-f])')) {
-                    $culpables += ('{0}:{1} escribe 0x{2}, que es un Int64 negativo y la L no lo arregla' -f
-                                   $archivo.Name, $n, $m.Groups['d'].Value)
+                    $malos += ('linea {0}: 0x{1}, que es un Int64 negativo y la L no lo arregla' -f
+                               $n, $m.Groups['d'].Value)
                 }
             }
+            return $malos
         }
 
-        # LA GUARDA DE CORDURA. Si el barrido dejara de encontrar tambien
-        # los literales BIEN escritos, es que el barrido esta roto y esta
-        # prueba estaria pasando por no mirar nada. Hoy hay dos: Mft.ps1
-        # compara el tipo de atributo terminal con 0xFFFFFFFFL y
-        # DiarioUsnCambios.ps1 recupera la razon con -band 0xFFFFFFFFL.
+        # LA GUARDA DE CORDURA, Y ESTA ES LA SEGUNDA VERSION. La primera
+        # exigia que el barrido encontrara al menos un literal BIEN escrito
+        # -habia dos, en Mft.ps1 y en DiarioUsnCambios.ps1- razonando que si
+        # no ve ni esos, no esta mirando el codigo.
         #
-        # SE PIDE UNO Y NO DOS APOSTA. Exigir dos ata la guarda al numero
-        # exacto de literales que hay hoy: el dia que alguien reescriba
-        # Mft.ps1 sin ese 0xFFFFFFFFL -algo perfectamente legitimo- esta
-        # prueba se pondria roja acusando al barrido de estar ciego cuando
-        # el barrido estaria bien. Ya paso al mutar: la mutacion que tenia
-        # que caer por la regla de los dieciseis digitos cayo aqui, o sea
-        # por el motivo equivocado. La pregunta correcta es "ve algo?", no
-        # "ve exactamente los dos que yo conozco".
-        $buenos | Should -BeGreaterThan 0 -Because (
-            'si no encuentra ni los que estan bien, el barrido no esta mirando el codigo')
+        # Era una guarda apoyada en algo que no se controla. El 5 de
+        # septiembre de 2026 se borraron esos dos archivos al descartar
+        # [VEL-01] y [VEL-02], y con ellos los dos unicos ejemplos: la
+        # prueba se habria puesto roja acusando al barrido de estar ciego
+        # cuando el barrido estaba perfecto.
+        #
+        # Ahora el detector se demuestra CONTRA SI MISMO, con texto
+        # fabricado aqui. Eso no depende de lo que el repositorio contenga
+        # hoy, y ademas comprueba las dos mitades: que ve lo malo y que NO
+        # marca lo bueno. Una guarda que solo comprobara lo primero pasaria
+        # con un detector que devolviera "todo es culpable".
+        @(script:Get-LiteralesPeligrosos '$mascara = [uint32]0xFFFFFFFF').Count |
+            Should -Be 1 -Because 'si no ve el literal sin L, el barrido no detecta nada'
+        @(script:Get-LiteralesPeligrosos '$fin = 0x8000000000000001').Count |
+            Should -Be 1 -Because 'los de dieciseis digitos que empiezan por 8-F tambien'
+        @(script:Get-LiteralesPeligrosos "`$ok = 0xFFFFFFFFL
+`$tambien = 0x7FFFFFFF
+`$y = 0x00000010
+`$nueve = 0xFFFFFFFFF").Count |
+            Should -Be 0 -Because 'un detector que marca lo correcto no sirve de nada'
+
+        $aBarrer = @($script:Fuentes) +
+                   @(Get-ChildItem -Path (Join-Path $script:RaizProy 'tools') -Filter '*.ps1' -Recurse)
+        @($aBarrer).Count | Should -BeGreaterThan 20 -Because 'sin archivos que barrer, esto no comprueba nada'
+
+        $culpables = @()
+        foreach ($archivo in $aBarrer) {
+            foreach ($malo in @(script:Get-LiteralesPeligrosos (script:Get-SinComentariosHex $archivo.FullName))) {
+                $culpables += ('{0} {1}' -f $archivo.Name, $malo)
+            }
+        }
 
         $culpables -join ' // ' | Should -BeNullOrEmpty -Because (
             'un 0x de ocho digitos que empieza por 8-F es un Int32 NEGATIVO: ' +

@@ -1390,6 +1390,11 @@ el siguiente análisis mentirá por omisión. Ante la duda, invalidar el índice
 > `src/Core/IndiceIncremental.ps1` decide si lo leído se puede creer —con **diez motivos de
 > rechazo distintos, cada uno con su frase**— y le aplica los cambios propagando los totales.
 >
+> **Nota del 5 de septiembre: todo lo que este apartado describe está BORRADO.** `DiarioUsn.ps1`,
+> `DiarioUsnCambios.ps1`, `Mft.ps1`, sus pruebas y los tres bancos de medición —unas 4.600 líneas—
+> salieron del repositorio al descartarse el punto. Sigue en el historial de git. Se conserva el
+> texto porque explica qué se construyó y por qué; los enlaces a archivos ya no resuelven.
+>
 > **🟡 La mitad de Windows, escrita el 2 de septiembre y SIN EJECUTAR.** Tres capas, de más a
 > menos probada: `DiarioUsn.ps1` convierte los bytes del diario en registros (64 pruebas, byte a
 > byte); `DiarioUsnCambios.ps1` convierte registros en altas, bajas y cambios colapsados por archivo,
