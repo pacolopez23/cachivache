@@ -48,25 +48,68 @@ Describe 'VAL-05: el sondeo de la ventana' {
         @($errores).Count | Should -Be 0
     }
 
-    It 'TODO NOMBRE QUE BUSCA EXISTE EN EL XAML' {
-        # LA INVARIANTE. Se sacan del codigo los nombres de la lista
-        # $buscados y se exige que cada uno este puesto como
-        # AutomationProperties.Name en algun XAML. El dia que alguien
-        # renombre un panel, esto se pone rojo AQUI -en dos segundos, en
-        # Linux- en vez de dentro de un robot que se queda esperando un
-        # control que ya no se llama asi.
+    It 'TODO BOTON DE NAVEGACION QUE BUSCA EXISTE EN EL XAML' {
+        # LA INVARIANTE. Se sacan del codigo los nombres de $buscados y se
+        # exige que cada uno sea el Content de un RadioButton de navegacion.
+        # El dia que alguien renombre un boton, esto se pone rojo AQUI -en
+        # dos segundos, en Linux- en vez de dentro de un robot que se queda
+        # esperando un control que ya no se llama asi.
+        #
+        # SE MIRA Content Y NO AutomationProperties.Name, y esa correccion
+        # salio de ejecutar el sondeo: la primera version buscaba los
+        # nombres de los PANELES y luego intentaba pulsarlos. Un panel es un
+        # contenedor y no se pulsa. En WPF, un control de contenido sin
+        # AutomationProperties.Name anuncia su Content, y eso es lo que ve
+        # un lector de pantalla y lo que ve el robot.
         $m = [regex]::Match($script:Codigo, '(?s)\$buscados\s*=\s*@\((?<lista>.*?)\)')
         $m.Success | Should -BeTrue -Because 'sin la lista no hay nada que comprobar, y esta prueba estaria pasando por no mirar'
 
         $nombres = @([regex]::Matches($m.Groups['lista'].Value, "'([^']+)'") |
                      ForEach-Object { $_.Groups[1].Value })
-        $nombres.Count | Should -BeGreaterThan 3
+        $nombres.Count | Should -Be 6 -Because 'son los seis paneles que tiene la ventana'
 
+        $principal = [IO.File]::ReadAllText(
+            (Join-Path (Join-Path (Join-Path $script:Raiz 'src') 'UI') 'MainWindow.xaml'))
         $huerfanos = @($nombres | Where-Object {
-            $script:Xaml -notmatch [regex]::Escape('AutomationProperties.Name="' + $_ + '"')
+            $principal -notmatch ('(?s)<RadioButton[^>]*?Content="' + [regex]::Escape($_) + '"')
         })
         $huerfanos -join ', ' | Should -BeNullOrEmpty -Because (
-            'un robot que busca un control que ya no se llama asi no falla: se queda ciego')
+            'un robot que busca un boton que ya no se llama asi no falla: se queda ciego')
+    }
+
+    It 'el panel que usa para comprobar el efecto del clic tambien existe' {
+        # El sondeo pulsa "Acerca de" y luego busca el panel "Acerca de
+        # Cachivache" para demostrar que el clic ha llegado. Si ese nombre
+        # cambiara, el sondeo diria que el programa no reacciona cuando en
+        # realidad reacciona perfectamente: un falso negativo, que en una
+        # herramienta de diagnostico es el peor resultado posible.
+        $script:Codigo | Should -Match ([regex]::Escape("Get-PorNombre 'Acerca de Cachivache'"))
+        $script:Xaml   | Should -Match ([regex]::Escape('AutomationProperties.Name="Acerca de Cachivache"'))
+    }
+
+    It 'no supone el patron de automatizacion: le pregunta al elemento' {
+        # El fallo que devolvio la primera ejecucion: "Modelo no admitido".
+        # Un RadioButton de WPF no se INVOCA, se SELECCIONA. Suponer el
+        # patron es la version de interfaz grafica de suponer que una
+        # llamada al sistema funciona, que es como murio [VEL-02].
+        $script:Codigo | Should -Match 'GetSupportedPatterns'
+        $script:Codigo | Should -Match 'SelectionItemPattern'
+    }
+
+    It 'desempata por tipo de control, porque hay nombres repetidos' {
+        # NavAjustes tiene Content="Ajustes" y el panel de ajustes tiene
+        # AutomationProperties.Name="Ajustes": dos elementos distintos con
+        # el MISMO nombre accesible. Buscar solo por nombre coge uno de los
+        # dos a suertes. Se comprueba aqui que la ambiguedad sigue estando
+        # -si un dia desapareciera, esta prueba avisaria de que el filtro
+        # por tipo ya no hace falta- y que el codigo la desempata.
+        $script:Codigo | Should -Match 'ControlTypeProperty'
+        $script:Codigo | Should -Match 'AndCondition'
+
+        $principal = [IO.File]::ReadAllText(
+            (Join-Path (Join-Path (Join-Path $script:Raiz 'src') 'UI') 'MainWindow.xaml'))
+        $principal | Should -Match ([regex]::Escape('Content="Ajustes"'))
+        $script:Xaml | Should -Match ([regex]::Escape('AutomationProperties.Name="Ajustes"'))
     }
 
     It 'NO PULSA NADA QUE BORRE, y eso no es una promesa del comentario' {

@@ -15,7 +15,7 @@ importa tanto como que funcione.
 - Se ejecuta con `Cachivache.exe`, que lanza `powershell.exe` (5.1) sin consola visible.
 - Las pruebas se ejecutan con PowerShell 7 + Pester.
 
-**Estado hoy: 2332 pruebas en verde, analizador limpio, 50 puntos de la hoja
+**Estado hoy: 2335 pruebas en verde, analizador limpio, 50 puntos de la hoja
 de ruta cerrados. La suite pasa también en Windows, en PowerShell 5.1 y en 7**, y los seis trabajos
 de la integración continua están en verde — nada de eso había pasado nunca hasta el 1 de septiembre
 de 2026.
@@ -331,7 +331,7 @@ tres estados de `USO-04`, `VEL-01` (tabla maestra de NTFS), `DIS-01` (firma, nec
 ## Lo primero que deberías hacer
 
 1. Leer `docs/HOJA-DE-RUTA.md` entero. Es largo y merece la pena: explica el porqué de todo.
-2. Ejecutar `tools/Probar.ps1` y confirmar **2332 en verde y analizador a cero**. Si no cuadra, eso es lo
+2. Ejecutar `tools/Probar.ps1` y confirmar **2335 en verde y analizador a cero**. Si no cuadra, eso es lo
    primero, antes que cualquier punto nuevo.
 3. Preguntarle con qué punto quiere seguir, ofreciéndole las opciones de la tabla de arriba con una
    frase de porqué cada una. No empieces por tu cuenta.

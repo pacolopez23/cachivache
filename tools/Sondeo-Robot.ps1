@@ -135,69 +135,102 @@ try {
     Write-Paso '2.' 'Se enumeran los controles' 'BIEN' (
         '{0} elementos, {1} con nombre accesible' -f $todos.Count, $conNombre.Count)
 
-    # Los que el robot necesitaria de verdad. Si alguno no aparece, el robot
-    # tendria que buscarlo de otra forma y hay que saberlo AHORA.
-    $buscados = @('Análisis del equipo', 'Resultados del análisis', 'Ajustes',
-                  'Registro de la sesión', 'Informes e historial', 'Acerca de Cachivache')
-    $faltan = @($buscados | Where-Object { $conNombre -notcontains $_ })
-    if ($faltan.Count -eq 0) {
-        Write-Paso '2b.' 'Los seis paneles se encuentran por nombre' 'BIEN'
-    } else {
-        Write-Paso '2b.' 'Los seis paneles se encuentran por nombre' 'FALLA' ('no aparecen: ' + ($faltan -join ', '))
-    }
+    # LOS SEIS BOTONES DE NAVEGACION, y aqui hubo que corregir el sondeo.
+    #
+    # La primera version buscaba los nombres de los PANELES -"Ajustes",
+    # "Acerca de Cachivache"- y luego intentaba pulsarlos. Dos errores
+    # encima del otro:
+    #
+    #   a) Un panel es un contenedor: no se pulsa. Y ademas NavAjustes
+    #      tiene Content="Ajustes" y el panel tiene
+    #      AutomationProperties.Name="Ajustes", o sea DOS ELEMENTOS CON EL
+    #      MISMO NOMBRE ACCESIBLE. Buscar solo por nombre cogia uno de los
+    #      dos a suertes, y salio el que no era.
+    #   b) "Acerca de Cachivache" no aparecia en el arbol. No es un fallo:
+    #      WPF no construye el contenido de un panel hasta que se muestra,
+    #      asi que LO QUE NO SE HA ENSENYADO NO EXISTE PARA UI AUTOMATION.
+    #      Es la regla de diseno mas importante que ha dejado este sondeo:
+    #      el robot tiene que NAVEGAR primero y mirar despues.
+    #
+    # Asi que se buscan los botones, filtrando ademas por tipo de control.
+    $buscados = @('Inicio', 'Resultados', 'Registro', 'Informes', 'Ajustes', 'Acerca de')
 
-    # --- 3. Pulsar un boton ------------------------------------------
-    # "Ajustes" y luego "Analisis del equipo": cambiar de panel y volver.
-    # No borra nada, no analiza nada, y deja la ventana como estaba.
-    function Get-PorNombre {
+    function Get-Navegacion {
         param([string] $Nombre)
-        $c = [Windows.Automation.PropertyCondition]::new(
-                [Windows.Automation.AutomationElement]::NameProperty, $Nombre)
-        return $ventana.FindFirst([Windows.Automation.TreeScope]::Descendants, $c)
+        $porNombre = [Windows.Automation.PropertyCondition]::new(
+                        [Windows.Automation.AutomationElement]::NameProperty, $Nombre)
+        # EL TIPO DE CONTROL NO ES UN ADORNO: es lo que desempata cuando dos
+        # elementos se llaman igual.
+        $porTipo = [Windows.Automation.PropertyCondition]::new(
+                        [Windows.Automation.AutomationElement]::ControlTypeProperty,
+                        [Windows.Automation.ControlType]::RadioButton)
+        $ambas = [Windows.Automation.AndCondition]::new($porNombre, $porTipo)
+        return $ventana.FindFirst([Windows.Automation.TreeScope]::Descendants, $ambas)
     }
 
-    $ajustes = Get-PorNombre 'Ajustes'
-    if ($null -eq $ajustes) {
-        Write-Paso '3.' 'Se puede pulsar un boton' 'FALLA' 'no se encuentra "Ajustes"'
+    $faltan = @($buscados | Where-Object { $null -eq (Get-Navegacion $_) })
+    if ($faltan.Count -eq 0) {
+        Write-Paso '2b.' 'Los seis botones de navegacion se encuentran' 'BIEN'
     } else {
+        Write-Paso '2b.' 'Los seis botones de navegacion se encuentran' 'FALLA' ('no aparecen: ' + ($faltan -join ', '))
+    }
+
+    # --- 3. Pulsar de verdad -----------------------------------------
+    # SE LE PREGUNTA AL ELEMENTO QUE SABE HACER, EN VEZ DE SUPONERLO. La
+    # primera version daba por hecho InvokePattern y el sondeo contesto
+    # "Modelo no admitido": un RadioButton de WPF NO se invoca, se
+    # SELECCIONA con SelectionItemPattern. Suponer el patron es la version
+    # de interfaz grafica de suponer que una llamada al sistema funciona.
+    $acerca = Get-Navegacion 'Acerca de'
+    $pulsado = $false
+    if ($null -eq $acerca) {
+        Write-Paso '3.' 'Se puede pulsar un boton' 'FALLA' 'no se encuentra el boton "Acerca de"'
+    } else {
+        $patrones = @($acerca.GetSupportedPatterns() | ForEach-Object { $_.ProgrammaticName })
         try {
-            $patron = $ajustes.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern)
-            $patron.Invoke()
-            Start-Sleep -Milliseconds 700
-            Write-Paso '3.' 'Se puede pulsar un boton' 'BIEN' 'pulsado "Ajustes"'
+            if ($acerca.GetSupportedPatterns() -contains [Windows.Automation.SelectionItemPattern]::Pattern) {
+                $acerca.GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select()
+                $pulsado = $true
+            } elseif ($acerca.GetSupportedPatterns() -contains [Windows.Automation.InvokePattern]::Pattern) {
+                $acerca.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+                $pulsado = $true
+            }
+            if ($pulsado) {
+                Start-Sleep -Milliseconds 900
+                Write-Paso '3.' 'Se puede pulsar un boton' 'BIEN' (
+                    'pulsado "Acerca de". Patrones: {0}' -f ($patrones -join ', '))
+            } else {
+                Write-Paso '3.' 'Se puede pulsar un boton' 'FALLA' (
+                    'no admite ni seleccionar ni invocar. Patrones: {0}' -f ($patrones -join ', '))
+            }
         } catch {
             Write-Paso '3.' 'Se puede pulsar un boton' 'FALLA' $_.Exception.Message
         }
     }
 
-    # --- 4. Leer lo que la ventana dice despues ----------------------
-    # LA MITAD QUE DE VERDAD IMPORTA. Pulsar sin poder comprobar el efecto
-    # no sirve de nada: seria un robot que hace clic y se fia.
-    $textos = @()
-    $despues = $ventana.FindAll([Windows.Automation.TreeScope]::Descendants,
-                                [Windows.Automation.Condition]::TrueCondition)
-    foreach ($e in $despues) {
-        if ($e.Current.ControlType.ProgrammaticName -match 'Text|Edit') {
-            $n = $e.Current.Name
-            if (-not [string]::IsNullOrWhiteSpace($n)) { $textos += $n }
+    # --- 3b. .SE HA ENTERADO EL PROGRAMA? ----------------------------
+    # LA PREGUNTA QUE DE VERDAD DECIDE. Un robot que pulsa y no comprueba
+    # el efecto es un robot que hace clic y se fia. El panel "Acerca de
+    # Cachivache" NO existia en el arbol antes de pulsar -paso 2b de la
+    # version anterior- asi que si ahora esta, la unica explicacion es que
+    # el clic ha llegado. Causa y efecto en la misma comprobacion.
+    if ($pulsado) {
+        $panel = Get-PorNombre 'Acerca de Cachivache'
+        if ($null -ne $panel) {
+            Write-Paso '3b.' 'El programa reacciona al clic' 'BIEN' (
+                'el panel "Acerca de Cachivache" no estaba en el arbol y ahora si')
+        } else {
+            Write-Paso '3b.' 'El programa reacciona al clic' 'FALLA' 'el panel sigue sin aparecer'
         }
     }
-    if ($textos.Count -gt 0) {
-        $muestra = @($textos | Select-Object -First 4) -join ' / '
-        Write-Paso '4.' 'Se lee lo que la ventana dice' 'BIEN' (
-            '{0} textos. Muestra: {1}' -f $textos.Count, $muestra)
-    } else {
-        Write-Paso '4.' 'Se lee lo que la ventana dice' 'FALLA' 'no se ha podido leer ni un texto'
-    }
 
-    # Volver al panel de inicio: cortesia, no medicion. Si falla no cambia
-    # el veredicto del sondeo -ya se ha contestado a las cinco preguntas- y
-    # por eso el catch no lanza; pero se dice, porque un catch mudo es
-    # exactamente lo que este proyecto persigue en el codigo de otros.
-    $volver = Get-PorNombre 'Análisis del equipo'
+    # Volver al inicio: cortesia, no medicion. Por el boton y con el patron
+    # que admite, igual que arriba: el error de la primera version se
+    # cometia TAMBIEN aqui, y por eso no basta con arreglarlo en un sitio.
+    $volver = Get-Navegacion 'Inicio'
     if ($null -ne $volver) {
         try {
-            $volver.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+            $volver.GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select()
         } catch {
             Write-Verbose ('No se ha podido volver al panel de inicio: {0}' -f $_.Exception.Message)
         }
