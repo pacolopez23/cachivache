@@ -58,6 +58,7 @@ $OrdenNucleoCachivache = @(
     'Mft.ps1'             # tabla maestra de NTFS. MEDIDO Y DESCARTADO como camino rapido: ver docs/VEL-01-MEDICION.md. Sigue aqui porque DiarioUsn reutiliza sus lectores de bytes
     'DiarioUsn.ps1'       # el diario USN de NTFS, de bytes a registros: lo que cambio desde el ultimo analisis
     'DiarioUsnCambios.ps1' # de registros del diario a los cambios que entiende IndiceIncremental
+    'CambiosLimpieza.ps1' # [VEL-04] lo que el propio programa acaba de borrar, como cambios del indice. Necesita Guard (Get-RaizQueContiene) y el contrato de Candidate
     'Mapa.ps1'            # disposicion del mapa de arbol (calculo puro)
     'Report.ps1'          # informes HTML, CSV y JSON
     'ReportEspacio.ps1'   # informe de espacio con mapa de arbol en SVG

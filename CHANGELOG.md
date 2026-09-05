@@ -173,6 +173,30 @@ que se hace una vez a un hábito después de cada tanda de cambios.
   de la guardia son lógica de seguridad, no texto de interfaz: si alguien se las lleva a un archivo
   de idioma, rompe la guardia en silencio. `[I18N-02]`
 
+### El programa ya sabe qué acaba de borrar: falta que se lo diga al índice
+
+`VEL-04`, rescatado de las ruinas de `VEL-02`. Después de limpiar, el usuario vuelve a analizar para
+comprobar que ha funcionado, y hoy eso recorre el disco entero otra vez —42 segundos— para descubrir
+exactamente lo que el programa acababa de hacer él mismo.
+
+Ya está el núcleo: convierte el resultado de una limpieza en los cambios que el índice sabe aplicar.
+Sin permisos de administrador, sin NTFS y sin llamadas al sistema, así que funciona también en FAT32,
+en exFAT y en unidades de red. Falta enchufarlo al final de la limpieza.
+
+**Lo interesante fue decidir hacia qué lado ser prudente.** «Ante la duda, pesimista» suena obvio hasta
+que hay que elegir: si el índice **conserva** un archivo que ya no está, sobreestima, y el siguiente
+análisis ofrece borrar algo que no existe — molesto e inofensivo. Si **quita** uno que sigue ahí, ese
+archivo no se vuelve a ofrecer nunca y el programa miente por omisión. Así que solo se quita lo que
+consta con certeza, y todo lo demás se queda.
+
+De los ocho métodos de borrado, solo dos dejan una huella que permita afirmar algo. Los otros seis
+borran una parte a propósito, o no cuentan qué han tocado. Y «se hizo» no basta: un borrado que
+termina con *«quedan 600 MB en uso»* cuenta como hecho para el registro de auditoría, pero para el
+índice no, porque no se sabe **qué** 600 MB sobrevivieron.
+
+La prueba de integración borra archivos de verdad y luego exige que el índice actualizado por el atajo
+diga exactamente lo mismo que volver a analizar la carpeta entera — que es, literalmente, la promesa.
+
 ### El diario de cambios de NTFS: se lee bien, y aun así no sirve
 
 `VEL-02` queda **medido y descartado**, como `VEL-01`. Se ejecutó por primera vez en un Windows real

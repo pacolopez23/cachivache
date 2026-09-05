@@ -1299,7 +1299,46 @@ completo en algo que se ejecuta sin pensárselo.
 >
 > *Todo el análisis de más abajo se conserva sin tocar: es lo que se creía el 1 de septiembre.*
 
-### `VEL-04` · Reanalizar tras limpiar no debería recorrer el disco · Media · **abierto**
+### `VEL-04` · Reanalizar tras limpiar no debería recorrer el disco · Media
+
+> 🟡 **NÚCLEO HECHO, FALTA ENCHUFARLO.** `src/Core/CambiosLimpieza.ps1` con 24 pruebas y la costura
+> entera; lo que queda es que el programa lo llame al terminar de limpiar.
+>
+> **La regla, y no es la que parece.** *«Ante la duda, pesimista»* suena obvio hasta que hay que
+> decidir hacia qué lado. Aquí pesimista es **dejar entradas, no quitarlas**: si el índice conserva un
+> archivo que ya no está, sobreestima y el siguiente análisis ofrece borrar algo que no existe —
+> molesto e inofensivo. Si quita uno que sigue ahí, **ese archivo no vuelve a ofrecerse nunca** y el
+> programa miente por omisión. Por eso no hay invalidación global: un candidato de efecto desconocido
+> no aporta bajas y ya está, sin estropear las de los demás. La primera versión invalidaba el índice
+> entero en cuanto aparecía un método incierto — y como casi toda limpieza vacía la papelera o lanza
+> un comando, **el atajo no se habría disparado nunca**.
+>
+> **Los ocho métodos, repartidos por la huella que dejan.** Solo `Ruta` y `Contenido` permiten dar de
+> baja el subárbol. `FirefoxCache` y `Miniaturas` borran parte a propósito, y averiguar cuál exigiría
+> repetir aquí la regla del módulo. `Papelera` y `Comando` no dicen qué han tocado. La clasificación
+> vive en tres listas y no en un `switch` escondido para que una prueba pueda exigir que los ocho
+> métodos del `ValidateSet` estén en **exactamente una** — un método nuevo sin clasificar no puede
+> colarse contestando "no hace nada" por descarte.
+>
+> **Y `Hecho` no basta.** `Remove.ps1` lo pone a `$true` cuando la rama corrió sin lanzar, y eso
+> incluye el resultado parcial —*«Quedan 600 MB: archivos en uso»*— que para el registro de auditoría
+> sí se hizo. Para el índice no: no se sabe **qué** 600 MB sobrevivieron. Hace falta `Hecho` y `Error`
+> vacío. Es el mismo dato leído para otra pregunta.
+>
+> **La pertenencia la decide `Get-RaizQueContiene`, de la guardia**, y no un `StartsWith` escrito
+> aquí: ya trae resueltas la normalización y la comparación ordinal, y exige la barra final, que es
+> lo que impide que limpiar `cache` se lleve por delante `cache-vieja`. Once mutaciones, las once
+> cazadas — una hubo que reescribirla porque no mutaba nada.
+>
+> **La costura usa el oráculo más fuerte que hay:** borra archivos de verdad y luego exige que el
+> índice actualizado por el atajo diga **exactamente lo mismo** que volver a recorrer la carpeta con
+> `New-IndiceDisco`. Que es, literalmente, la promesa de este punto. Encontró de paso una trampa del
+> propio índice: `TotalArchivos` cuenta todos los archivos vistos, mientras que `Archivos` solo guarda
+> los que superan el mínimo.
+>
+> **Lo que falta:** llamarlo desde donde termina una limpieza, guardar el índice actualizado y decidir
+> qué hacer con los inciertos —lo honesto es que el índice quede marcado como *«tiene deuda»* y el
+> siguiente análisis completo la salde.
 
 Rescatado de `VEL-02`. Después de limpiar, el usuario vuelve a analizar para comprobar que ha
 funcionado, y hoy eso cuesta otros 42 s recorriendo el disco entero — para descubrir exactamente lo
