@@ -155,6 +155,13 @@ try {
     # Asi que se buscan los botones, filtrando ademas por tipo de control.
     $buscados = @('Inicio', 'Resultados', 'Registro', 'Informes', 'Ajustes', 'Acerca de')
 
+    function Get-PorNombre {
+        param([string] $Nombre)
+        $c = [Windows.Automation.PropertyCondition]::new(
+                [Windows.Automation.AutomationElement]::NameProperty, $Nombre)
+        return $ventana.FindFirst([Windows.Automation.TreeScope]::Descendants, $c)
+    }
+
     function Get-Navegacion {
         param([string] $Nombre)
         $porNombre = [Windows.Automation.PropertyCondition]::new(
@@ -222,6 +229,27 @@ try {
         } else {
             Write-Paso '3b.' 'El programa reacciona al clic' 'FALLA' 'el panel sigue sin aparecer'
         }
+    }
+
+    # --- 4. Leer lo que la ventana dice ------------------------------
+    # LA OTRA MITAD QUE IMPORTA. Pulsar sin poder leer el resultado seria
+    # un robot que hace clic a ciegas. Se lee DESPUES de navegar, que es la
+    # leccion del paso 2b: lo que no se ha ensenyado no existe en el arbol.
+    $textos = @()
+    $despues = $ventana.FindAll([Windows.Automation.TreeScope]::Descendants,
+                                [Windows.Automation.Condition]::TrueCondition)
+    foreach ($e in $despues) {
+        if ($e.Current.ControlType.ProgrammaticName -match 'Text|Edit') {
+            $n = $e.Current.Name
+            if (-not [string]::IsNullOrWhiteSpace($n)) { $textos += $n }
+        }
+    }
+    if ($textos.Count -gt 0) {
+        $muestra = @($textos | Select-Object -First 4) -join ' / '
+        Write-Paso '4.' 'Se lee lo que la ventana dice' 'BIEN' (
+            '{0} textos. Muestra: {1}' -f $textos.Count, $muestra)
+    } else {
+        Write-Paso '4.' 'Se lee lo que la ventana dice' 'FALLA' 'no se ha podido leer ni un texto'
     }
 
     # Volver al inicio: cortesia, no medicion. Por el boton y con el patron

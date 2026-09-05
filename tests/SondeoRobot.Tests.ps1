@@ -48,6 +48,65 @@ Describe 'VAL-05: el sondeo de la ventana' {
         @($errores).Count | Should -Be 0
     }
 
+    It 'SIGUE HACIENDO LAS CINCO PREGUNTAS QUE PROMETE' {
+        # ESTA PRUEBA FALTABA, Y SE NOTO POR LAS MALAS. Al corregir el
+        # sondeo tras su primera ejecucion, una sustitucion de texto se
+        # llevo por delante el paso 4 entero -"se lee lo que la ventana
+        # dice"- y con el la funcion Get-PorNombre que usa el 3b. El sondeo
+        # siguiente salio con cuatro pasos en verde, sin el 4, y con un
+        # "Get-PorNombre no se reconoce" al final.
+        #
+        # Las nueve invariantes de este archivo pasaron tan contentas:
+        # todas miraban DETALLES del sondeo -que no pulse nada peligroso,
+        # que cierre el proceso, que no suponga el patron- y ninguna miraba
+        # si el sondeo seguia siendo un sondeo. Es el fallo del que habla
+        # la regla 8 del relevo, en su otra cara: no basta con vigilar que
+        # cada pieza este bien puesta si nadie cuenta las piezas.
+        #
+        # SE COMPARA EL CONJUNTO ENTERO, no se comprueba uno por uno. La
+        # primera version recorria la lista preguntando ".esta el 4?", y
+        # eso deja pasar un paso INVENTADO: al renumerar una rama a '3c.'
+        # el sondeo anunciaba un paso que no promete y la prueba seguia
+        # verde, porque el '3b.' original seguia en la otra rama. Salio
+        # mutando. Comparar los dos conjuntos contesta las dos preguntas a
+        # la vez -.falta alguno? .sobra alguno?- que es la forma que pide
+        # la regla 8 del relevo.
+        $prometidos = @('0.', '1.', '2.', '2b.', '3.', '3b.', '4.', '5.')
+        $anunciados = @([regex]::Matches($script:Codigo, "Write-Paso\s+'([^']+)'") |
+                        ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+
+        @($anunciados).Count | Should -BeGreaterThan 4 -Because 'si no encuentra pasos, no esta mirando el codigo'
+        ($anunciados -join ' ') | Should -Be (($prometidos | Sort-Object -Unique) -join ' ') -Because (
+            'el sondeo tiene que anunciar exactamente los pasos que promete su cabecera: ni uno menos ni uno mas')
+    }
+
+    It 'no llama a ninguna funcion suya que no exista' {
+        # La otra mitad del mismo accidente: Get-PorNombre se seguia
+        # usando despues de que la sustitucion borrara su definicion. En
+        # PowerShell eso no se ve hasta que esa linea se EJECUTA, y esa
+        # linea solo se ejecuta con una ventana delante.
+        $errores = $null
+        $arbol = [System.Management.Automation.Language.Parser]::ParseFile(
+                    $script:RutaSondeo, [ref]$null, [ref]$errores)
+
+        $definidas = @($arbol.FindAll({
+            $args[0] -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $true) |
+            ForEach-Object { $_.Name })
+
+        # Solo se miran los nombres con la pinta de este archivo -Verbo-Algo
+        # definido aqui-, para no perseguir cmdlets del sistema.
+        $llamadas = @($arbol.FindAll({
+            $args[0] -is [System.Management.Automation.Language.CommandAst] }, $true) |
+            ForEach-Object { $_.GetCommandName() } |
+            Where-Object { $_ -and ($_ -match '^(Get|Write)-(Paso|PorNombre|Navegacion)$') } |
+            Sort-Object -Unique)
+
+        @($llamadas).Count | Should -BeGreaterThan 2 -Because 'si no encuentra llamadas, no esta mirando el arbol'
+        $huerfanas = @($llamadas | Where-Object { $definidas -notcontains $_ })
+        $huerfanas -join ', ' | Should -BeNullOrEmpty -Because (
+            'una funcion que no existe no se nota hasta que se ejecuta esa linea, y aqui hace falta una ventana para eso')
+    }
+
     It 'TODO BOTON DE NAVEGACION QUE BUSCA EXISTE EN EL XAML' {
         # LA INVARIANTE. Se sacan del codigo los nombres de $buscados y se
         # exige que cada uno sea el Content de un RadioButton de navegacion.
