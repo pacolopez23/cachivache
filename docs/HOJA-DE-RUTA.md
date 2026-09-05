@@ -86,6 +86,14 @@ Decidir esto ahora ahorra meses.
 > - **`src/UI` está al 5 %, y ese suelo no lo sube ninguna prueba.** Ahí no hay WPF: la mitad de lo
 >   que falta por cubrir no es deuda, es otra máquina. La cubren `docs/PRUEBA-MANUAL.md`, la CI en
 >   Windows y `docs/BANCO-PRUEBAS.md`.
+>
+>   **Corrección del 5 de septiembre de 2026, y hace falta decirla porque el párrafo de arriba se
+>   quedó demasiado cómodo.** «No es deuda, es otra máquina» describe bien *por qué* no está cubierto
+>   y mal *lo que cuesta*. Ese mismo día aparecieron siete fallos vivos y la suite —2.455 pruebas en
+>   verde— no vio ninguno: tres los cazó la CI al ejecutar por fin en Windows 5.1, tres los vio el
+>   usuario **mirando la ventana** (botones que no se podían pulsar, un recuento ilegible antes de
+>   borrar, un botón que mentía, un diálogo fuera de pantalla) y el séptimo salió al ejecutar como
+>   administrador. Que un hueco tenga una buena excusa no lo hace más pequeño. Se abre `VAL-05`.
 > - **32 funciones que ninguna prueba nombraba**, ahora en `tests/datos/deuda-de-pruebas.txt`. La
 >   lista solo puede encoger, y es la mejor lista de "qué hacer ahora" que tiene el proyecto.
 >
@@ -94,6 +102,28 @@ Decidir esto ahora ahorra meses.
 > mentía— vivían en líneas perfectamente cubiertas. Lo que protege este proyecto son las
 > invariantes y la verificación por mutación; el suelo solo impide que un trozo entero se quede sin
 > ejecutar nunca.
+
+### `VAL-05` · Nadie pulsa nunca un botón · Alta · **abierto**
+
+**El hueco, con su número:** `src/Core` está al 87,5 %, `src/Cli` al 89,4 %, y **`src/UI` al 7,3 %:
+1.814 instrucciones que no se ejecutan jamás.** El motor tiene un usuario falso que lo usa entero
+—el trabajo *Banco de pruebas (borrado real)* de la CI monta cebos en un disco de verdad, analiza,
+simula, **borra de verdad** y compara un inventario de antes con otro de después—, y la ventana no
+tiene nada equivalente. Nadie pulsa nunca un botón.
+
+**Por qué importa más de lo que parece:** los cuatro fallos de interfaz de este día se veían *a
+simple vista* y ninguna prueba podía verlos, porque ninguna prueba abre la ventana. Y no se pueden
+sustituir por más invariantes de XAML: las invariantes prohíben estructuras que *sabemos* que
+fallan, y esas cuatro no se sabían.
+
+**Lo que lo hace viable hoy y no lo era antes:** `A11Y-01` puso un `AutomationProperties.Name` en
+cada control. Esa es la misma API —UI Automation— que usan los lectores de pantalla, así que un
+guion puede buscar *«Analizar»* por su nombre accesible, pulsarlo, esperar, marcar filas, abrir el
+diálogo, leer lo que pone y comprobar que el archivo desapareció. El trabajo de accesibilidad dejó
+montada, sin pretenderlo, la infraestructura de pruebas que falta.
+
+**Coste honesto:** uno o dos días, la CI se vuelve más lenta y las pruebas de interfaz son
+notoriamente frágiles. Ese es el motivo de que no se haga hoy, no que no haga falta.
 
 ### `VAL-01` · Ejecutarlo en Windows · ~~Bloqueante~~ → **Hecho en parte, y hay que seguir haciéndolo**
 

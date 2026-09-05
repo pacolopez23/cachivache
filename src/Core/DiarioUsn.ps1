@@ -573,9 +573,33 @@ function Read-DiarioUsn {
         while ($leidoTotal -lt $MaximoBytes) {
             # READ_USN_JOURNAL_DATA_V0: StartUsn(8) ReasonMask(4)
             # ReturnOnlyOnClose(4) Timeout(8) BytesToWaitFor(8) UsnJournalID(8)
+            #
+            # LA MASCARA SE ESCRIBE [uint32]::MaxValue Y NO 0xFFFFFFFF, Y
+            # ESTO COSTO UNA SESION ENTERA. En PowerShell el literal
+            # 0xFFFFFFFF es un Int32 que vale -1 -no un UInt32 que vale
+            # 4.294.967.295-, asi que [uint32]0xFFFFFFFF LANZA: "no se
+            # puede convertir el valor -1 al tipo System.UInt32".
+            #
+            # Y lanzaba AQUI DENTRO, dos lineas antes de la unica llamada
+            # al sistema de toda la funcion. El catch de abajo lo convertia
+            # en un return $null, que desde fuera se ve exactamente igual
+            # que "Windows ha dicho que no": el banco de pruebas imprimia
+            # "NO SE HA PODIDO LEER" en 81 ms, y esos 81 ms eran la pista
+            # -no habia llamada al sistema que pudiera tardar tan poco-.
+            #
+            # Lo grotesco es que la trampa esta explicada en la cabecera de
+            # Get-RegistroUsn, en este mismo archivo, 436 lineas mas
+            # arriba. Saberla escrita no sirvio de nada en el unico sitio
+            # del archivo que ninguna prueba puede ejecutar. Ver la
+            # invariante de tests/Invariantes.Tests.ps1, que ahora barre
+            # src/ y tools/ enteros buscando literales de ocho digitos que
+            # empiecen por 8-F sin la L.
+            #
+            # Ademas de no lanzar, se lee mejor: la mascara de razones son
+            # "todas", y eso es literalmente el maximo del tipo.
             $peticion = [byte[]]::new(40)
             [Array]::Copy([BitConverter]::GetBytes([int64]$usnActual),  0, $peticion,  0, 8)
-            [Array]::Copy([BitConverter]::GetBytes([uint32]0xFFFFFFFF), 0, $peticion,  8, 4)
+            [Array]::Copy([BitConverter]::GetBytes([uint32]::MaxValue), 0, $peticion,  8, 4)
             [Array]::Copy([BitConverter]::GetBytes([uint32]1),          0, $peticion, 12, 4)
             # Timeout y BytesToWaitFor a cero: devolver lo que haya y no esperar.
             [Array]::Copy([BitConverter]::GetBytes([uint64]$IdDiario),  0, $peticion, 32, 8)

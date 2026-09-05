@@ -1258,6 +1258,113 @@ Describe 'COR-07: ninguna lista generica se crea con New-Object' {
             'esos aceleradores llegaron en PowerShell 6 y el programa corre en 5.1')
     }
 
+    It 'ningun literal hexadecimal con el bit alto puesto se escribe sin la L' {
+        # EL FALLO QUE ENCONTRO ESTA PRUEBA, y es hermano del de arriba.
+        #
+        # src/Core/DiarioUsn.ps1 escribia la mascara de razones del diario
+        # USN asi: [uint32]0xFFFFFFFF. En PowerShell ese literal NO es un
+        # UInt32 que vale 4.294.967.295: son ocho digitos, o sea 32 bits, y
+        # el analizador lo lee como un Int32 QUE VALE -1. Convertir -1 a
+        # UInt32 lanza. Y lanzaba dentro del try de Read-DiarioUsn, dos
+        # lineas antes de la unica llamada al sistema de toda la funcion,
+        # asi que el catch lo devolvia como $null y desde fuera se veia
+        # exactamente igual que "Windows ha dicho que no".
+        #
+        # POR QUE NINGUNA DE LAS 2.454 PRUEBAS LO VIO: Read-DiarioUsn abre
+        # \\.\C: en crudo. No se puede ejecutar en Linux, no se puede
+        # ejecutar sin ser administrador, y la integracion continua no es
+        # administrador. Las 107 pruebas de [VEL-02] cubren el calculo puro
+        # que rodea a esa funcion y no podian decir nada de ella. Se
+        # descubrio ejecutandolo a mano en la maquina del usuario, elevado.
+        #
+        # Y LO PEOR: la trampa ESTABA YA EXPLICADA, con estas mismas
+        # palabras, en la cabecera de Get-RegistroUsn, 436 lineas mas
+        # arriba EN EL MISMO ARCHIVO. Saber una cosa escrita no es lo mismo
+        # que tenerla comprobada. Por eso esto es una invariante y no un
+        # parrafo mas.
+        #
+        # LA REGLA, y esta si se puede barrer: un literal 0x de EXACTAMENTE
+        # ocho digitos que empiece por 8-F tiene el bit de signo puesto y es
+        # un Int32 negativo. Sirve para comparar con -band -que promociona a
+        # Int64 y compara contra el numero equivocado- y LANZA al convertir
+        # a cualquier tipo sin signo. La L lo convierte en Int64 y las dos
+        # cosas pasan a funcionar. Los de dieciseis digitos que empiezan por
+        # 8-F son Int64 negativos y la L no los salva, asi que se rechazan
+        # siempre: hay que escribirlos en decimal o con ::MaxValue.
+        #
+        # Se pregunta "hay alguno mal?" barriendo src/, tools/ y la raiz, y
+        # NO "los tres que conozco estan bien" (regla 8 de docs/RELEVO.md).
+        function script:Get-SinComentariosHex {
+            param([string] $Ruta)
+            $t = [IO.File]::ReadAllText($Ruta)
+            # Los bloques <# #> ANTES que las lineas de #. Al reves, el
+            # primer paso se lleva la linea del "#>" y el bloque se queda
+            # sin cerrar. Aqui importa de verdad: las cabeceras de
+            # DiarioUsn.ps1 y Mft.ps1 explican la trampa CITANDO el literal
+            # sin L, asi que leer los comentarios haria que esta prueba se
+            # pusiera roja por su propia documentacion.
+            $t = [regex]::Replace($t, '(?s)<#.*?#>', '')
+            return (@($t -split "`r?`n" | Where-Object { $_ -notmatch '^\s*#' }) -join "`n")
+        }
+
+        $aBarrer = @($script:Fuentes) +
+                   @(Get-ChildItem -Path (Join-Path $script:RaizProy 'tools') -Filter '*.ps1' -Recurse)
+
+        $culpables = @()
+        $buenos    = 0
+        foreach ($archivo in $aBarrer) {
+            $n = 0
+            foreach ($linea in (script:Get-SinComentariosHex $archivo.FullName) -split "`n") {
+                $n++
+                # Ocho digitos justos, el primero de 8 a F, y lo que venga
+                # detras. El (?![0-9A-Fa-f]) impide que un literal de nueve
+                # o mas digitos entre por aqui partido por la mitad.
+                foreach ($m in [regex]::Matches($linea, '0x(?<d>[89A-Fa-f][0-9A-Fa-f]{7})(?![0-9A-Fa-f])(?<suf>[Ll]?)')) {
+                    if ($m.Groups['suf'].Value) { $buenos++; continue }
+                    # EL VALOR SE SACA POR LOS BYTES Y NO CON [int]. La
+                    # primera version de esta linea decia
+                    # [int][Convert]::ToUInt32(...), y eso LANZA con
+                    # 4.294.967.295: "no se puede convertir al tipo Int32".
+                    # O sea que la prueba cometia, al redactar su propio
+                    # mensaje, exactamente el fallo que viene a cazar, y
+                    # salia roja con un error de conversion en vez de con
+                    # la lista de culpables. Salio mutando. Reinterpretar
+                    # los cuatro bytes es lo que hace el analizador de
+                    # PowerShell, asi que ademas es el numero de verdad.
+                    $valor = [BitConverter]::ToInt32(
+                                 [BitConverter]::GetBytes([Convert]::ToUInt32($m.Groups['d'].Value, 16)), 0)
+                    $culpables += ('{0}:{1} escribe 0x{2} sin la L (es un Int32 que vale {3})' -f
+                                   $archivo.Name, $n, $m.Groups['d'].Value, $valor)
+                }
+                foreach ($m in [regex]::Matches($linea, '0x(?<d>[89A-Fa-f][0-9A-Fa-f]{15})(?![0-9A-Fa-f])')) {
+                    $culpables += ('{0}:{1} escribe 0x{2}, que es un Int64 negativo y la L no lo arregla' -f
+                                   $archivo.Name, $n, $m.Groups['d'].Value)
+                }
+            }
+        }
+
+        # LA GUARDA DE CORDURA. Si el barrido dejara de encontrar tambien
+        # los literales BIEN escritos, es que el barrido esta roto y esta
+        # prueba estaria pasando por no mirar nada. Hoy hay dos: Mft.ps1
+        # compara el tipo de atributo terminal con 0xFFFFFFFFL y
+        # DiarioUsnCambios.ps1 recupera la razon con -band 0xFFFFFFFFL.
+        #
+        # SE PIDE UNO Y NO DOS APOSTA. Exigir dos ata la guarda al numero
+        # exacto de literales que hay hoy: el dia que alguien reescriba
+        # Mft.ps1 sin ese 0xFFFFFFFFL -algo perfectamente legitimo- esta
+        # prueba se pondria roja acusando al barrido de estar ciego cuando
+        # el barrido estaria bien. Ya paso al mutar: la mutacion que tenia
+        # que caer por la regla de los dieciseis digitos cayo aqui, o sea
+        # por el motivo equivocado. La pregunta correcta es "ve algo?", no
+        # "ve exactamente los dos que yo conozco".
+        $buenos | Should -BeGreaterThan 0 -Because (
+            'si no encuentra ni los que estan bien, el barrido no esta mirando el codigo')
+
+        $culpables -join ' // ' | Should -BeNullOrEmpty -Because (
+            'un 0x de ocho digitos que empieza por 8-F es un Int32 NEGATIVO: ' +
+            'lanza al convertirlo a un tipo sin signo y compara mal con -band')
+    }
+
     It 'la lista de candidatos de la ventana se puede enumerar con @( )' {
         # La comprobacion de verdad: se construye igual que Window.ps1 y se
         # enumera igual que Report.ps1. Si alguien vuelve a cambiarlo por
