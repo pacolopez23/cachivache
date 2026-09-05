@@ -189,6 +189,55 @@ jobs:
   # respuestas de la guardia que no dependen del agente. Que un modulo no
   # encuentre nada -aqui no hay Steam, ni Docker, ni navegadores usados- no
   # falla. Que un cebo no aparezca, si.
+  sondeo:
+    name: Sondeo de la ventana (UI Automation)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # LA PREGUNTA QUE ESTE TRABAJO CONTESTA no es si el programa funciona
+      # -eso lo miran los otros cinco- sino si ESTA MAQUINA puede manejar la
+      # ventana. Un ejecutor de GitHub es un Windows sin nadie delante, y no
+      # esta garantizado que una aplicacion WPF llegue a pintarse ahi. En la
+      # maquina del autor los siete pasos salen BIEN; aqui puede que no, y
+      # eso es exactamente lo que hace falta saber antes de escribir el
+      # robot de [VAL-05] encima.
+      #
+      # NO LLEVA continue-on-error A PROPOSITO. Un trabajo al que se le
+      # permite fallar es un trabajo que nadie mira, y este proyecto ya
+      # tiene escrito -en tools/Cobertura.ps1- por que un trinquete que
+      # salta y se desactiva es peor que no tenerlo. Si esto sale rojo, se
+      # arregla o se quita; no se ignora.
+      - name: Se puede manejar la ventana desde un guion?
+        shell: powershell
+        timeout-minutes: 5
+        run: |
+          $salida = .\tools\Sondeo-Robot.ps1 -Segundos 90 6>&1 | Out-String
+          Write-Host $salida
+          $fallos = @([regex]::Matches($salida, 'FALLA'))
+          if ($fallos.Count -gt 0) {
+              Write-Host ('::error::El sondeo de la ventana ha fallado en {0} paso(s).' -f $fallos.Count)
+              exit 1
+          }
+          if ($salida -notmatch '3b\.') {
+              Write-Host '::error::Falta el paso 3b, que es el que comprueba que el clic surte efecto.'
+              exit 1
+          }
+          Write-Host 'La ventana se puede manejar desde un guion en este ejecutor.'
+
+      - name: No ha quedado ningun Cachivache abierto
+        shell: pwsh
+        if: always()
+        run: |
+          $vivos = @(Get-Process powershell -ErrorAction SilentlyContinue |
+                     Where-Object { $_.MainWindowTitle -eq 'Cachivache' })
+          if ($vivos.Count -gt 0) {
+              Write-Host ('::error::Han quedado {0} proceso(s) con la ventana abierta.' -f $vivos.Count)
+              $vivos | Stop-Process -Force
+              exit 1
+          }
+          Write-Host 'No queda ningun proceso colgado.'
+
   banco:
     name: Banco de pruebas (borrado real)
     runs-on: windows-latest

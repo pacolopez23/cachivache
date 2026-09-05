@@ -283,6 +283,10 @@ try {
 
 Write-Host ''
 Write-Host '=== Copia esta salida entera en la conversacion ======================' -ForegroundColor Cyan
-Write-Host '  Si los cinco pasos dicen BIEN, el robot de [VAL-05] se puede escribir'
-Write-Host '  y llevar a la integracion continua. Si alguno falla, se documenta y se'
-Write-Host '  descarta, como se hizo con [VEL-01] y [VEL-02].'
+Write-Host '  Si TODOS los pasos dicen BIEN, el robot de [VAL-05] se puede escribir.'
+Write-Host '  El que decide es el 3b: pulsar sin poder comprobar el efecto seria un'
+Write-Host '  robot que hace clic y se fia, o sea otra prueba verde que no mira nada.'
+Write-Host ''
+Write-Host '  Contestado que si en Windows 11 el 5 de septiembre de 2026. Este guion'
+Write-Host '  se queda como el juez de si la maquina de turno puede manejar la'
+Write-Host '  ventana: lo ejecuta la integracion continua antes de nada.'

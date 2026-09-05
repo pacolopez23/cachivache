@@ -103,7 +103,39 @@ Decidir esto ahora ahorra meses.
 > invariantes y la verificación por mutación; el suelo solo impide que un trozo entero se quede sin
 > ejecutar nunca.
 
-### `VAL-05` · Nadie pulsa nunca un botón · Alta · **abierto**
+### `VAL-05` · Nadie pulsa nunca un botón · Alta · **sondeado y viable**
+
+> 🟡 **LA PREGUNTA ESTÁ CONTESTADA: SÍ SE PUEDE.** Ejecutado en Windows 11 con PowerShell 5.1 el 5 de
+> septiembre de 2026, `tools/Sondeo-Robot.ps1` da los siete pasos en verde. La ventana arranca y se
+> localiza en 3,0 s, se enumeran **199 elementos con 165 nombres accesibles**, se leen 123 textos —y
+> el proceso se cierra sin quedarse colgado.
+>
+> **El paso que decide es el 3b**, y salió bien: se pulsa *«Acerca de»* y el panel *«Acerca de
+> Cachivache»*, que **no estaba en el árbol de automatización**, aparece. Causa y efecto en la misma
+> medida. Lo confirma un segundo número por otro camino: los textos legibles pasan de 107 a 123 al
+> construirse ese panel. Un robot que pulsa y no comprueba el efecto sería otra prueba verde que no
+> mira nada.
+>
+> **Las tres trampas que el sondeo descubrió, y que el robot ya no tendrá que descubrir:**
+>
+> 1. **Buscar por nombre no basta.** `NavAjustes` tiene `Content="Ajustes"` y el panel de ajustes
+>    tiene `AutomationProperties.Name="Ajustes"`: dos elementos distintos con el mismo nombre
+>    accesible. Hay que desempatar por tipo de control.
+> 2. **No se puede suponer el patrón.** Un `RadioButton` de WPF no se *invoca*: se *selecciona*. El
+>    sondeo devolvió *«Modelo no admitido»* hasta que se le preguntó al elemento qué sabe hacer
+>    (`GetSupportedPatterns` dice `SelectionItemPattern` y `SynchronizedInputPattern`, ningún
+>    `Invoke`). Suponer el patrón es la versión gráfica de suponer que una llamada al sistema
+>    funciona, que es como murió `VEL-02`.
+> 3. **Lo que no se ha mostrado no existe.** WPF no construye el contenido de un panel hasta que se
+>    enseña, así que no está en el árbol. **El robot tiene que navegar primero y mirar después.**
+>
+> **Lo que falta y quién lo contesta:** si un ejecutor de GitHub —un Windows sin nadie delante— puede
+> pintar una ventana WPF. No se puede saber desde aquí, así que lo pregunta la propia integración
+> continua: hay un trabajo *Sondeo de la ventana (UI Automation)* que ejecuta esto en cada push, sin
+> `continue-on-error`, porque un trabajo al que se le permite fallar es un trabajo que nadie mira. Si
+> sale rojo, `VAL-05` se queda en «solo en la máquina del autor» y hay que decidir si eso vale.
+
+### `VAL-05` (análisis original) · el hueco, con su número
 
 **El hueco, con su número:** `src/Core` está al 87,5 %, `src/Cli` al 89,4 %, y **`src/UI` al 7,3 %:
 1.814 instrucciones que no se ejecutan jamás.** El motor tiene un usuario falso que lo usa entero

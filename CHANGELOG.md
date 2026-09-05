@@ -173,6 +173,28 @@ que se hace una vez a un hábito después de cada tanda de cambios.
   de la guardia son lógica de seguridad, no texto de interfaz: si alguien se las lleva a un archivo
   de idioma, rompe la guardia en silencio. `[I18N-02]`
 
+### Un guion puede manejar la ventana: `VAL-05` deja de ser una idea
+
+`src/UI` está al **7,3 %** — 1.814 instrucciones que no se ejecutan jamás. Los cuatro fallos de
+interfaz de ayer se veían a simple vista y ninguna de las 2.337 pruebas podía verlos, porque ninguna
+abre la ventana. La idea para taparlo es un robot que la use como una persona.
+
+**Antes de escribir el robot se ha preguntado si se puede**, que es la lección de los dos puntos
+muertos de esta semana. `tools/Sondeo-Robot.ps1` abre Cachivache, cambia de panel y lo cierra — sin
+pulsar nada que borre. En Windows 11 da los siete pasos en verde: la ventana aparece en 3 segundos,
+se enumeran 199 elementos con 165 nombres accesibles y se leen 123 textos.
+
+**El paso que decide es el que comprueba que el clic surte efecto.** Se pulsa *«Acerca de»* y se
+verifica que el panel correspondiente, que antes no existía, ahora está. Un robot que pulsa y no
+comprueba el efecto sería otra prueba verde que no mira nada.
+
+Y esto lo hace posible el trabajo de accesibilidad de hace unos días: al ponerle un nombre a cada
+control para los lectores de pantalla, quedó montada —sin pretenderlo— la infraestructura que un
+robot necesita. La misma API sirve para las dos cosas.
+
+El sondeo pasa a ejecutarse en cada push sobre Windows, porque queda una pregunta que solo puede
+contestar la propia integración continua: si una máquina sin nadie delante puede pintar una ventana.
+
 ### `cachivache -Espacio` ya no vuelve a medir el disco si no hace falta
 
 El índice del disco se guarda al terminar y se reutiliza la próxima vez. La primera pasada cuesta lo
