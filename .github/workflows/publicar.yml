@@ -152,15 +152,42 @@ jobs:
       # viejos sin que falle nada aqui. Falla en casa de quien instala, y lo
       # que le dice su gestor de paquetes es que el archivo no coincide con
       # lo declarado. Ver [DIS-03] y [DIS-04].
+      # SIN CONDICION DE ETIQUETA, Y ESO SE CORRIGIO ANTES DE LA PRIMERA
+      # PUBLICACION. Estos dos pasos estaban limitados a las etiquetas, asi
+      # que el ensayo a mano -que existe justamente para probar el
+      # empaquetado sin publicar- se los saltaba. O sea que la parte mas
+      # delicada y la unica que no se habia ejecutado nunca era tambien la
+      # unica que no se podia ensayar: solo la estrenaria una etiqueta de
+      # verdad, a ciegas. Es el mismo patron que mato a [VEL-02], en el
+      # flujo de publicacion.
+      #
+      # Ahora corren siempre. En un ensayo la version sale de Version.ps1,
+      # que es de donde tiene que salir de todas formas.
       - name: Generar los manifiestos de winget y de Scoop
-        if: startsWith(github.ref, 'refs/tags/')
         shell: pwsh
         run: |
-          $etiqueta = $env:GITHUB_REF -replace '^refs/tags/', ''
+          . ./src/Core/Version.ps1
+          $delPrograma = 'v' + (Get-VersionCachivache)
+
+          if ($env:GITHUB_REF -like 'refs/tags/*') {
+              $etiqueta = $env:GITHUB_REF -replace '^refs/tags/', ''
+              # LA ETIQUETA Y EL PROGRAMA TIENEN QUE DECIR LA MISMA VERSION.
+              # Sin esto se puede publicar v2.1.0 de un codigo que se
+              # presenta como 2.0.0: el panel "Acerca de" diria una cosa, el
+              # gestor de paquetes otra, y el usuario no tendria forma de
+              # saber cual creer. Nadie lo comprobaba.
+              if ($etiqueta -ne $delPrograma) {
+                  Write-Host ('::error::La etiqueta {0} no coincide con la version del programa ({1}). Corrige src/Core/Version.ps1 o la etiqueta.' -f $etiqueta, $delPrograma)
+                  exit 1
+              }
+          } else {
+              $etiqueta = $delPrograma
+              Write-Host ('Ensayo: no hay etiqueta, se usa la version del programa ({0}).' -f $etiqueta)
+          }
+
           ./tools/Publicar-Manifiestos.ps1 -Etiqueta $etiqueta -Paquete $env:PAQUETE
 
       - name: Comprobar que los manifiestos declaran el paquete que se sube
-        if: startsWith(github.ref, 'refs/tags/')
         shell: pwsh
         run: |
           # Se leen los archivos ESCRITOS y se comparan con el hash real del

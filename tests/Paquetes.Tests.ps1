@@ -445,13 +445,38 @@ Describe 'La costura con el flujo de publicacion' {
         }
     }
 
-    It 'los manifiestos solo se generan cuando hay etiqueta' {
-        # El disparo a mano usa la version "dev", que no es una etiqueta:
-        # Get-VersionDesdeEtiqueta lanzaria y tumbaria una ejecucion que
-        # existe justamente para probar el empaquetado sin publicar.
+    It 'los manifiestos SI se generan en el ensayo a mano' {
+        # ESTA PRUEBA DECIA LO CONTRARIO HASTA EL 5 DE SEPTIEMBRE DE 2026, y
+        # su razon era buena: el disparo a mano no trae etiqueta,
+        # Get-VersionDesdeEtiqueta lanzaba, y eso tumbaba una ejecucion que
+        # existe justamente para probar el empaquetado sin publicar. La
+        # solucion de entonces fue saltarse el paso.
+        #
+        # POR QUE SE HA DADO LA VUELTA. Saltarselo dejaba la parte mas
+        # delicada del flujo -y la unica que no se habia ejecutado jamas-
+        # fuera del unico ensayo disponible: solo la habria estrenado una
+        # etiqueta de verdad, con la version ya publicada y sin vuelta
+        # atras. Es el patron que mato a [VEL-02] aplicado al flujo de
+        # publicacion, y este proyecto ya sabe como acaba.
+        #
+        # Se ataca la CAUSA en vez del sintoma: sin etiqueta, la version
+        # sale de Version.ps1, que es de donde tiene que salir igualmente.
+        # Con eso el generador recibe una version valida y el ensayo
+        # recorre el flujo entero menos publicar.
         $pos = $script:Flujo.IndexOf('Generar los manifiestos')
         $pos | Should -BeGreaterThan 0
-        $script:Flujo.Substring($pos, 200) | Should -Match "startsWith\(github\.ref, 'refs/tags/'\)"
+        $paso = $script:Flujo.Substring($pos, 900)
+        $paso | Should -Not -Match "startsWith\(github\.ref, 'refs/tags/'\)" -Because (
+            'saltarse este paso en el ensayo lo deja sin probar hasta la version de verdad')
+        $paso | Should -Match 'Get-VersionCachivache' -Because (
+            'sin etiqueta la version tiene que salir del programa, no lanzar')
+    }
+
+    It 'y aun asi el ensayo no puede publicar nada' {
+        # La otra mitad: abrir el ensayo no puede abrir la publicacion. El
+        # unico paso que sube archivos sigue exigiendo etiqueta.
+        $script:Flujo | Should -Match (
+            "(?s)- name: Adjuntar a la version\s*\r?\n\s*if:\s*startsWith\(github\.ref,\s*'refs/tags/'\)")
     }
 }
 

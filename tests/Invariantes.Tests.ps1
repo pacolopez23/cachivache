@@ -2584,6 +2584,55 @@ Describe 'Nada que no sea codigo puede colarse en lo que se publica' {
     }
 }
 
+Describe 'La publicacion se puede ensayar entera menos la publicacion' {
+    <#
+        Escrito el 5 de septiembre de 2026, ANTES de la primera version.
+
+        publicar.yml se anuncia en su cabecera con un ensayo a mano -"para
+        poder probar el empaquetado sin publicar nada"-, y ese ensayo se
+        saltaba los dos pasos de los manifiestos de winget y Scoop, que
+        estaban limitados a las etiquetas. O sea que la parte mas delicada
+        del flujo, y la unica que no se habia ejecutado NUNCA, era tambien
+        la unica que no se podia ensayar: la habria estrenado una etiqueta
+        de verdad, a ciegas.
+
+        Es exactamente el patron que mato a [VEL-02]: codigo verde escrito
+        contra la documentacion, sin una sola ejecucion. Se corrigio antes
+        de etiquetar, y estas dos invariantes lo dejan atado.
+    #>
+
+    BeforeAll {
+        $script:RaizFlujo = Split-Path $PSScriptRoot -Parent
+        $script:Publicar = [IO.File]::ReadAllText(
+            (Join-Path $script:RaizFlujo '.github/workflows/publicar.yml'))
+    }
+
+    It 'solo el paso que publica esta limitado a las etiquetas' {
+        # LA PREGUNTA CORRECTA no es ".estan bien los dos pasos que ya
+        # arregle?" sino ".hay algun paso condicionado que no deberia
+        # estarlo?" (regla 8). Se cuentan las condiciones de etiqueta que
+        # hay en el archivo: tiene que quedar UNA, la de adjuntar.
+        $condiciones = @([regex]::Matches($script:Publicar, "if:\s*startsWith\(github\.ref,\s*'refs/tags/'\)"))
+        @($condiciones).Count | Should -Be 1 -Because (
+            'todo lo que no sea publicar tiene que poder ensayarse; si no, se estrena en la version de verdad')
+
+        # Y que la que queda sea la de adjuntar, no otra cualquiera.
+        $script:Publicar | Should -Match (
+            "(?s)- name: Adjuntar a la version\s*\r?\n\s*if:\s*startsWith\(github\.ref,\s*'refs/tags/'\)") -Because (
+            'la unica condicion que debe quedar es la del paso que sube la version')
+    }
+
+    It 'la etiqueta y la version del programa no pueden divergir' {
+        # Sin esta comprobacion se puede publicar v2.1.0 de un codigo que se
+        # presenta como 2.0.0: el panel "Acerca de" diria una cosa, el gestor
+        # de paquetes otra, y quien lo instale no tendria forma de saber cual
+        # creer. No lo comprobaba nadie.
+        $script:Publicar | Should -Match 'Get-VersionCachivache' -Because (
+            'la version tiene que salir del programa y no de lo que alguien escriba en la etiqueta')
+        $script:Publicar | Should -Match 'no coincide con la version del programa'
+    }
+}
+
 Describe 'Un flujo de trabajo invalido no llega ni a ejecutarse' {
     <#
         Encontrado en el primer push del repositorio, y es de la peor
