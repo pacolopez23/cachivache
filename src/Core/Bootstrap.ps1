@@ -55,6 +55,7 @@ $OrdenNucleoCachivache = @(
     'VistaArchivos.ps1'   # la capa de consulta del indice: todos los archivos por tamano, con comodines
     'IndicePersistente.ps1' # guardar y leer el indice en binario: ver docs/VEL-02-MEDICION.md
     'IndiceIncremental.ps1' # si el indice guardado se puede creer, y como se le aplican los cambios
+    'IndiceEspacio.ps1'   # lo que falta para REUTILIZAR el indice guardado sin mentir: huella del volumen, nombre por zonas y el aviso de que los datos son de antes
     'CambiosLimpieza.ps1' # [VEL-04] lo que el propio programa acaba de borrar, como cambios del indice. Necesita Guard (Get-RaizQueContiene) y el contrato de Candidate
     'Mapa.ps1'            # disposicion del mapa de arbol (calculo puro)
     'Report.ps1'          # informes HTML, CSV y JSON

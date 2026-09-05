@@ -76,6 +76,11 @@ function Show-InformeEspacio {
         [ValidateSet('Tamano', 'Nombre')]
         [string]   $Orden        = 'Tamano',
         [switch]   $ContarEnlacesDuros,
+        # Fuerza volver a mirar el disco aunque haya un índice guardado que
+        # se pueda creer. Existe porque un índice reutilizado dice lo que
+        # HABIA, no lo que hay: el aviso que sale por pantalla nombra esta
+        # opción, y una opción nombrada en un aviso tiene que existir.
+        [switch]   $Recorrer,
         [switch]   $Anonimo,
         # Si se da, ademas del volcado en consola se escribe un informe
         # HTML con el mapa de arbol dibujado.
@@ -102,10 +107,99 @@ function Show-InformeEspacio {
     foreach ($z in $zonas) { Write-Linea ('  Analizando: {0}' -f (& $mostrar $z)) }
     Write-Linea ''
 
+    # ---------------- El indice: guardado o recorrido ----------------
+    #
+    # PRIMER CONSUMIDOR REAL DE IndicePersistente.ps1. Hasta el 5 de
+    # septiembre de 2026 ese archivo y IndiceIncremental.ps1 -1.666 lineas
+    # con 1.700 de pruebas- no los llamaba NADIE: estaban escritos, verdes
+    # y sin un solo camino que pasara por ellos.
+    #
+    # LO QUE SE PROMETE Y LO QUE NO. Un indice reutilizado no dice lo que
+    # hay en el disco: dice lo que habia cuando se guardo. No hay forma de
+    # ponerlo al dia -eso era [VEL-02], que se midio y se descarto-, asi
+    # que lo unico honesto es USARLO Y DECIRLO. La frase la escribe
+    # Get-AvisoIndiceReutilizado, que es codigo probado y no un Write-Host
+    # improvisado aqui.
+    $indice = $null
+    $reutilizado = $false
+    $rutaIndice = ''
+    $huella = ''
+    # TODO ESTO VA DENTRO DE UN try, Y ES LO MAS IMPORTANTE DEL BLOQUE.
+    # Averiguar donde vive el indice es una OPTIMIZACION: si falla, lo
+    # correcto es recorrer el disco como se ha hecho siempre, no tumbar el
+    # comando. La primera version no lo tenia, y en un entorno sin
+    # LOCALAPPDATA ni TEMP -PowerShell sobre Linux- Get-CarpetaDatos
+    # devolvia $null y salia una cascada de errores rojos antes del
+    # informe. El informe llegaba a salir, que es casi peor: parecia roto
+    # sin estarlo. Se arreglo tambien Get-CarpetaDatos, pero la red se
+    # queda: una optimizacion no puede romper aquello que optimiza.
+    try {
+        $nombreIndice = Get-NombreIndiceEspacio -Zonas $zonas
+        if ($nombreIndice) {
+            $carpetaDatos = Get-CarpetaDatos
+            if (-not [string]::IsNullOrWhiteSpace($carpetaDatos)) {
+                $carpetaIndices = Join-Path $carpetaDatos 'indices'
+                if (-not (Test-Path -LiteralPath $carpetaIndices)) {
+                    New-Item -ItemType Directory -Path $carpetaIndices -Force -ErrorAction Stop | Out-Null
+                }
+                $rutaIndice = Join-Path $carpetaIndices $nombreIndice
+                $huella = Get-HuellaVolumenDeZonas -Zonas $zonas
+            }
+        }
+    } catch {
+        Write-Verbose ('No se ha podido preparar el índice guardado: {0}' -f $_.Exception.Message)
+        $rutaIndice = ''
+    }
+
     $cronometro = [Diagnostics.Stopwatch]::StartNew()
-    $indice = New-IndiceDisco -Rutas $zonas -MinimoArchivoBytes 1MB `
-                              -ContarEnlacesDuros:$ContarEnlacesDuros
+
+    if (-not $Recorrer -and $rutaIndice) {
+        $cabecera = Get-CabeceraIndice -Ruta $rutaIndice
+        $veredicto = Test-IndiceUtilizable -Cabecera $cabecera `
+                                           -VersionEsperada (Get-VersionFormatoIndice) `
+                                           -SerieVolumen $huella `
+                                           -IdDiario (Get-MarcaSinDiario) `
+                                           -PrimerUsn 0 `
+                                           -Ahora (Get-Date)
+        if ($veredicto.Utilizable) {
+            $indice = Read-IndiceDisco -Ruta $rutaIndice
+            # Leer puede fallar aunque la cabecera cuadre -el cuerpo se
+            # comprueba al leerlo-, y entonces se recorre como si no
+            # hubiera nada. Un indice a medias no se usa jamas.
+            if ($null -ne $indice) {
+                $reutilizado = $true
+                Write-Linea ('  ' + (Get-AvisoIndiceReutilizado -Escrito $cabecera.Escrito -Ahora (Get-Date))) 'aviso'
+                Write-Linea ''
+            }
+        } elseif ($null -ne $cabecera) {
+            # Solo se explica el rechazo cuando HABIA un indice. La primera
+            # vez no hay nada que rechazar, y decirlo seria ruido.
+            Write-Linea ('  Habia un índice guardado y no se ha usado: {0}' -f $veredicto.Motivo)
+            Write-Linea ''
+        }
+    }
+
+    if ($null -eq $indice) {
+        $indice = New-IndiceDisco -Rutas $zonas -MinimoArchivoBytes 1MB `
+                                  -ContarEnlacesDuros:$ContarEnlacesDuros
+    }
     $cronometro.Stop()
+
+    # Se guarda solo lo RECORRIDO. Volver a escribir un indice reutilizado
+    # le pondria fecha de hoy a unos datos de antes, y entonces la
+    # caducidad de siete dias -que sin diario es la unica red que queda-
+    # no caducaria nunca.
+    if (-not $reutilizado -and $rutaIndice -and $indice.Bytes -gt 0) {
+        $guardado = Save-IndiceDisco -Indice $indice -Ruta $rutaIndice `
+                                     -SerieVolumen $huella `
+                                     -IdDiario (Get-MarcaSinDiario) -UsnCorte 0 `
+                                     -Confirm:$false
+        if (-not $guardado) {
+            # Ni se calla ni se muere: no poder guardar el indice solo
+            # significa que la proxima vez se volvera a recorrer.
+            Write-Linea '  No se ha podido guardar el índice para la próxima vez.' 'aviso'
+        }
+    }
 
     if ($indice.Bytes -le 0) {
         Write-Linea '  No se ha podido medir nada. Comprueba los permisos.' 'aviso'

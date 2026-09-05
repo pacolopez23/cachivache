@@ -47,6 +47,11 @@
     Cuantos niveles de carpeta enseña -Espacio. Por defecto 2.
 .PARAMETER Buscar
     Filtra los archivos de -Espacio por nombre. Admite comodines.
+.PARAMETER Recorrer
+    Obliga a -Espacio a volver a medir el disco, aunque tenga guardado un
+    indice reciente que podria reutilizar. Un indice reutilizado dice lo
+    que HABIA cuando se guardo, no lo que hay ahora, y el programa lo avisa
+    por pantalla cuando lo usa.
 .PARAMETER InformeAnonimo
     Genera el informe sustituyendo tu carpeta de perfil, tu nombre de
     usuario y el nombre del equipo por marcadores genericos. Uselo si va a
@@ -105,6 +110,7 @@ param(
     [switch] $Espacio,
     [int]    $Profundidad = 2,
     [string] $Buscar = '',
+    [switch] $Recorrer,
     [switch] $Listar,
     [switch] $Silencioso,
     [switch] $Diagnostico
@@ -234,6 +240,7 @@ if ($Espacio) {
     . (Join-Path (Join-Path (Join-Path $Raiz 'src') 'Cli') 'Espacio.ps1')
 
     Show-InformeEspacio -Rutas $Modulos -Profundidad $Profundidad -Buscar $Buscar `
+                        -Recorrer:$Recorrer `
                         -Anonimo:$InformeAnonimo -Informe $Informe -Configuracion $configuracion
     exit 0
 }

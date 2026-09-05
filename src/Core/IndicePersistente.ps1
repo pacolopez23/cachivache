@@ -155,6 +155,25 @@ $script:FirmaIndicePersistente = [byte[]] @(0x43, 0x41, 0x43, 0x48, 0x49, 0x44, 
 # se conoce, porque los campos podrian no estar donde se esperan.
 $script:VersionFormatoIndice = 1
 
+function Get-VersionFormatoIndice {
+    <#
+    .SYNOPSIS
+        La version del formato del indice que entiende este programa.
+
+    .NOTES
+        Se expone con una funcion, y no dejando que quien la necesite mire
+        la variable, por lo mismo que Get-CaducidadIndice y
+        Get-SueloCobertura: quien ESCRIBE la cabecera y quien la COMPRUEBA
+        tienen que decir el mismo numero. Y ademas $script: dentro de un
+        archivo dot-sourceado apunta al ambito de QUIEN LLAMA, asi que
+        fuera del nucleo esa variable no es de fiar.
+    #>
+    [CmdletBinding()]
+    [OutputType([int])]
+    param()
+    return [int]$script:VersionFormatoIndice
+}
+
 # El mismo centinela que usa New-EntradaCarpeta para "aqui no hay fecha".
 $script:FechaCeroIndice = [datetime]'1900-01-01'
 

@@ -1299,6 +1299,42 @@ completo en algo que se ejecuta sin pensárselo.
 >
 > *Todo el análisis de más abajo se conserva sin tocar: es lo que se creía el 1 de septiembre.*
 
+### `VEL-05` · El índice guardado no lo usaba nadie · Media
+
+> ✅ **RESUELTO.** `cachivache -Espacio` guarda el índice al terminar y lo reutiliza la próxima vez.
+> Es el **primer consumidor real** de `IndicePersistente.ps1` e `IndiceIncremental.ps1`: 1.666 líneas
+> con 1.700 de pruebas que llevaban una semana escritas, verdes y sin que ningún camino del programa
+> pasara por ellas.
+>
+> **Lo que cambia la promesa.** El plan era poner el índice al día con el diario de NTFS. Al
+> descartarse `VEL-02`, queda el índice guardado **sin forma de actualizarlo**, y eso obliga a rebajar
+> lo que se puede prometer: un índice reutilizado no dice lo que hay en el disco, dice lo que había.
+> Sigue valiendo —para *dónde se fue el espacio*, una foto de hace diez minutos es igual de útil— pero
+> **solo si se dice**. Por eso la frase que avisa vive en `Get-AvisoIndiceReutilizado`, probada, y no
+> en un `Write-Host` suelto dentro del comando.
+>
+> **Las tres decisiones que no son obvias:**
+>
+> - **`Get-NombreIndiceEspacio`** — un índice vale para las carpetas que midió y para ninguna otra, y
+>   el formato del archivo no guarda cuáles fueron. Se resuelve en el nombre, que sale de las zonas
+>   normalizadas y ordenadas: analizar otras carpetas no encuentra índice y recorre, en vez de enseñar
+>   un total que no es el suyo.
+> - **`Get-HuellaVolumen`** — no se llama «serie» a propósito: el número de serie de NTFS exigiría CIM
+>   (decenas de ms, solo Windows), así que se compone con formato, tamaño y fecha de formateo del
+>   volumen. Caza otro disco en la misma letra; no caza una partición clonada bit a bit, y eso está
+>   escrito.
+> - **`Get-MarcaSinDiario`** — `Test-IndiceUtilizable` exige identificador de diario. Guardar
+>   `sin-diario` no es colarse por la comprobación: el día que alguien retome ese camino, los índices
+>   de hoy se rechazarán **solos**, que es justo lo que debe pasar.
+>
+> **Reutilizar no renueva la fecha del índice**, y eso salió mutando. Si la renovara, la caducidad de
+> siete días —única red que queda sin diario— no caducaría nunca: cada consulta le daría siete días
+> más mientras se aleja de la realidad. Siete mutaciones, las siete cazadas.
+>
+> Y dos arreglos de robustez que salieron de ejecutarlo en un entorno sin `LOCALAPPDATA` ni `TEMP`:
+> `Get-CarpetaDatos` ya no se queda sin sitio donde escribir, y buscar el índice va dentro de un `try`
+> — **una optimización no puede romper aquello que optimiza**.
+
 ### `VEL-04` · Reanalizar tras limpiar no debería recorrer el disco · Media
 
 > 🟡 **NÚCLEO HECHO, FALTA ENCHUFARLO.** `src/Core/CambiosLimpieza.ps1` con 24 pruebas y la costura

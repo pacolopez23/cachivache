@@ -42,6 +42,14 @@ function Get-CarpetaDatos {
 
     $base = $env:LOCALAPPDATA
     if ([string]::IsNullOrWhiteSpace($base)) { $base = $env:TEMP }
+    # TERCERA RED, y hizo falta. Las dos de arriba son variables de
+    # entorno, y hay entornos donde no existe NINGUNA de las dos: PowerShell
+    # sobre Linux no define TEMP, y un servicio de Windows puede correr sin
+    # LOCALAPPDATA. Sin esto, esta funcion devolvia $null y quien la usaba
+    # reventaba con "Cannot bind argument to parameter 'Path'" -en cascada,
+    # una vez por cada Join-Path de aqui abajo-. GetTempPath() no es una
+    # variable: la resuelve .NET y siempre contesta algo.
+    if ([string]::IsNullOrWhiteSpace($base)) { $base = [IO.Path]::GetTempPath() }
     $carpeta = Join-Path $base 'Cachivache'
 
     foreach ($sub in @('', 'informes', 'registros')) {

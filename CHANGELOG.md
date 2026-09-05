@@ -173,6 +173,36 @@ que se hace una vez a un hábito después de cada tanda de cambios.
   de la guardia son lógica de seguridad, no texto de interfaz: si alguien se las lleva a un archivo
   de idioma, rompe la guardia en silencio. `[I18N-02]`
 
+### `cachivache -Espacio` ya no vuelve a medir el disco si no hace falta
+
+El índice del disco se guarda al terminar y se reutiliza la próxima vez. La primera pasada cuesta lo
+de siempre; la segunda es prácticamente instantánea, porque no se recorre nada.
+
+**Y dice de dónde salen los datos.** Ahí está lo importante. El plan original era poner el índice al
+día leyendo el diario de cambios de NTFS, y eso se midió y se descartó, así que un índice reutilizado
+**no dice lo que hay en el disco: dice lo que había cuando se guardó**. Para «dónde se fue el
+espacio» una foto de hace diez minutos vale igual — pero solo si se avisa. Así que cuando reutiliza,
+el programa lo dice y explica cómo forzar una medición nueva:
+
+```
+  Datos del índice guardado hace 6 min: no se ha vuelto a mirar el disco.
+  Usa -Recorrer para medirlo otra vez.
+```
+
+Tres cosas que decide el código y no el azar: el índice **solo vale para las carpetas que midió** (si
+analizas otras, se recorre en vez de enseñarte el total equivocado); se descarta si la unidad ya no
+parece el mismo disco, o si tiene más de una semana; y **reutilizarlo no le renueva la fecha**, porque
+si no, un índice consultado a diario no caducaría nunca mientras se aleja cada día un poco más de la
+realidad. Eso último apareció rompiendo el código a propósito, no escribiéndolo.
+
+Esto convierte en código vivo 1.666 líneas que llevaban una semana escritas, probadas y **sin que las
+llamara nadie**.
+
+De paso, dos arreglos que salieron de probarlo en un entorno raro: la carpeta de datos ya no se queda
+sin sitio donde escribir cuando el sistema no define ninguna de las dos variables de entorno
+habituales, y buscar el índice guardado no puede tumbar el informe — una optimización no puede romper
+aquello que optimiza.
+
 ### Fuera 4.600 líneas que ya no llevaban a ninguna parte
 
 Al descartarse `VEL-01` (leer la tabla maestra de NTFS) y `VEL-02` (leer el diario de cambios), el
