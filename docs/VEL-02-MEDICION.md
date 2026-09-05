@@ -15,6 +15,28 @@ de cambios —el *USN Journal*— exactamente para eso.
 
 ## La respuesta, antes que nada
 
+> ## ⛔ ESTA RESPUESTA ERA FALSA. Corregida el 5 de septiembre de 2026.
+>
+> El punto 3 de la letra pequeña de aquí abajo decía: *«el tercio de la medición que decide el punto
+> no se ha ejecutado nunca… si esa llamada resulta ser cara, el número de arriba baja»*. **Se ejecutó
+> en un Windows real, y no bajó: se desplomó.**
+>
+> | | supuesto el 1 de septiembre | medido el 5 de septiembre |
+> |---|---|---|
+> | Coste por registro | 33,4 µs | **12.800 µs** (74–82 reg/s en 5.1) |
+> | Punto de equilibrio | 125.000 registros | **≈ 330 registros** |
+>
+> La vara de medir del encargo era: *«si compensa mientras cambien menos de 50.000 archivos, la idea
+> es buena; si es menos de 500, es inservible»*. **330 cae por debajo de 500. Inservible, según el
+> criterio que se escribió antes de conocer el resultado.**
+>
+> Y hay un segundo hallazgo que lo cierra por otro lado, independiente de la velocidad: **el diario
+> solo conserva entre 10 y 80 minutos de historia** en esa máquina. Un limpiador de disco se usa
+> cada semanas. Ver la *Tercera parte*, al final.
+>
+> **Todo lo que sigue se conserva sin tocar.** Es lo que se creía el 1 de septiembre, y el valor de
+> este documento está justamente en poder comparar las dos cosas.
+
 **Compensa, y por un margen amplio: el punto de equilibrio está en unos 125.000 registros del
 diario, que son del orden de 30.000 archivos tocados.** Por debajo de eso sale más barato leer el
 diario; por encima, volver a recorrer el disco.
@@ -516,3 +538,95 @@ cuál de las dos formas gane. Lo que no existe todavía es ninguna de las dos.
    con el recorrido completo como salida de cualquier «no» por el camino.
 4. Medir en `C:` de verdad los dos caminos, y contrastar con el punto de equilibrio de la primera
    parte (~30.000 cambios).
+
+---
+
+## Tercera parte · 5 de septiembre de 2026 — ejecutado en Windows real. El veredicto se invierte.
+
+Todo lo anterior daba por bueno un supuesto que el propio documento marcaba como no comprobado.
+Se comprobó, en la máquina del autor, Windows 11, PowerShell 5.1, como administrador, con
+[`tools/Diagnostico-DiarioUsn.ps1`](../tools/Diagnostico-DiarioUsn.ps1) y
+[`tools/Banco-VEL02-Retencion.ps1`](../tools/Banco-VEL02-Retencion.ps1).
+
+### Lo que sí funciona, y no es poco
+
+`Get-DatosDiarioUsn` y `Read-DiarioUsn` **funcionan**. La P/Invoke a `DeviceIoControl`, el
+`FileStream` sobre `\\.\C:`, los códigos de control `0x000900F4` y `0x000900BB`, el `USN_JOURNAL_DATA`
+y el recorrido de registros pegados: todo correcto contra hardware real. Las seis variantes de la
+petición devuelven `BIEN`, los registros llegan en **versión 2.0** —la que `Get-RegistroUsn` sabe
+leer— y el parseador los entiende. El volumen declara admitir de la V2 a la V4, así que la V2 no está
+en peligro de desaparecer.
+
+Hubo un fallo, y era de una línea: la máscara de razones se escribía `[uint32]0xFFFFFFFF`. En
+PowerShell ese literal es un **`Int32` que vale −1**, y convertirlo lanza. Lanzaba dentro del `try`,
+dos líneas antes de la única llamada al sistema de la función, así que el `catch` lo devolvía como
+`$null` y desde fuera se veía idéntico a *«Windows ha dicho que no»*. Los **81 ms** que tardaba en
+fallar eran la pista: ninguna llamada al sistema tarda tan poco.
+
+### El número que lo tumba: la velocidad
+
+| | |
+|---|---|
+| Parseo medido en Windows PowerShell 5.1 | **74–82 registros/s** |
+| Parseo del mismo código en pwsh 7 sobre Linux | 5.694 registros/s (**70×**) |
+| Diario del equipo en ese momento | 38,2 MB ≈ **341.000 registros** |
+| Parsearlo entero | **4.154–4.587 s ≈ 70 minutos** |
+| Recorrer el disco entero, hoy, en ese equipo | **42 segundos** |
+
+Con el margen de 4,2 s que dejaba la medición original, a 12.800 µs por registro el punto de
+equilibrio cae a **unos 330 registros**. El encargo decía que por debajo de 500 la idea era
+inservible.
+
+**Y no es un problema de esta implementación.** Incluso al ritmo bueno —5.694 reg/s, que es pwsh 7 en
+Linux— el diario entero costaría 60 s, más que los 42 s de recorrer el disco. El problema es hacer
+parseo binario en PowerShell: 341.000 `pscustomobject`, con dos llamadas a función cada uno, es
+trabajo que este lenguaje no hace a esa escala. En C# con `Add-Type` sería menos de un segundo. Esa
+puerta queda abierta y documentada, pero no se cruza, por lo que viene ahora.
+
+### El número que lo cierra por el otro lado: la retención
+
+El diario NTFS es un **buffer circular**. Se midió con reloj durante 10,5 minutos, con el equipo en
+uso normal:
+
+```
+  reloj        generado (MB)      tirado (MB)  conserva (MB)
+  00:30                  0,3              0,0         39,0
+  05:30                  1,2              0,0         39,9
+  06:27                  1,5              8,0         32,2     <- NTFS recorta de golpe
+  10:27                  4,7              8,0         35,4
+```
+
+- **Genera 0,4 MB/min** con el equipo tranquilo → ventana de **79 minutos**.
+- Entre dos ejecuciones anteriores había generado **148 MB**, unas 9 veces más rápido → ventana de
+  **~10 minutos**.
+- NTFS **no recorta poco a poco**: descarta en bloques de 8 MB de golpe (la fila de 06:27).
+
+O sea que la historia que guarda el diario está entre **diez minutos y hora y pico**, según lo que
+esté haciendo el equipo. **No son días.**
+
+Eso mata la premisa, y de forma independiente de la velocidad. La promesa de `VEL-02` era *«el
+segundo análisis no recorre el disco»*. Un limpiador de disco se usa cada semanas: para cuando el
+usuario vuelve, `FirstUsn` hace mucho que pasó de su `UsnCorte`, `Test-IndiceUtilizable` lo detecta
+correctamente y se recorre el disco entero igual. **El camino rápido casi nunca se dispararía.**
+
+### Lo que sí queda, y es la parte útil
+
+Hay un caso en el que el camino rápido sí se dispararía: **volver a analizar justo después de
+limpiar**, para comprobar que ha funcionado. Ahí han pasado segundos, no semanas.
+
+Pero ese caso **no necesita el diario para nada**. El programa ya sabe exactamente qué acaba de
+borrar —`Remove.ps1` deja `BytesLiberados` en cada candidato— y `Update-IndiceConCambios` ya existe y
+ya está probado. Lo único que falta es el cable entre los dos. Eso es `VEL-04`, y no necesita
+administrador, ni NTFS, ni P/Invoke: funciona también en FAT32, exFAT y unidades de red, donde el
+diario ni siquiera existe.
+
+### Qué se aprende de esto, más allá de `VEL-02`
+
+1. **La letra pequeña del 1 de septiembre acertó de pleno**, y por eso estaba escrita. El punto 3
+   decía qué comprobación faltaba y qué pasaría si salía mal. Salió mal. Un documento que enumera
+   sus propios supuestos no comprobados vale más que uno que solo da resultados.
+2. **107 pruebas verdes alrededor de una función no dicen nada sobre esa función.** Las de `VEL-02`
+   cubrían el cálculo puro que rodea a `Read-DiarioUsn`; ninguna podía ejecutarla, porque abre el
+   volumen en crudo. El fallo vivió ahí hasta que alguien lo ejecutó a mano, elevado.
+3. **Medir antes de optimizar, incluso cuando "está claro" que va a compensar.** El punto de
+   equilibrio calculado y el real se llevaban un factor de 380.

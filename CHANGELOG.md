@@ -173,6 +173,35 @@ que se hace una vez a un hábito después de cada tanda de cambios.
   de la guardia son lógica de seguridad, no texto de interfaz: si alguien se las lleva a un archivo
   de idioma, rompe la guardia en silencio. `[I18N-02]`
 
+### El diario de cambios de NTFS: se lee bien, y aun así no sirve
+
+`VEL-02` queda **medido y descartado**, como `VEL-01`. Se ejecutó por primera vez en un Windows real
+y como administrador, que es la única forma de saberlo.
+
+**Lo que funciona.** Leer el diario de NTFS desde PowerShell **se puede**: la llamada al sistema, el
+volumen abierto en crudo y el parseo de registros son correctos contra hardware real, y el disco
+sirve los registros en la versión que el programa sabe leer. Había un fallo, y era de una línea: la
+máscara de razones se escribía `[uint32]0xFFFFFFFF`, y en PowerShell ese literal no vale 4.294.967.295
+sino **−1**, así que reventaba dos líneas antes de la llamada al sistema. Desde fuera se veía idéntico
+a *«Windows ha dicho que no»*. La pista fueron los **81 ms** que tardaba en fallar: ninguna llamada al
+sistema tarda tan poco.
+
+**Lo que no funciona, y son dos cosas distintas.** Parsear el diario en PowerShell va a **74–82
+registros por segundo**: el diario entero son 70 minutos, contra los **42 segundos** que cuesta
+recorrer el disco. El atajo era 100 veces más lento que el camino largo. Y aunque se arreglara —en
+C# sería menos de un segundo—, el diario **solo conserva entre 10 y 80 minutos de historia**, medido
+con reloj. Un limpiador de disco se usa cada semanas: cuando el usuario vuelve, el diario ya olvidó
+lo que hacía falta.
+
+**Lo que se rescata.** El único momento en que el atajo se dispararía es al reanalizar justo después
+de limpiar. Y ese caso no necesita ningún diario: **el programa ya sabe qué acaba de borrar.** Queda
+abierto como `VEL-04`, funciona sin permisos de administrador y hasta en discos que no son NTFS.
+
+De propina, una invariante nueva barre todo el repositorio buscando la trampa del literal: un `0x` de
+ocho dígitos que empiece por 8-F es un `Int32` negativo. Estaba explicada por escrito **en la cabecera
+del mismo archivo que la cometía**, 436 líneas más arriba. Saber una cosa escrita no es tenerla
+comprobada.
+
 ### Marcar 5.000 filas ya no deja la ventana colgada
 
 `VEL-03`. *Marcar todo*, *Desmarcar todo* y *Solo lo seguro* recorrían la lista entera de un tirón en

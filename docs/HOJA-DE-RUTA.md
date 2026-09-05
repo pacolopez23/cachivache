@@ -1264,9 +1264,62 @@ sería un salto de orden de magnitud, no un ajuste.
 con retroceso al recorrido normal. **Tamaño: grande.** Pero es lo que convertiría el análisis
 completo en algo que se ejecuta sin pensárselo.
 
-### `VEL-02` · El índice compartido de disco · Media — **y ahora es el camino principal**
+### `VEL-02` · El índice compartido de disco · ~~Media — el camino principal~~ → **MEDIDO Y DESCARTADO**
 
-> ✅ **MEDIDO EL 1 DE SEPTIEMBRE DE 2026, Y COMPENSA.** Ver
+> ⛔ **DESCARTADO EL 5 DE SEPTIEMBRE DE 2026, EJECUTÁNDOLO EN UN WINDOWS REAL.** Segundo punto que
+> muere igual que `VEL-01`: escrito, medido y descartado con números. Ver la *Tercera parte* de
+> [`docs/VEL-02-MEDICION.md`](VEL-02-MEDICION.md).
+>
+> **Lo que sí quedó demostrado**, y no es poco: `Get-DatosDiarioUsn` y `Read-DiarioUsn` **funcionan**
+> contra hardware real. La P/Invoke a `DeviceIoControl`, el volumen en crudo, los dos códigos de
+> control y el parseo de registros son correctos, y el volumen sirve `USN_RECORD` **v2.0**, que es la
+> que el parseador sabe leer. Hubo un fallo y era de una línea: `[uint32]0xFFFFFFFF`, que en
+> PowerShell es un `Int32` que vale −1 y **lanza** al convertir. Ver `CHANGELOG.md`.
+>
+> **Y lo que lo mata, por dos lados independientes:**
+>
+> | | supuesto el 1 de septiembre | medido el 5 |
+> |---|---|---|
+> | Coste por registro | 33,4 µs | **12.800 µs** (74–82 reg/s en 5.1) |
+> | Punto de equilibrio | 125.000 registros | **≈ 330** — el encargo decía que por debajo de 500 era inservible |
+> | Parsear el diario entero (38 MB) | — | **≈ 70 min**, contra **42 s** de recorrer el disco |
+>
+> Y aparte de la velocidad: **el diario solo conserva entre 10 y 80 minutos de historia** (medido con
+> reloj; NTFS descarta en bloques de 8 MB). Un limpiador de disco se usa cada semanas, así que cuando
+> el usuario vuelve el diario ya olvidó lo que hacía falta, `Test-IndiceUtilizable` lo detecta y se
+> recorre el disco igual. **El camino rápido casi nunca se dispararía.**
+>
+> **La puerta que queda abierta, y por qué no se cruza.** En C# con `Add-Type` el parseo sería menos
+> de un segundo, y el problema de velocidad desaparecería. Pero seguiría estando el de la retención,
+> que no se arregla con código. Se documenta y no se hace.
+>
+> **Lo que sí se rescata → `VEL-04`.** El único caso donde el camino rápido se dispararía es
+> *reanalizar justo después de limpiar*. Y ese caso **no necesita el diario**: el programa ya sabe
+> qué acaba de borrar. Ver abajo.
+>
+> *Todo el análisis de más abajo se conserva sin tocar: es lo que se creía el 1 de septiembre.*
+
+### `VEL-04` · Reanalizar tras limpiar no debería recorrer el disco · Media · **abierto**
+
+Rescatado de `VEL-02`. Después de limpiar, el usuario vuelve a analizar para comprobar que ha
+funcionado, y hoy eso cuesta otros 42 s recorriendo el disco entero — para descubrir exactamente lo
+que el programa acababa de hacer él mismo.
+
+**No hace falta ningún diario.** `Remove.ps1` ya deja `BytesLiberados` en cada candidato, y
+`Update-IndiceConCambios` (en `IndiceIncremental.ps1`) ya existe y está probado. Falta el cable entre
+los dos: convertir el resultado de una limpieza en la lista de cambios que el índice sabe aplicar.
+
+**Por qué es mejor que lo que sustituye:** sin administrador, sin NTFS, sin P/Invoke — y por tanto
+funciona también en FAT32, exFAT y unidades de red, donde el diario de cambios ni siquiera existe. Y
+es PowerShell corriente, así que **se puede probar entero en la integración continua**, que es justo
+lo que no se podía hacer con `VEL-02`.
+
+**Cuidado con lo que no se ve:** una limpieza no solo borra. Vacía la papelera, borra carpetas
+enteras, y algunos métodos fallan a medias dejando parte del contenido. El índice tiene que quedar
+**más pesimista que la realidad, nunca más optimista**: si se marca como borrado algo que sigue ahí,
+el siguiente análisis mentirá por omisión. Ante la duda, invalidar el índice y recorrer.
+
+> ✅ ~~**MEDIDO EL 1 DE SEPTIEMBRE DE 2026, Y COMPENSA.**~~ Ver
 > [`docs/VEL-02-MEDICION.md`](VEL-02-MEDICION.md). Este punto vivía condicionado a `VEL-01`;
 > con `VEL-01` descartado, **es la única forma real de ganarle en velocidad a WizTree**, y sale.
 >

@@ -74,7 +74,11 @@ Write-Host ''
 Write-Host ('=== Retencion del diario de {0} · observando {1} minutos ===' -f $letra, $Minutos) -ForegroundColor Cyan
 Write-Host '  Sigue usando el ordenador con normalidad: la cifra vale para el uso real.'
 Write-Host ''
-Write-Host ('  {0,-9} {1,>16} {2,>16} {3,>12}' -f 'reloj', 'generado (MB)', 'tirado (MB)', 'conserva (MB)')
+# Alineacion a la derecha es {1,16}, NO {1,>16}: el mayor-que no existe en
+# el formato de .NET y hace que -f lance "la cadena de entrada no tiene el
+# formato correcto". Reventaba en la cabecera, o sea antes de la primera
+# medicion, en la unica linea del archivo que no se habia ejecutado nunca.
+Write-Host ('  {0,-9} {1,16} {2,16} {3,14}' -f 'reloj', 'generado (MB)', 'tirado (MB)', 'conserva (MB)')
 
 $arranque   = Get-Date
 $usnInicial = $primero.UsnSiguiente
