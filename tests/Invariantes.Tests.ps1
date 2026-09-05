@@ -2622,6 +2622,37 @@ Describe 'La publicacion se puede ensayar entera menos la publicacion' {
             'la unica condicion que debe quedar es la del paso que sube la version')
     }
 
+    It 'UN SOLO SITIO DECIDE LA VERSION' {
+        # EL FALLO QUE ENCONTRO EL PRIMER ENSAYO, y es el error central de
+        # este proyecto cometido en el flujo de publicacion: el paso que
+        # armaba el paquete deducia la version del ref por su cuenta -y la
+        # llamaba "dev" sin etiqueta- mientras el que generaba los
+        # manifiestos la deducia otra vez y sacaba "v2.0.0". Dos sitios
+        # decidiendo lo mismo y llegando a respuestas distintas. El paquete
+        # se llamaba Cachivache-dev.zip y los manifiestos declaraban
+        # Cachivache-v2.0.0.zip: dos URL que devuelven 404.
+        #
+        # La pregunta correcta no es ".lo deduce bien cada paso?" sino
+        # ".cuantas veces se deduce?". Una.
+        $deducciones = @([regex]::Matches($script:Publicar, 'GITHUB_REF\s+-replace'))
+        @($deducciones).Count | Should -Be 1 -Because (
+            'la version se decide una vez y se pasa por GITHUB_ENV; deducirla dos veces es como se llega a dos respuestas')
+
+        $script:Publicar | Should -Match 'VERSION=\$version' -Because 'la decision tiene que quedar donde la lean los demas pasos'
+        $script:Publicar | Should -Match 'Cachivache-\$env:VERSION' -Because 'el paquete se nombra con la version decidida'
+        $script:Publicar | Should -Match '-Etiqueta \$env:VERSION'  -Because 'y los manifiestos declaran esa misma'
+    }
+
+    It 'la version se decide ANTES de compilar y empaquetar' {
+        # Si la etiqueta y el programa no cuadran, mejor saberlo en diez
+        # segundos que despues de pasar la suite, compilar el lanzador y
+        # armar el zip.
+        $posDecidir = $script:Publicar.IndexOf('- name: Decidir la version')
+        $posPruebas = $script:Publicar.IndexOf('- name: Pruebas')
+        $posDecidir | Should -BeGreaterThan 0
+        $posPruebas | Should -BeGreaterThan $posDecidir
+    }
+
     It 'la etiqueta y la version del programa no pueden divergir' {
         # Sin esta comprobacion se puede publicar v2.1.0 de un codigo que se
         # presenta como 2.0.0: el panel "Acerca de" diria una cosa, el gestor

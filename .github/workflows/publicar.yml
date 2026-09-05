@@ -32,6 +32,45 @@ jobs:
       - uses: actions/checkout@v4
 
       # Antes de empaquetar nada: si las pruebas no pasan, no hay version.
+      # UN SOLO SITIO DECIDE LA VERSION, y esto se escribio despues de que
+      # el primer ensayo fallara por no hacerlo. El paso que armaba el
+      # paquete lo llamaba "Cachivache-dev.zip" cuando no habia etiqueta, y
+      # el que generaba los manifiestos declaraba "Cachivache-v2.0.0.zip":
+      # dos sitios decidiendo lo mismo y llegando a respuestas distintas,
+      # que es el fallo que este proyecto persigue en el codigo y se le
+      # habia colado en el flujo. Lo caza la guarda de
+      # Publicar-Manifiestos.ps1, que rechaza un paquete cuyo nombre no sea
+      # el que va a declarar, porque publicarlo asi deja dos URL que
+      # devuelven 404.
+      #
+      # Va lo PRIMERO, antes incluso de las pruebas: si la etiqueta y el
+      # programa no cuadran, mejor saberlo en diez segundos que despues de
+      # compilar y empaquetar.
+      - name: Decidir la version
+        shell: pwsh
+        run: |
+          . ./src/Core/Version.ps1
+          $delPrograma = 'v' + (Get-VersionCachivache)
+
+          if ($env:GITHUB_REF -like 'refs/tags/*') {
+              $version = $env:GITHUB_REF -replace '^refs/tags/', ''
+              # LA ETIQUETA Y EL PROGRAMA TIENEN QUE DECIR LO MISMO. Sin
+              # esto se puede publicar v2.1.0 de un codigo que se presenta
+              # como 2.0.0: el panel "Acerca de" diria una cosa, el gestor
+              # de paquetes otra, y quien lo instale no tendria forma de
+              # saber cual creer.
+              if ($version -ne $delPrograma) {
+                  Write-Host ('::error::La etiqueta {0} no coincide con la version del programa ({1}). Corrige src/Core/Version.ps1 o la etiqueta.' -f $version, $delPrograma)
+                  exit 1
+              }
+              Write-Host ('Publicando {0}.' -f $version)
+          } else {
+              $version = $delPrograma
+              Write-Host ('Ensayo sin etiqueta: se usa la version del programa ({0}).' -f $version)
+          }
+
+          "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
       - name: Pruebas
         shell: pwsh
         run: |
@@ -74,10 +113,9 @@ jobs:
       - name: Armar el paquete
         shell: pwsh
         run: |
-          $version = if ($env:GITHUB_REF -like 'refs/tags/*') {
-              $env:GITHUB_REF -replace '^refs/tags/', ''
-          } else { 'dev' }
-          $carpeta = "Cachivache-$version"
+          # La version la decidio el primer paso; aqui no se vuelve a
+          # deducir. Ver el comentario largo de "Decidir la version".
+          $carpeta = "Cachivache-$env:VERSION"
           New-Item -ItemType Directory -Path $carpeta | Out-Null
 
           # Lo que necesita un usuario para ejecutarlo, y nada mas: ni
@@ -166,26 +204,8 @@ jobs:
       - name: Generar los manifiestos de winget y de Scoop
         shell: pwsh
         run: |
-          . ./src/Core/Version.ps1
-          $delPrograma = 'v' + (Get-VersionCachivache)
-
-          if ($env:GITHUB_REF -like 'refs/tags/*') {
-              $etiqueta = $env:GITHUB_REF -replace '^refs/tags/', ''
-              # LA ETIQUETA Y EL PROGRAMA TIENEN QUE DECIR LA MISMA VERSION.
-              # Sin esto se puede publicar v2.1.0 de un codigo que se
-              # presenta como 2.0.0: el panel "Acerca de" diria una cosa, el
-              # gestor de paquetes otra, y el usuario no tendria forma de
-              # saber cual creer. Nadie lo comprobaba.
-              if ($etiqueta -ne $delPrograma) {
-                  Write-Host ('::error::La etiqueta {0} no coincide con la version del programa ({1}). Corrige src/Core/Version.ps1 o la etiqueta.' -f $etiqueta, $delPrograma)
-                  exit 1
-              }
-          } else {
-              $etiqueta = $delPrograma
-              Write-Host ('Ensayo: no hay etiqueta, se usa la version del programa ({0}).' -f $etiqueta)
-          }
-
-          ./tools/Publicar-Manifiestos.ps1 -Etiqueta $etiqueta -Paquete $env:PAQUETE
+          # La misma version que nombro el paquete. Un solo sitio decide.
+          ./tools/Publicar-Manifiestos.ps1 -Etiqueta $env:VERSION -Paquete $env:PAQUETE
 
       - name: Comprobar que los manifiestos declaran el paquete que se sube
         shell: pwsh

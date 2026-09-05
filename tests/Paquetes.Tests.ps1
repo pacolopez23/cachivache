@@ -379,9 +379,17 @@ Describe 'La costura con el flujo de publicacion' {
         $carpeta = [regex]::Match($script:Flujo, '\$carpeta\s*=\s*"([^"]+)"')
         $carpeta.Success | Should -BeTrue -Because 'sin encontrar el nombre, esta prueba no compara nada'
 
-        # El flujo escribe "Cachivache-$version"; aqui se sustituye $version
-        # por una etiqueta y se compara con lo que dicen los manifiestos.
-        $delFlujo = $carpeta.Groups[1].Value.Replace('$version', 'v2.1.0')
+        # El flujo escribe "Cachivache-$env:VERSION"; aqui se sustituye esa
+        # variable por una etiqueta y se compara con lo que dicen los
+        # manifiestos.
+        #
+        # Antes era "$version", una variable local del propio paso. Se
+        # cambio a $env:VERSION el 5 de septiembre de 2026 porque cada paso
+        # deducia la version por su cuenta y llegaban a respuestas
+        # distintas: el paquete salia "Cachivache-dev.zip" y los manifiestos
+        # declaraban "Cachivache-v2.0.0.zip". Ahora la decide un solo paso y
+        # los demas la leen del entorno.
+        $delFlujo = $carpeta.Groups[1].Value.Replace('$env:VERSION', 'v2.1.0')
         ($delFlujo + '.zip') | Should -BeExactly (Get-NombrePaqueteZip -Etiqueta 'v2.1.0')
         $delFlujo            | Should -BeExactly (Get-CarpetaDentroDelZip -Etiqueta 'v2.1.0')
     }
@@ -468,8 +476,8 @@ Describe 'La costura con el flujo de publicacion' {
         $paso = $script:Flujo.Substring($pos, 900)
         $paso | Should -Not -Match "startsWith\(github\.ref, 'refs/tags/'\)" -Because (
             'saltarse este paso en el ensayo lo deja sin probar hasta la version de verdad')
-        $paso | Should -Match 'Get-VersionCachivache' -Because (
-            'sin etiqueta la version tiene que salir del programa, no lanzar')
+        $paso | Should -Match '-Etiqueta \$env:VERSION' -Because (
+            'la version la decide un solo paso al principio; aqui solo se lee')
     }
 
     It 'y aun asi el ensayo no puede publicar nada' {
